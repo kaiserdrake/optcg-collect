@@ -146,11 +146,16 @@ export default function CardSearch() {
   };
 
   useEffect(() => {
-    if (searchTerm.length < 3) {
-      setResults([]);
-      setError(null);
-      return;
+    // Extract if advanced search keywords are present
+    const advancedKeywordRegex = /(?:\b(id|pack|color):\S+)/gi;
+    const hasAdvancedKeyword = advancedKeywordRegex.test(searchTerm);
+
+    if (searchTerm.length < 3 && !hasAdvancedKeyword) {
+       setResults([]);
+       setError(null);
+       return;
     }
+
     const delayDebounceFn = setTimeout(() => {
       setLoading(true);
       setError(null);
@@ -210,6 +215,22 @@ export default function CardSearch() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm, apiUrl, showOnlyOwned, showProxies]);
 
+  // --- Subtle Status Message Styles ---
+  const subtleBoxStyle = (color, borderColor) => ({
+    mb: 4,
+    p: 3,
+    bg: color,
+    borderRadius: 'md',
+    borderLeft: '4px',
+    borderColor: borderColor,
+  });
+  const subtleTextStyle = (color = 'gray.600', fontSize = 'sm') => ({
+    color: color,
+    fontSize: fontSize,
+    fontWeight: 'normal',
+    lineHeight: '1.5',
+  });
+
   return (
     <Box>
       <HStack mb={4}>
@@ -247,28 +268,22 @@ export default function CardSearch() {
               />
           </FormControl>
       </Flex>
-      {/* Status Messages */}
+      {/* Subtle Status Messages */}
       {searchTerm.length === 0 && (
-        <Box mb={4} p={3} bg="gray.50" borderRadius="md" borderLeft="4px" borderColor="gray.400">
+        <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
           <HStack align="center">
-            <Text color="gray.600" fontSize="sm" fontWeight="semibold">
-              🔍 Start typing to search cards
-            </Text>
-            <Text color="gray.500" fontSize="xs" ml={2}>
-              (minimum 3 characters)
+            <Text {...subtleTextStyle('gray.500')}>
+              Start typing to search cards (minimum 3 characters)
             </Text>
           </HStack>
         </Box>
       )}
 
       {searchTerm.length > 0 && searchTerm.length < 3 && (
-        <Box mb={4} p={3} bg="blue.50" borderRadius="md" borderLeft="4px" borderColor="blue.400">
+        <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
           <HStack align="center">
-            <Text color="blue.600" fontSize="sm" fontWeight="semibold">
-              Type at least 3 characters to search
-            </Text>
-            <Text color="blue.500" fontSize="xs" ml={2}>
-              ({3 - searchTerm.length} more needed)
+            <Text {...subtleTextStyle('gray.500')}>
+              Type at least 3 characters to search ({3 - searchTerm.length} more needed)
             </Text>
           </HStack>
         </Box>
@@ -276,10 +291,10 @@ export default function CardSearch() {
 
       {/* Loading State */}
       {loading && (
-        <Box mb={4} p={3} bg="blue.50" borderRadius="md" borderLeft="4px" borderColor="blue.400">
+        <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
           <HStack align="center">
-            <Spinner size="sm" color="blue.500" thickness="2px" />
-            <Text color="blue.600" fontSize="sm" fontWeight="semibold">
+            <Spinner size="sm" color="blue.400" thickness="2px" />
+            <Text {...subtleTextStyle('gray.500')}>
               Searching cards for "{searchTerm}"...
             </Text>
           </HStack>
@@ -288,13 +303,10 @@ export default function CardSearch() {
 
       {/* Error State */}
       {error && (
-        <Box mb={4} p={3} bg="red.50" borderRadius="md" borderLeft="4px" borderColor="red.400">
+        <Box {...subtleBoxStyle('red.50', 'red.200')}>
           <HStack justify="space-between" align="center">
             <VStack align="start" spacing={1} flex={1}>
-              <Text color="red.600" fontSize="sm" fontWeight="semibold">
-                ⚠️ Search Error
-              </Text>
-              <Text color="red.500" fontSize="xs">
+              <Text {...subtleTextStyle('red.600')}>
                 {error}
               </Text>
             </VStack>
@@ -325,13 +337,13 @@ export default function CardSearch() {
 
       {/* No Results State */}
       {!loading && !error && searchTerm.length >= 3 && results.length === 0 && (
-        <Box mb={4} p={3} bg="yellow.50" borderRadius="md" borderLeft="4px" borderColor="yellow.400">
+        <Box {...subtleBoxStyle('yellow.50', 'yellow.100')}>
           <HStack justify="space-between" align="center">
             <VStack align="start" spacing={1} flex={1}>
-              <Text color="yellow.700" fontSize="sm" fontWeight="semibold">
-                📭 No cards found for "{searchTerm}"
+              <Text {...subtleTextStyle('yellow.700')}>
+                No cards found for "{searchTerm}"
               </Text>
-              <Text color="yellow.600" fontSize="xs">
+              <Text {...subtleTextStyle('yellow.600', 'xs')}>
                 Try different keywords or remove filters
               </Text>
             </VStack>
@@ -359,10 +371,10 @@ export default function CardSearch() {
 
       {/* Results Counter */}
       {!loading && !error && results.length > 0 && (
-        <Box mb={4} p={3} bg="green.50" borderRadius="md" borderLeft="4px" borderColor="green.400">
+        <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
           <HStack justify="space-between" align="center">
-            <Text color="green.700" fontSize="sm" fontWeight="semibold">
-              ✅ Found {results.length} card{results.length !== 1 ? 's' : ''} for "{searchTerm}"
+            <Text {...subtleTextStyle('gray.500')}>
+              Found {results.length} card{results.length !== 1 ? 's' : ''} for "{searchTerm}"
             </Text>
           </HStack>
         </Box>
@@ -507,3 +519,4 @@ export default function CardSearch() {
     </Box>
   );
 }
+

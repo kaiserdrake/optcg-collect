@@ -29,10 +29,12 @@ import { HamburgerIcon } from '@chakra-ui/icons';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+// --- Updated NavLink styling as requested ---
 const NavLink = ({ href, children }) => {
     const pathname = usePathname();
     const isActive = pathname === href;
 
+    // Use subtle gray: active is dark gray, inactive is lighter gray, no bold, no blue
     return (
         <Link href={href} passHref>
             <ChakraLink
@@ -43,8 +45,8 @@ const NavLink = ({ href, children }) => {
                     textDecoration: 'none',
                     bg: 'gray.200',
                 }}
-                color={isActive ? 'blue.500' : 'gray.600'}
-                fontWeight={isActive ? 'semibold' : 'medium'}
+                color={isActive ? 'gray.800' : 'gray.400'}
+                fontWeight="medium"
             >
                 {children}
             </ChakraLink>
@@ -179,3 +181,4 @@ export default function Navbar() {
     </Box>
   );
 }
+

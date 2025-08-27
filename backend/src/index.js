@@ -332,6 +332,11 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
 
     fuzzyText = sanitizedKeyword.replace(regex, '').trim();
 
+    // If all search fields are empty, reject the search
+    if (!fuzzyText && !criteria.id && !criteria.pack && !criteria.color) {
+      return res.status(400).json({ error: 'Search keyword cannot be empty' });
+    }
+
     let baseQuery = `
       SELECT
         c.id, c.name, c.card_code, c.category, c.color, c.power, c.counter, c.effect, c.trigger_effect, c.img_url,
@@ -404,7 +409,11 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       baseQuery += ' WHERE ' + whereClauses.join(' AND ');
     }
 
-    baseQuery += ` GROUP BY c.id, oc.owned_count, oc.proxy_count`;
+    baseQuery += ` GROUP BY
+      c.id, c.name, c.card_code, c.category, c.color, c.power, c.counter, c.effect, c.trigger_effect, c.img_url,
+      c.attributes, c.types, c.block, c.rarity, c.cost,
+      oc.owned_count, oc.proxy_count
+    `;
 
     const orderByClauses = [];
     if (criteria.color) {
