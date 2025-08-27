@@ -93,7 +93,7 @@ const populateMasterData = async () => {
     console.log('INIT: Fetching all card data from scraper...');
     let packs;
     try {
-        const response = await fetch('http://scraper-api:8080/packs?format=json');
+        const response = await fetch('http://opcc-scraper-api:8080/packs?format=json');
         packs = JSON.parse(await response.json());
     } catch (err) { console.error('Error fetching pack list:', err); throw err; }
 
@@ -107,7 +107,7 @@ const populateMasterData = async () => {
         console.log(`INIT: Processing pack ${i + 1}/${packs.length}: ${pack.name}`);
         let cardsFromPack;
         try {
-            const response = await fetch(`http://scraper-api:8080/cards/${pack.series}?format=json`);
+            const response = await fetch(`http://opcc-scraper-api:8080/cards/${pack.series}?format=json`);
             cardsFromPack = JSON.parse(await response.json());
         } catch (err) { console.warn(`Could not fetch cards for pack ${pack.code}.`); continue; }
 

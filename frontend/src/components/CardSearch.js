@@ -203,7 +203,7 @@ export default function CardSearch() {
           </FormControl>
           <FormControl display="flex" alignItems="center" w="auto">
               <FormLabel htmlFor="show-proxies-switch" mb="0" mr={3} fontSize="sm">
-                  Show Proxy Count
+                  Show Proxy
               </FormLabel>
               <Switch
                 id="show-proxies-switch"

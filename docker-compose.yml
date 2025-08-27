@@ -1,5 +1,6 @@
 services:
-  db:
+  opcc-db:
+    container_name: opcc-db
     image: postgres:15-alpine
     restart: always
     environment:
@@ -7,15 +8,17 @@ services:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - opcc-dbvolume:/var/lib/postgresql/data
     ports:
       - '5432:5432'
 
-  scraper-api:
+  opcc-scraper-api:
+    container_name: opcc-scraper-api
     image: ghcr.io/kaiserdrake/optcg-scraper
     restart: always
 
-  backend:
+  opcc-backend:
+    container_name: opcc-backend
     build: ./backend
     restart: always
     ports:
@@ -25,18 +28,20 @@ services:
     env_file:
       - ./backend/.env
     depends_on:
-      - db
+      - opcc-db
 
-  frontend:
+  opcc-frontend:
+    container_name: opcc-frontend
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: http://backend:3001
+        NEXT_PUBLIC_API_URL: http://opcc-backend:3001
     restart: always
     ports:
       - '3000:3000'
     depends_on:
-      - backend
+      - opcc-backend
 
 volumes:
-  postgres_data:
+  opcc-dbvolume:
+

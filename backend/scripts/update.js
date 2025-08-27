@@ -7,7 +7,7 @@ const updateData = async () => {
 
   let allLatestPacks;
   try {
-    const response = await fetch('http://scraper-api:8080/packs?format=json');
+    const response = await fetch('http://opcc-scraper-api:8080/packs?format=json');
     allLatestPacks = JSON.parse(await response.json());
   } catch (err) {
     console.error('UPDATE: Error fetching pack list. Aborting.', err);
@@ -34,7 +34,7 @@ const updateData = async () => {
 
       let cardsFromPack;
       try {
-        const response = await fetch(`http://scraper-api:8080/cards/${pack.series}?format=json`);
+        const response = await fetch(`http://opcc-scraper-api:8080/cards/${pack.series}?format=json`);
         cardsFromPack = JSON.parse(await response.json());
       } catch (err) {
         console.warn(`Could not fetch cards for pack ${pack.code}. Skipping.`);
