@@ -3,19 +3,22 @@ services:
     container_name: opcc-db
     image: postgres:15-alpine
     restart: always
-    environment:
-      - POSTGRES_DB=tcg_db
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
+    env_file:
+      - .env
     volumes:
-      - opcc-dbvolume:/var/lib/postgresql/data
+      # Only database needs persistent storage
+      - ${OPCC_DATA_PATH}/postgres:/var/lib/postgresql/data
     ports:
       - '5432:5432'
+    networks:
+      - opcc-network
 
   opcc-scraper-api:
     container_name: opcc-scraper-api
     image: ghcr.io/kaiserdrake/optcg-scraper
     restart: always
+    networks:
+      - opcc-network
 
   opcc-backend:
     container_name: opcc-backend
@@ -23,25 +26,32 @@ services:
     restart: always
     ports:
       - '3001:3001'
-    volumes:
-      - ./data:/usr/src/app/data
     env_file:
-      - ./backend/.env
+      - .env
     depends_on:
       - opcc-db
+      - opcc-scraper-api
+    networks:
+      - opcc-network
 
   opcc-frontend:
     container_name: opcc-frontend
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: http://opcc-backend:3001
+        # Use localhost for browser requests (client-side)
+        NEXT_PUBLIC_API_URL: http://localhost:3001
     restart: always
     ports:
       - '3000:3000'
     depends_on:
       - opcc-backend
+    networks:
+      - opcc-network
 
 volumes:
   opcc-dbvolume:
 
+networks:
+  opcc-network:
+    driver: bridge

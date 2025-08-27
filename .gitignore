@@ -1,1 +1,20 @@
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+
+# App data directory (contains database and application data)
 appdata/
+
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+
+# Logs
+*.log
+npm-debug.log*

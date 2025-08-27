@@ -2,6 +2,7 @@
 
 import { createContext, useState, useContext, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { api, getErrorMessage } from '../utils/api';
 
 const AuthContext = createContext(null);
 
@@ -10,62 +11,46 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const router = useRouter();
 
-    const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
     // Check if user is logged in on initial load
     useEffect(() => {
         const checkUserLoggedIn = async () => {
             try {
-                const res = await fetch(`${api}/api/users/me`, { credentials: 'include' });
-                if (res.ok) {
-                    const userData = await res.json();
-                    setUser(userData);
-                } else {
-                    setUser(null);
-                }
+                console.log('[Auth] Checking if user is logged in...');
+                const userData = await api.users.me();
+                console.log('[Auth] User is logged in:', userData);
+                setUser(userData);
             } catch (error) {
+                console.log('[Auth] User is not logged in:', error.message);
                 setUser(null);
             } finally {
                 setLoading(false);
             }
         };
+
         checkUserLoggedIn();
-    }, [api]);
+    }, []);
 
     const login = async (username, password) => {
         try {
-            const res = await fetch(`${api}/api/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                //
-                //  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                //  <<<<<       THE FIX IS HERE        >>>>>
-                //  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                //  We are sending 'usernameOrEmail' to match the backend
-                //
-                body: JSON.stringify({ usernameOrEmail: username, password }),
-                //
-                credentials: 'include',
-            });
+            console.log('[Auth] Attempting to log in...');
+            const data = await api.login({ usernameOrEmail: username, password });
+            console.log('[Auth] Login successful:', data);
 
-            if (res.ok) {
-                const data = await res.json();
-                setUser(data.user);
-                router.push('/');
-                return { success: true };
-            } else {
-                const errorData = await res.json();
-                return { success: false, message: errorData.message };
-            }
+            setUser(data.user);
+            router.push('/');
+            return { success: true };
         } catch (error) {
-            return { success: false, message: "Could not connect to server." };
+            console.error('[Auth] Login failed:', error);
+            const message = getErrorMessage(error);
+            return { success: false, message };
         }
     };
 
     const logout = async () => {
         try {
+            console.log('[Auth] Logging out...');
             // Tell the backend to clear the HttpOnly cookie
-            await fetch(`${api}/api/logout`, {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/logout`, {
                 method: 'POST',
                 credentials: 'include',
             });
@@ -83,7 +68,6 @@ export const AuthProvider = ({ children }) => {
             {children}
         </AuthContext.Provider>
     );
-
 };
 
 // Custom hook to use the auth context

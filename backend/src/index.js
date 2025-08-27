@@ -14,12 +14,42 @@ dotenv.config();
 const app = express();
 const port = 3001;
 
-// Manual CORS Middleware
+// Debug middleware to log all requests
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.url} - Origin: ${req.headers.origin || 'none'}`);
+  console.log(`[${timestamp}] Headers:`, {
+    'content-type': req.headers['content-type'],
+    'user-agent': req.headers['user-agent']?.substring(0, 50),
+    'referer': req.headers['referer'],
+    'origin': req.headers['origin']
+  });
+
+  // Log request completion
+  res.on('finish', () => {
+    console.log(`[${timestamp}] Response: ${res.statusCode} for ${req.method} ${req.url}`);
+  });
+
+  next();
+});
+
+// Improved CORS Middleware
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://opcc-frontend:3000'
+  ];
+
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
@@ -28,6 +58,26 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(cookieParser());
+
+app.get('/api/health', async (req, res) => {
+    try {
+        // Check database connection
+        await query('SELECT 1');
+        res.status(200).json({
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            database: 'connected'
+        });
+    } catch (err) {
+        console.error('Health check failed:', err);
+        res.status(503).json({
+            status: 'unhealthy',
+            timestamp: new Date().toISOString(),
+            database: 'disconnected',
+            error: err.message
+        });
+    }
+});
 
 // --- AUTHENTICATION & USER ROUTES ---
 
@@ -255,22 +305,32 @@ app.post('/api/collection/update', isAuthenticated, async (req, res) => {
 app.get('/api/cards/search', isAuthenticated, async (req, res) => {
   const { keyword, ownedOnly, showProxies } = req.query;
   const userId = req.user.id;
-  if (!keyword) { return res.status(400).json({ error: 'Search keyword is required' }); }
+
+  if (!keyword || typeof keyword !== 'string') {
+    return res.status(400).json({ error: 'Search keyword is required and must be a string' });
+  }
+
+  // Sanitize keyword to prevent potential issues
+  const sanitizedKeyword = keyword.trim();
+  if (sanitizedKeyword.length === 0) {
+    return res.status(400).json({ error: 'Search keyword cannot be empty' });
+  }
+
   try {
-    let fuzzyText = keyword;
+    let fuzzyText = sanitizedKeyword;
     const criteria = { id: null, pack: null, color: null };
 
     const regex = /(\w+):("([^"]+)"|(\S+))/g;
     let match;
-    while ((match = regex.exec(keyword)) !== null) {
+    while ((match = regex.exec(sanitizedKeyword)) !== null) {
       const key = match[1].toLowerCase();
-      const value = match[3] || match[4];
-      if (key === 'id') criteria.id = value;
-      if (key === 'pack') criteria.pack = value;
-      if (key === 'color') criteria.color = value;
+      const value = (match[3] || match[4]).trim();
+      if (key === 'id' && value.length > 0) criteria.id = value;
+      if (key === 'pack' && value.length > 0) criteria.pack = value;
+      if (key === 'color' && value.length > 0) criteria.color = value;
     }
 
-    fuzzyText = keyword.replace(regex, '').trim();
+    fuzzyText = sanitizedKeyword.replace(regex, '').trim();
 
     let baseQuery = `
       SELECT
@@ -281,8 +341,12 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
         STRING_AGG(DISTINCT cpa.pack_code, ', ') AS packs
       FROM cards c
       LEFT JOIN (
-        SELECT card_id, COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count, COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count
-        FROM owned_cards WHERE user_id = $2 GROUP BY card_id
+        SELECT card_id,
+               COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
+               COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count
+        FROM owned_cards
+        WHERE user_id = $2
+        GROUP BY card_id
       ) AS oc ON c.id = oc.card_id
       LEFT JOIN card_pack_appearances cpa ON c.id = cpa.card_id
     `;
@@ -291,13 +355,16 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
     const params = [fuzzyText || '', userId];
     let paramIndex = 3;
 
-    if (fuzzyText) {
+    if (fuzzyText && fuzzyText.length > 0) {
       whereClauses.push(`GREATEST(
-          similarity(COALESCE(c.name, ''), $1), similarity(COALESCE(c.id, ''), $1),
-          similarity(COALESCE(c.card_code, ''), $1), similarity(COALESCE(c.effect, ''), $1),
-          similarity(COALESCE(c.category, ''), $1), similarity(COALESCE(c.trigger_effect, ''), $1),
-          similarity(array_to_string(c.attributes, ' '), $1),
-          similarity(array_to_string(c.types, ' '), $1)
+          similarity(COALESCE(c.name, ''), $1),
+          similarity(COALESCE(c.id, ''), $1),
+          similarity(COALESCE(c.card_code, ''), $1),
+          similarity(COALESCE(c.effect, ''), $1),
+          similarity(COALESCE(c.category, ''), $1),
+          similarity(COALESCE(c.trigger_effect, ''), $1),
+          similarity(array_to_string(COALESCE(c.attributes, ARRAY[]::TEXT[]), ' '), $1),
+          similarity(array_to_string(COALESCE(c.types, ARRAY[]::TEXT[]), ' '), $1)
         ) > 0.15`);
     }
 
@@ -318,18 +385,24 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
 
     if (criteria.color) {
       whereClauses.push(`c.color ILIKE $${paramIndex}`);
-      params.push(criteria.color);
+      params.push(`%${criteria.color}%`);
       paramIndex++;
+    }
+
+    // Add owned-only filter if requested
+    if (ownedOnly === 'true') {
+      whereClauses.push(`oc.owned_count > 0`);
     }
 
     if (whereClauses.length > 0) {
       baseQuery += ' WHERE ' + whereClauses.join(' AND ');
     }
+
     baseQuery += ` GROUP BY c.id, oc.owned_count, oc.proxy_count`;
 
     const orderByClauses = [];
     if (criteria.color) {
-        const colorParamIndex = params.findIndex(p => p === criteria.color) + 1;
+        const colorParamIndex = params.findIndex(p => p === `%${criteria.color}%`) + 1;
         if (colorParamIndex > 0) {
             orderByClauses.push(`CASE WHEN c.color ILIKE $${colorParamIndex} THEN 0 ELSE 1 END`);
         }
@@ -340,19 +413,25 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
             orderByClauses.push(`CASE WHEN c.id ILIKE $${idParamIndex} OR c.card_code ILIKE $${idParamIndex} THEN 0 ELSE 1 END`);
         }
     }
-    if (fuzzyText) {
-        orderByClauses.push(`GREATEST(similarity(c.name, $1), similarity(c.id, $1), similarity(c.card_code, $1)) DESC`);
+    if (fuzzyText && fuzzyText.length > 0) {
+        orderByClauses.push(`GREATEST(
+          similarity(c.name, $1),
+          similarity(c.id, $1),
+          similarity(c.card_code, $1)
+        ) DESC`);
     }
     orderByClauses.push('c.name ASC');
+
     if (orderByClauses.length > 0) {
         baseQuery += ' ORDER BY ' + orderByClauses.join(', ');
     }
     baseQuery += ' LIMIT 50;';
+
     const results = await query(baseQuery, params);
     res.json(results.rows);
   } catch (err) {
     console.error('Error executing search query:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', message: err.message });
   }
 });
 

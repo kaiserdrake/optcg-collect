@@ -1,23 +1,34 @@
 
 # Building
 
-Open your terminal in the root tcg-collection/ directory and follow these steps.
+Rebuild the containers:
+```sh
+docker compose down
+docker compose up --build -d
+```
 
-Install Dependencies locally: Run npm install inside the backend directory and also inside the frontend directory. This is good practice to generate package-lock.json files which Docker will use.
+Check if services are running:
+```sh
+docker compose ps
+```
 
-Bash
-
-cd backend && npm install && cd ..
-cd frontend && npm install && cd ..
-Build and Start Containers: This command will build the images for your frontend and backend and start all three services in the background.
-
+Initialize database:
+```sh
+docker compose exec opcc-backend npm run db:init
+```
 
 # Deployment
 
-docker compose down -v
+# Debugging
 
-docker compose up --build -d
+Checking for database entries:
+```sh
+docker exec -it opcc-db psql -U user -d tcg_db
+```
 
-docker compose exec backend npm run db:init
+Test backend directly from your host:
+```sh
+curl http://localhost:3001/api/health
+```
 
-docker compose exec backend npm run db:update
+

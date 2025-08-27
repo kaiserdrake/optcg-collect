@@ -1,6 +1,6 @@
 'use client';
 
-import { HStack, IconButton, Text, useToast } from '@chakra-ui/react';
+import { HStack, IconButton, Text, useToast, Tooltip } from '@chakra-ui/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@chakra-ui/icons';
 import { useState } from 'react';
 
@@ -12,6 +12,7 @@ export default function CountControl({ cardId, type, count, onUpdate }) {
   const handleUpdate = async (e, action) => {
     // This stops the click from affecting parent elements (like the card row)
     e.stopPropagation();
+    e.preventDefault();
 
     setIsLoading(true);
     try {
@@ -25,35 +26,93 @@ export default function CountControl({ cardId, type, count, onUpdate }) {
       const data = await res.json();
       if (res.ok) {
         onUpdate(cardId, data);
+
+        // Provide user feedback
+        const actionText = action === 'increment' ? 'Added' : 'Removed';
+        const typeText = type === 'proxy' ? 'proxy' : 'owned card';
+
+        toast({
+          title: `${actionText} ${typeText}`,
+          status: "success",
+          duration: 1000,
+          isClosable: false,
+          position: "bottom-right",
+          size: "sm"
+        });
       } else {
-        toast({ title: "Update Failed", description: data.message, status: "error", duration: 3000, isClosable: true });
+        toast({
+          title: "Update Failed",
+          description: data.message,
+          status: "error",
+          duration: 3000,
+          isClosable: true
+        });
       }
     } catch (err) {
-      toast({ title: "Network Error", description: "Could not connect to server.", status: "error", duration: 3000, isClosable: true });
+      toast({
+        title: "Network Error",
+        description: "Could not connect to server.",
+        status: "error",
+        duration: 3000,
+        isClosable: true
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
+  const decrementDisabled = count <= 0 || isLoading;
+  const incrementDisabled = count >= 99 || isLoading;
+
+  const typeLabel = type === 'proxy' ? 'proxy' : 'owned';
+
   return (
-    <HStack>
-      <IconButton
-        aria-label={`Decrement ${type} count`}
-        icon={<ChevronLeftIcon />}
-        size="xs"
-        // Pass the event object 'e' to the handler
-        onClick={(e) => handleUpdate(e, 'decrement')}
-        isDisabled={count <= 0 || isLoading}
-      />
-      <Text w="2.5rem" textAlign="center" fontWeight="bold" fontSize="lg">{count}</Text>
-      <IconButton
-        aria-label={`Increment ${type} count`}
-        icon={<ChevronRightIcon />}
-        size="xs"
-        // Pass the event object 'e' to the handler
-        onClick={(e) => handleUpdate(e, 'increment')}
-        isDisabled={count >= 99 || isLoading}
-      />
+    <HStack spacing={1} role="group" aria-label={`${typeLabel} card count controls`}>
+      <Tooltip
+        label={decrementDisabled ? 'Cannot go below 0' : `Remove from ${typeLabel}`}
+        isDisabled={isLoading}
+      >
+        <IconButton
+          aria-label={`Decrease ${typeLabel} count`}
+          icon={<ChevronLeftIcon />}
+          size="xs"
+          variant="ghost"
+          onClick={(e) => handleUpdate(e, 'decrement')}
+          isDisabled={decrementDisabled}
+          isLoading={isLoading && count > 0}
+          _hover={{ bg: 'red.100' }}
+          _active={{ bg: 'red.200' }}
+        />
+      </Tooltip>
+
+      <Text
+        w="2.5rem"
+        textAlign="center"
+        fontWeight="bold"
+        fontSize="lg"
+        role="status"
+        aria-live="polite"
+        aria-label={`${count} ${typeLabel} cards`}
+      >
+        {count}
+      </Text>
+
+      <Tooltip
+        label={incrementDisabled ? 'Maximum 99 cards' : `Add to ${typeLabel}`}
+        isDisabled={isLoading}
+      >
+        <IconButton
+          aria-label={`Increase ${typeLabel} count`}
+          icon={<ChevronRightIcon />}
+          size="xs"
+          variant="ghost"
+          onClick={(e) => handleUpdate(e, 'increment')}
+          isDisabled={incrementDisabled}
+          isLoading={isLoading && count < 99}
+          _hover={{ bg: 'green.100' }}
+          _active={{ bg: 'green.200' }}
+        />
+      </Tooltip>
     </HStack>
   );
 }
