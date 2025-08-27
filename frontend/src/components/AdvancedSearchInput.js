@@ -3,23 +3,62 @@
 import { Box, Input, Text } from '@chakra-ui/react';
 import React from 'react';
 
+const colorMap = {
+  red: '#E53E3E',
+  green: '#48BB78',
+  blue: '#4299E1',
+  purple: '#9F7AEA',
+  black: '#1A202C',
+  yellow: '#D69E2E',
+};
+
 const AdvancedSearchInput = ({ value, onChange, ...props }) => {
+  // Helper to render the highlighted text with color values
   const renderHighlightedText = () => {
-    const parts = value.split(/(id:\S*|pack:\S*|color:\S*)/gi);
+    // Regex matches: id:something, pack:something, color:something
+    // We'll split by these, keeping them in the result
+    // It will match the entire "keyword:value" as one part
+    const regex = /(id:\S*|pack:\S*|color:\S*)/gi;
+    const parts = value.split(regex);
 
     return (
       <>
         {parts.map((part, index) => {
-          if (part.toLowerCase().startsWith('id:')) {
-            return <Text as="span" key={index} color="blue.500">{part}</Text>;
+          // Match keyword:value pattern
+          const match = part.match(/^(id|pack|color):(\S*)$/i);
+          if (match) {
+            const [full, keyword, keywordValue] = match;
+            if (keyword.toLowerCase() === 'color') {
+              // "color:" in gray, value in mapped color
+              const valueColor =
+                colorMap[keywordValue?.toLowerCase()] || 'gray.500';
+              return (
+                <React.Fragment key={index}>
+                  <Text as="span" color="gray.500">
+                    color:
+                  </Text>
+                  {keywordValue && (
+                    <Text as="span" color={valueColor} fontWeight="bold">
+                      {keywordValue}
+                    </Text>
+                  )}
+                </React.Fragment>
+              );
+            } else {
+              // id: or pack: -- all gray
+              return (
+                <Text as="span" key={index} color="gray.500">
+                  {full}
+                </Text>
+              );
+            }
           }
-          if (part.toLowerCase().startsWith('pack:')) {
-            return <Text as="span" key={index} color="green.500">{part}</Text>;
-          }
-          if (part.toLowerCase().startsWith('color:')) {
-            return <Text as="span" key={index} color="purple.500">{part}</Text>;
-          }
-          return part;
+          // Non-keyword parts, render as normal text
+          return (
+            <Text as="span" key={index}>
+              {part}
+            </Text>
+          );
         })}
       </>
     );
@@ -30,6 +69,7 @@ const AdvancedSearchInput = ({ value, onChange, ...props }) => {
     fontSize: "lg",
     height: "3rem",
     width: "100%",
+    letterSpacing: 'normal',
   };
 
   return (
@@ -55,7 +95,7 @@ const AdvancedSearchInput = ({ value, onChange, ...props }) => {
         overflow="hidden"
         display="flex"
         alignItems="center"
-        sx={{...inputStyles}}
+        sx={{ ...inputStyles }}
       >
         {renderHighlightedText()}
       </Box>
@@ -65,10 +105,15 @@ const AdvancedSearchInput = ({ value, onChange, ...props }) => {
         position="relative"
         zIndex={2}
         bg="transparent"
+        // Make text transparent but caret visible
         color="transparent"
         caretColor="black"
         variant="unstyled"
-        sx={{...inputStyles}}
+        sx={{
+          ...inputStyles,
+          // Custom caret for better visibility if needed
+          // You may style this further for other themes
+        }}
         {...props}
       />
     </Box>
@@ -76,4 +121,3 @@ const AdvancedSearchInput = ({ value, onChange, ...props }) => {
 };
 
 export default AdvancedSearchInput;
-

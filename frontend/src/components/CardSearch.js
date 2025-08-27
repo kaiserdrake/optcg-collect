@@ -364,16 +364,6 @@ export default function CardSearch() {
             <Text color="green.700" fontSize="sm" fontWeight="semibold">
               ✅ Found {results.length} card{results.length !== 1 ? 's' : ''} for "{searchTerm}"
             </Text>
-            {(showOnlyOwned || showProxies) && (
-              <HStack spacing={2}>
-                {showOnlyOwned && (
-                  <Tag size="sm" colorScheme="blue" variant="solid">In Collection</Tag>
-                )}
-                {showProxies && (
-                  <Tag size="sm" colorScheme="purple" variant="solid">Showing Proxies</Tag>
-                )}
-              </HStack>
-            )}
           </HStack>
         </Box>
       )}
