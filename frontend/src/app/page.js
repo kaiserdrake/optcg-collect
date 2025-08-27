@@ -19,9 +19,6 @@ export default function Home() {
     }
   }, [user, loading, router]);
 
-  if (loading || !user) {
-    return <Container centerContent mt={20}><Spinner size="xl" /></Container>;
-  }
 
   return (
     <Box>

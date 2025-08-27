@@ -389,9 +389,15 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       paramIndex++;
     }
 
-    // Add owned-only filter if requested
+    // Updated owned-only filter logic
     if (ownedOnly === 'true') {
-      whereClauses.push(`oc.owned_count > 0`);
+      if (showProxies === 'true') {
+        // When showProxies is true, consider both owned and proxy cards as "in collection"
+        whereClauses.push(`(oc.owned_count > 0 OR oc.proxy_count > 0)`);
+      } else {
+        // When showProxies is false, only consider owned cards
+        whereClauses.push(`oc.owned_count > 0`);
+      }
     }
 
     if (whereClauses.length > 0) {

@@ -25,6 +25,7 @@ export default function CountControl({ cardId, type, count, onUpdate }) {
 
       const data = await res.json();
       if (res.ok) {
+        // Pass the new counts to the parent component
         onUpdate(cardId, data);
 
         // Provide user feedback
