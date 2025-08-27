@@ -113,10 +113,16 @@ export default function CardSearch() {
   const [error, setError] = useState(null);
   const [showProxies, setShowProxies] = useState(false);
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const [selectedCard, setSelectedCard] = useState(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  // Fix hydration mismatch by ensuring component is mounted
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleCardClick = (card) => {
     setSelectedCard(card);
@@ -146,6 +152,9 @@ export default function CardSearch() {
   };
 
   useEffect(() => {
+    // Don't run search if not mounted (prevents hydration issues)
+    if (!mounted) return;
+
     // Extract if advanced search keywords are present
     const advancedKeywordRegex = /(?:\b(id|pack|color):\S+)/gi;
     const hasAdvancedKeyword = advancedKeywordRegex.test(searchTerm);
@@ -159,13 +168,18 @@ export default function CardSearch() {
     const delayDebounceFn = setTimeout(() => {
       setLoading(true);
       setError(null);
+
       const searchParams = new URLSearchParams({
           keyword: searchTerm,
-          ownedOnly: showOnlyOwned,
-          showProxies: showProxies,
+          ownedOnly: showOnlyOwned.toString(),
+          showProxies: showProxies.toString(),
       });
+
       fetch(`${apiUrl}/api/cards/search?${searchParams.toString()}`, {
-        credentials: 'include'
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       })
       .then((res) => {
         if (!res.ok) {
@@ -186,16 +200,18 @@ export default function CardSearch() {
         return res.json();
       })
       .then((data) => {
-        // Ensure data is an array
+        // Ensure data is an array and handle empty responses
         if (!Array.isArray(data)) {
           console.warn('Search API returned non-array data:', data);
           setResults([]);
         } else {
           setResults(data);
         }
+        setError(null);
       })
       .catch((error) => {
         console.error("Failed to fetch search results:", error);
+
         // Provide user-friendly error messages
         let errorMessage = 'Failed to fetch search results.';
 
@@ -203,6 +219,8 @@ export default function CardSearch() {
           errorMessage = 'Search query contains invalid characters. Please try different search terms.';
         } else if (error.message.includes('fetch')) {
           errorMessage = 'Unable to connect to server. Please check your connection and try again.';
+        } else if (error.message.includes('Server error')) {
+          errorMessage = 'Server error occurred. The search functionality is temporarily unavailable.';
         } else if (error.message) {
           errorMessage = error.message;
         }
@@ -210,10 +228,13 @@ export default function CardSearch() {
         setError(errorMessage);
         setResults([]);
       })
-      .finally(() => { setLoading(false); });
+      .finally(() => {
+        setLoading(false);
+      });
     }, 500);
+
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, apiUrl, showOnlyOwned, showProxies]);
+  }, [searchTerm, apiUrl, showOnlyOwned, showProxies, mounted]);
 
   // --- Subtle Status Message Styles ---
   const subtleBoxStyle = (color, borderColor) => ({
@@ -231,11 +252,16 @@ export default function CardSearch() {
     lineHeight: '1.5',
   });
 
+  // Don't render anything until mounted (prevents hydration mismatch)
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <Box>
       <HStack mb={4}>
         <AdvancedSearchInput
-          placeholder="Search... e.g., 'zoro color:red id:ST01- pack:OP01'"
+          placeholder="Search cards, names, effects, e.g., 'zoro color:red id:ST01- pack:OP01'"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -268,6 +294,7 @@ export default function CardSearch() {
               />
           </FormControl>
       </Flex>
+
       {/* Subtle Status Messages */}
       {searchTerm.length === 0 && (
         <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
@@ -380,7 +407,6 @@ export default function CardSearch() {
         </Box>
       )}
 
-      {error && <Text color="red.500">Error: {error}</Text>}
       <VStack spacing={2} align="stretch">
         {results.map((card) => {
           const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
@@ -465,7 +491,7 @@ export default function CardSearch() {
                     <StyledTextRenderer text={selectedCard.effect} />
                     <StyledTextRenderer text={selectedCard.trigger_effect} />
                   </VStack>
-                   <Box pt={2}>
+                  <Box pt={2}>
                     <Heading size="sm" mb={1}>Appears In</Heading>
                     <Wrap>
                       {selectedCard.packs?.split(', ').map(pack => (
@@ -481,7 +507,9 @@ export default function CardSearch() {
               </Flex>
             </ModalBody>
             <ModalFooter>
-              <Button colorScheme="blue" onClick={onDetailClose}>Close</Button>
+              <Button colorScheme="blue" mr={3} onClick={onDetailClose}>
+                Close
+              </Button>
             </ModalFooter>
           </ModalContent>
         </Modal>
@@ -519,4 +547,3 @@ export default function CardSearch() {
     </Box>
   );
 }
-

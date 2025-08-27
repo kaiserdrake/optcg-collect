@@ -350,27 +350,30 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
                COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
                COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count
         FROM owned_cards
-        WHERE user_id = $2
+        WHERE user_id = $1
         GROUP BY card_id
       ) AS oc ON c.id = oc.card_id
       LEFT JOIN card_pack_appearances cpa ON c.id = cpa.card_id
     `;
 
     const whereClauses = [];
-    const params = [fuzzyText || '', userId];
-    let paramIndex = 3;
+    const params = [userId];
+    let paramIndex = 2;
 
+    // Only add fuzzy search if fuzzyText exists
     if (fuzzyText && fuzzyText.length > 0) {
       whereClauses.push(`GREATEST(
-          similarity(COALESCE(c.name, ''), $1),
-          similarity(COALESCE(c.id, ''), $1),
-          similarity(COALESCE(c.card_code, ''), $1),
-          similarity(COALESCE(c.effect, ''), $1),
-          similarity(COALESCE(c.category, ''), $1),
-          similarity(COALESCE(c.trigger_effect, ''), $1),
-          similarity(array_to_string(COALESCE(c.attributes, ARRAY[]::TEXT[]), ' '), $1),
-          similarity(array_to_string(COALESCE(c.types, ARRAY[]::TEXT[]), ' '), $1)
+          similarity(COALESCE(c.name, ''), $${paramIndex}),
+          similarity(COALESCE(c.id, ''), $${paramIndex}),
+          similarity(COALESCE(c.card_code, ''), $${paramIndex}),
+          similarity(COALESCE(c.effect, ''), $${paramIndex}),
+          similarity(COALESCE(c.category, ''), $${paramIndex}),
+          similarity(COALESCE(c.trigger_effect, ''), $${paramIndex}),
+          similarity(array_to_string(COALESCE(c.attributes, ARRAY[]::TEXT[]), ' '), $${paramIndex}),
+          similarity(array_to_string(COALESCE(c.types, ARRAY[]::TEXT[]), ' '), $${paramIndex})
         ) > 0.15`);
+      params.push(fuzzyText);
+      paramIndex++;
     }
 
     if (criteria.id) {
@@ -429,11 +432,14 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
         }
     }
     if (fuzzyText && fuzzyText.length > 0) {
-        orderByClauses.push(`GREATEST(
-          similarity(c.name, $1),
-          similarity(c.id, $1),
-          similarity(c.card_code, $1)
-        ) DESC`);
+        const fuzzyParamIndex = params.findIndex(p => p === fuzzyText) + 1;
+        if (fuzzyParamIndex > 0) {
+            orderByClauses.push(`GREATEST(
+              similarity(c.name, $${fuzzyParamIndex}),
+              similarity(c.id, $${fuzzyParamIndex}),
+              similarity(c.card_code, $${fuzzyParamIndex})
+            ) DESC`);
+        }
     }
     orderByClauses.push('c.name ASC');
 
@@ -441,6 +447,9 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
         baseQuery += ' ORDER BY ' + orderByClauses.join(', ');
     }
     baseQuery += ' LIMIT 50;';
+
+    console.log('Executing query:', baseQuery);
+    console.log('With params:', params);
 
     const results = await query(baseQuery, params);
     res.json(results.rows);
