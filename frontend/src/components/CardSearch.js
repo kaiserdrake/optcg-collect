@@ -5,9 +5,9 @@ import {
   Box, Text, VStack, HStack, Tag, Spinner, Stat, StatLabel, StatNumber, Wrap, WrapItem, Image,
   Flex, Heading, StackDivider, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader,
   ModalFooter, ModalBody, ModalCloseButton, Button, IconButton, Code, FormControl, FormLabel, Switch,
-  Grid, GridItem
+  Grid, GridItem, Tooltip
 } from '@chakra-ui/react';
-import { QuestionOutlineIcon } from '@chakra-ui/icons';
+import { QuestionOutlineIcon, ViewIcon, HamburgerIcon } from '@chakra-ui/icons';
 import AdvancedSearchInput from './AdvancedSearchInput';
 import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
@@ -59,40 +59,26 @@ const StyledTextRenderer = ({ text }) => {
         return <Text as="span">&nbsp;</Text>;
     }
     const parts = text.split(/(\[.*?\])/g);
-    return (
-        <Text as="span" fontSize="sm" whiteSpace="pre-wrap">
-            {parts.map((part, index) => {
-                if (part.startsWith('[') && part.endsWith(']')) {
-                    const keyword = part.slice(1, -1);
-                    const keywordLower = keyword.toLowerCase();
-                    const exactStyle = keywordStyles[keywordLower];
-                    if (exactStyle) {
-                        const { sx, ...chakraProps } = exactStyle;
-                        return <Tag key={index} size="sm" mx="1" sx={sx} {...chakraProps} verticalAlign="baseline">{keyword}</Tag>;
-                    }
-                    for (const pattern of keywordPatterns) {
-                        if (pattern.regex.test(keyword)) {
-                            const { sx, ...chakraProps } = pattern.style;
-                            return <Tag key={index} size="sm" mx="1" sx={sx} {...chakraProps} verticalAlign="baseline">{keyword}</Tag>;
-                        }
-                    }
-                    return <Text as="span" key={index} fontWeight="bold">{keyword}</Text>;
-                }
-                return part.split(/<br\s*\/?>/gi).map((line, lineIndex, arr) => (
-                    <React.Fragment key={`${index}-${lineIndex}`}>
-                        {line}
-                        {lineIndex < arr.length - 1 && <br />}
-                    </React.Fragment>
-                ));
-            })}
-        </Text>
-    );
+    return parts.map((part, index) => {
+        if (part.match(/^\[.*\]$/)) {
+            const keyword = part.slice(1, -1).toLowerCase();
+            const style = keywordStyles[keyword];
+            if (style) {
+                return <Tag key={index} {...style} mr={1}>{part.slice(1, -1)}</Tag>;
+            }
+            const patternMatch = keywordPatterns.find(p => p.regex.test(part.slice(1, -1)));
+            if (patternMatch) {
+                return <Tag key={index} {...patternMatch.style} mr={1}>{part.slice(1, -1)}</Tag>;
+            }
+        }
+        return <Text key={index} as="span">{part}</Text>;
+    });
 };
 
-const extractStyledKeywords = (effectText, triggerText) => {
-    const combinedText = `${effectText || ''} ${triggerText || ''}`;
+const extractStyledKeywords = (effect, triggerEffect) => {
+    const combinedText = `${effect || ''} ${triggerEffect || ''}`;
+    const regex = /\[([^\]]+)\]/g;
     const keywordSet = new Set();
-    const regex = /\[(.*?)\]/g;
     let match;
     while ((match = regex.exec(combinedText)) !== null) {
         const keyword = match[1];
@@ -113,16 +99,11 @@ export default function CardSearch() {
   const [error, setError] = useState(null);
   const [showProxies, setShowProxies] = useState(false);
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'thumbnail'
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const [selectedCard, setSelectedCard] = useState(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-  // Fix hydration mismatch by ensuring component is mounted
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const handleCardClick = (card) => {
     setSelectedCard(card);
@@ -152,9 +133,6 @@ export default function CardSearch() {
   };
 
   useEffect(() => {
-    // Don't run search if not mounted (prevents hydration issues)
-    if (!mounted) return;
-
     // Extract if advanced search keywords are present
     const advancedKeywordRegex = /(?:\b(id|pack|color):\S+)/gi;
     const hasAdvancedKeyword = advancedKeywordRegex.test(searchTerm);
@@ -168,23 +146,17 @@ export default function CardSearch() {
     const delayDebounceFn = setTimeout(() => {
       setLoading(true);
       setError(null);
-
       const searchParams = new URLSearchParams({
           keyword: searchTerm,
-          ownedOnly: showOnlyOwned.toString(),
-          showProxies: showProxies.toString(),
+          ownedOnly: showOnlyOwned,
+          showProxies: showProxies,
       });
-
       fetch(`${apiUrl}/api/cards/search?${searchParams.toString()}`, {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include'
       })
       .then((res) => {
         if (!res.ok) {
           return res.json().then(errData => {
-            // Handle specific error cases
             if (res.status === 400) {
               throw new Error('Invalid search parameters. Please check your search criteria.');
             } else if (res.status === 500) {
@@ -193,34 +165,27 @@ export default function CardSearch() {
               throw new Error(errData.message || `Search failed with status ${res.status}`);
             }
           }).catch(jsonError => {
-            // If response is not JSON, create a generic error
             throw new Error(`Search failed: ${res.statusText || 'Unknown error'}`);
           });
         }
         return res.json();
       })
       .then((data) => {
-        // Ensure data is an array and handle empty responses
         if (!Array.isArray(data)) {
           console.warn('Search API returned non-array data:', data);
           setResults([]);
         } else {
           setResults(data);
         }
-        setError(null);
       })
       .catch((error) => {
         console.error("Failed to fetch search results:", error);
-
-        // Provide user-friendly error messages
         let errorMessage = 'Failed to fetch search results.';
 
         if (error.message.includes('could not determine data type')) {
           errorMessage = 'Search query contains invalid characters. Please try different search terms.';
         } else if (error.message.includes('fetch')) {
           errorMessage = 'Unable to connect to server. Please check your connection and try again.';
-        } else if (error.message.includes('Server error')) {
-          errorMessage = 'Server error occurred. The search functionality is temporarily unavailable.';
         } else if (error.message) {
           errorMessage = error.message;
         }
@@ -228,13 +193,10 @@ export default function CardSearch() {
         setError(errorMessage);
         setResults([]);
       })
-      .finally(() => {
-        setLoading(false);
-      });
+      .finally(() => { setLoading(false); });
     }, 500);
-
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, apiUrl, showOnlyOwned, showProxies, mounted]);
+  }, [searchTerm, apiUrl, showOnlyOwned, showProxies]);
 
   // --- Subtle Status Message Styles ---
   const subtleBoxStyle = (color, borderColor) => ({
@@ -252,112 +214,202 @@ export default function CardSearch() {
     lineHeight: '1.5',
   });
 
-  // Don't render anything until mounted (prevents hydration mismatch)
-  if (!mounted) {
-    return null;
-  }
+  // Thumbnail Card Component
+  const ThumbnailCard = ({ card }) => {
+    const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
+
+    return (
+      <Box
+        position="relative"
+        cursor="pointer"
+        onClick={() => handleCardClick(card)}
+        _hover={{ transform: 'scale(1.05)', transition: 'all 0.2s' }}
+        transition="all 0.2s"
+        bg="white"
+        borderRadius="lg"
+        shadow="md"
+        overflow="hidden"
+        w="200px"
+        h="auto"
+      >
+        {/* Card Image */}
+        <Box position="relative" w="100%" h="280px">
+          <Image
+            src={card.img_url}
+            alt={card.name}
+            fallbackSrc='https://via.placeholder.com/200x280?text=No+Image'
+            w="100%"
+            h="100%"
+            objectFit="cover"
+          />
+        </Box>
+
+        {/* Card Info Overlay */}
+        <Box p={3} bg="white">
+          <Text fontSize="sm" fontWeight="bold" noOfLines={2} mb={2} textAlign="center">
+            {card.name}
+          </Text>
+
+          {/* Count Information - Subtle */}
+          <Flex justify="center" align="center" gap={4}>
+            <VStack spacing={0}>
+              <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                Owned
+              </Text>
+              <Text fontSize="sm" fontWeight="bold" color="blue.600">
+                {card.owned_count || 0}
+              </Text>
+            </VStack>
+
+            {showProxies && (
+              <VStack spacing={0}>
+                <Text fontSize="xs" color="gray.400" fontWeight="medium">
+                  Proxy
+                </Text>
+                <Text fontSize="sm" fontWeight="bold" color="gray.500">
+                  {card.proxy_count || 0}
+                </Text>
+              </VStack>
+            )}
+          </Flex>
+        </Box>
+      </Box>
+    );
+  };
+
+  // List Card Component (existing implementation)
+  const ListCard = ({ card }) => {
+    const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
+
+    return (
+      <Box
+        key={card.id}
+        p={3}
+        shadow="sm"
+        borderWidth="1px"
+        borderRadius="md"
+        onClick={() => handleCardClick(card)}
+        cursor="pointer"
+        _hover={{ shadow: 'md', bg: 'gray.50' }}
+      >
+        <Flex justify="space-between" align="center">
+          <VStack align="start" spacing={1.5} flex={1} minW={0}>
+            <Wrap spacingX={4} spacingY={1} align="center">
+              <WrapItem>
+                <HStack>
+                  <Text fontWeight="bold" fontSize="md" noOfLines={1}>{card.name}</Text>
+                  <CardVariantIndicator cardId={card.id} />
+                </HStack>
+              </WrapItem>
+              {card.category && <WrapItem fontSize="sm" color="gray.600">{toTitleCase(card.category)}</WrapItem>}
+              {card.attributes && card.attributes.length > 0 && card.attributes.map(attr => (<WrapItem key={attr}><Tag size="sm" variant="outline" colorScheme="gray">{toTitleCase(attr)}</Tag></WrapItem>))}
+              {card.cost !== null && <WrapItem fontSize="sm">Cost: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.cost}</Text></WrapItem>}
+              {card.power !== null && <WrapItem fontSize="sm">Power: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.power}</Text></WrapItem>}
+              {card.counter !== null && <WrapItem fontSize="sm">Counter: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.counter}</Text></WrapItem>}
+            </Wrap>
+            <Wrap spacingX={4} spacingY={1} align="center">
+              <WrapItem><Tag size="sm" {...getTagStyles(card.color)}>{card.card_code}</Tag></WrapItem>
+              {card.rarity && <WrapItem fontSize="sm" color="gray.800" fontWeight="semibold">{card.rarity}</WrapItem>}
+              {card.types && card.types.length > 0 && card.types.map(type => (<WrapItem key={type}><Tag size="sm" variant="outline">{toTitleCase(type)}</Tag></WrapItem>))}
+            </Wrap>
+            {keywords.length > 0 ? (
+              <Wrap align="center" pt={1}>
+                <Text fontSize="xs" fontWeight="bold" color="gray.500" mr={2}>Keywords:</Text>
+                {keywords.map(kw => (
+                    <WrapItem key={kw}><Tag size="sm" variant="subtle" colorScheme="gray">{kw}</Tag></WrapItem>
+                ))}
+              </Wrap>
+            ) : ( <Box h="22px" /> )}
+          </VStack>
+          <HStack spacing={4} ml={4}>
+            {showProxies && (<VStack spacing={0}><Text fontSize="xs" color="gray.500">Proxy</Text><CountControl cardId={card.id} type="proxy" count={card.proxy_count} onUpdate={handleCountUpdate} /></VStack>)}
+            <VStack spacing={0}><Text fontSize="xs" color="gray.500">Owned</Text><CountControl cardId={card.id} type="owned" count={card.owned_count} onUpdate={handleCountUpdate} /></VStack>
+          </HStack>
+        </Flex>
+      </Box>
+    );
+  };
 
   return (
     <Box>
       <HStack mb={4}>
         <AdvancedSearchInput
-          placeholder="Search cards, names, effects, e.g., 'zoro color:red id:ST01- pack:OP01'"
+          placeholder="Search cards by name, effect, or use advanced syntax..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          variant="filled"
+          size="md"
         />
-        <IconButton
-          aria-label="Search Help"
-          icon={<QuestionOutlineIcon />}
-          size="lg"
+        <Button
+          leftIcon={<QuestionOutlineIcon />}
           onClick={onHelpOpen}
-        />
+          variant="outline"
+          colorScheme="blue"
+          size="md"
+        >
+          Help
+        </Button>
       </HStack>
-      <Flex justify="flex-end" mb={6} gap={6}>
-          <FormControl display="flex" alignItems="center" w="auto">
-              <FormLabel htmlFor="show-only-owned-switch" mb="0" mr={3} fontSize="sm">
-                  In Collection
-              </FormLabel>
-              <Switch
-                id="show-only-owned-switch"
-                isChecked={showOnlyOwned}
-                onChange={(e) => setShowOnlyOwned(e.target.checked)}
-              />
+
+      {/* Filters and View Toggle */}
+      <HStack mb={4} justify="space-between" wrap="wrap" spacing={4}>
+        <HStack spacing={4}>
+          <FormControl display="flex" alignItems="center">
+            <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
+              Show Proxies
+            </FormLabel>
+            <Switch id="show-proxies" isChecked={showProxies} onChange={(e) => setShowProxies(e.target.checked)} />
           </FormControl>
-          <FormControl display="flex" alignItems="center" w="auto">
-              <FormLabel htmlFor="show-proxies-switch" mb="0" mr={3} fontSize="sm">
-                  Show Proxy
-              </FormLabel>
-              <Switch
-                id="show-proxies-switch"
-                isChecked={showProxies}
-                onChange={(e) => setShowProxies(e.target.checked)}
-              />
+          <FormControl display="flex" alignItems="center">
+            <FormLabel htmlFor="owned-only" mb="0" fontSize="sm">
+              Owned Only
+            </FormLabel>
+            <Switch id="owned-only" isChecked={showOnlyOwned} onChange={(e) => setShowOnlyOwned(e.target.checked)} />
           </FormControl>
-      </Flex>
+        </HStack>
 
-      {/* Subtle Status Messages */}
-      {searchTerm.length === 0 && (
-        <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
-          <HStack align="center">
-            <Text {...subtleTextStyle('gray.500')}>
-              Start typing to search cards (minimum 3 characters)
-            </Text>
-          </HStack>
-        </Box>
-      )}
+        {/* View Toggle Buttons */}
+        <HStack spacing={2}>
+          <Tooltip label="List View">
+            <IconButton
+              aria-label="List View"
+              icon={<HamburgerIcon />}
+              size="sm"
+              variant={viewMode === 'list' ? 'solid' : 'outline'}
+              colorScheme="blue"
+              onClick={() => setViewMode('list')}
+            />
+          </Tooltip>
+          <Tooltip label="Thumbnail View">
+            <IconButton
+              aria-label="Thumbnail View"
+              icon={<ViewIcon />}
+              size="sm"
+              variant={viewMode === 'thumbnail' ? 'solid' : 'outline'}
+              colorScheme="blue"
+              onClick={() => setViewMode('thumbnail')}
+            />
+          </Tooltip>
+        </HStack>
+      </HStack>
 
-      {searchTerm.length > 0 && searchTerm.length < 3 && (
-        <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
-          <HStack align="center">
-            <Text {...subtleTextStyle('gray.500')}>
-              Type at least 3 characters to search ({3 - searchTerm.length} more needed)
-            </Text>
-          </HStack>
-        </Box>
-      )}
-
-      {/* Loading State */}
       {loading && (
-        <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
-          <HStack align="center">
-            <Spinner size="sm" color="blue.400" thickness="2px" />
-            <Text {...subtleTextStyle('gray.500')}>
-              Searching cards for "{searchTerm}"...
-            </Text>
-          </HStack>
-        </Box>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <Box {...subtleBoxStyle('red.50', 'red.200')}>
+        <Box {...subtleBoxStyle('blue.50', 'blue.100')}>
           <HStack justify="space-between" align="center">
-            <VStack align="start" spacing={1} flex={1}>
-              <Text {...subtleTextStyle('red.600')}>
-                {error}
+            <HStack>
+              <Spinner size="sm" color="blue.500" />
+              <Text {...subtleTextStyle('blue.700')}>
+                Searching for "{searchTerm}"...
               </Text>
-            </VStack>
-            <HStack spacing={1}>
-              <Button
-                size="xs"
-                colorScheme="red"
-                variant="outline"
-                onClick={() => {
-                  setError(null);
-                  setSearchTerm('');
-                }}
-              >
-                Clear
-              </Button>
-              <Button
-                size="xs"
-                colorScheme="blue"
-                variant="ghost"
-                onClick={onHelpOpen}
-              >
-                Help
-              </Button>
             </HStack>
+            <Button
+              size="xs"
+              colorScheme="blue"
+              variant="ghost"
+              onClick={onHelpOpen}
+            >
+              Help
+            </Button>
           </HStack>
         </Box>
       )}
@@ -403,63 +455,35 @@ export default function CardSearch() {
             <Text {...subtleTextStyle('gray.500')}>
               Found {results.length} card{results.length !== 1 ? 's' : ''} for "{searchTerm}"
             </Text>
+            <Text fontSize="xs" color="gray.500">
+              Viewing as: {viewMode === 'list' ? 'List' : 'Thumbnails'}
+            </Text>
           </HStack>
         </Box>
       )}
 
-      <VStack spacing={2} align="stretch">
-        {results.map((card) => {
-          const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
-          return (
-            <Box
-              key={card.id}
-              p={3}
-              shadow="sm"
-              borderWidth="1px"
-              borderRadius="md"
-              onClick={() => handleCardClick(card)}
-              cursor="pointer"
-              _hover={{ shadow: 'md', bg: 'gray.50' }}
-            >
-              <Flex justify="space-between" align="center">
-                <VStack align="start" spacing={1.5} flex={1} minW={0}>
-                  <Wrap spacingX={4} spacingY={1} align="center">
-                    <WrapItem>
-                      <HStack>
-                        <Text fontWeight="bold" fontSize="md" noOfLines={1}>{card.name}</Text>
-                        <CardVariantIndicator cardId={card.id} />
-                      </HStack>
-                    </WrapItem>
-                    {card.category && <WrapItem fontSize="sm" color="gray.600">{toTitleCase(card.category)}</WrapItem>}
-                    {card.attributes && card.attributes.length > 0 && card.attributes.map(attr => (<WrapItem key={attr}><Tag size="sm" variant="outline" colorScheme="gray">{toTitleCase(attr)}</Tag></WrapItem>))}
-                    {card.cost !== null && <WrapItem fontSize="sm">Cost: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.cost}</Text></WrapItem>}
-                    {card.power !== null && <WrapItem fontSize="sm">Power: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.power}</Text></WrapItem>}
-                    {card.counter !== null && <WrapItem fontSize="sm">Counter: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.counter}</Text></WrapItem>}
-                  </Wrap>
-                  <Wrap spacingX={4} spacingY={1} align="center">
-                    <WrapItem><Tag size="sm" {...getTagStyles(card.color)}>{card.card_code}</Tag></WrapItem>
-                    {card.rarity && <WrapItem fontSize="sm" color="gray.800" fontWeight="semibold">{card.rarity}</WrapItem>}
-                    {card.types && card.types.length > 0 && card.types.map(type => (<WrapItem key={type}><Tag size="sm" variant="outline">{toTitleCase(type)}</Tag></WrapItem>))}
-                  </Wrap>
-                  {keywords.length > 0 ? (
-                    <Wrap align="center" pt={1}>
-                      <Text fontSize="xs" fontWeight="bold" color="gray.500" mr={2}>Keywords:</Text>
-                      {keywords.map(kw => (
-                          <WrapItem key={kw}><Tag size="sm" variant="subtle" colorScheme="gray">{kw}</Tag></WrapItem>
-                      ))}
-                    </Wrap>
-                  ) : ( <Box h="22px" /> )}
-                </VStack>
-                <HStack spacing={4} ml={4}>
-                  {showProxies && (<VStack spacing={0}><Text fontSize="xs" color="gray.500">Proxy</Text><CountControl cardId={card.id} type="proxy" count={card.proxy_count} onUpdate={handleCountUpdate} /></VStack>)}
-                  <VStack spacing={0}><Text fontSize="xs" color="gray.500">Owned</Text><CountControl cardId={card.id} type="owned" count={card.owned_count} onUpdate={handleCountUpdate} /></VStack>
-                </HStack>
-              </Flex>
-            </Box>
-        )})}
-      </VStack>
+      {error && <Text color="red.500">Error: {error}</Text>}
 
-      {/* Card Detail Modal */}
+      {/* Results Display */}
+      {viewMode === 'list' ? (
+        <VStack spacing={2} align="stretch">
+          {results.map((card) => (
+            <ListCard key={card.id} card={card} />
+          ))}
+        </VStack>
+      ) : (
+        <Grid
+          templateColumns="repeat(auto-fill, minmax(200px, 1fr))"
+          gap={6}
+          justifyItems="center"
+        >
+          {results.map((card) => (
+            <ThumbnailCard key={card.id} card={card} />
+          ))}
+        </Grid>
+      )}
+
+      {/* Card Detail Modal - Same as original */}
       {selectedCard && (
         <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="4xl" isCentered>
           <ModalOverlay />
@@ -491,7 +515,7 @@ export default function CardSearch() {
                     <StyledTextRenderer text={selectedCard.effect} />
                     <StyledTextRenderer text={selectedCard.trigger_effect} />
                   </VStack>
-                  <Box pt={2}>
+                   <Box pt={2}>
                     <Heading size="sm" mb={1}>Appears In</Heading>
                     <Wrap>
                       {selectedCard.packs?.split(', ').map(pack => (
@@ -507,15 +531,13 @@ export default function CardSearch() {
               </Flex>
             </ModalBody>
             <ModalFooter>
-              <Button colorScheme="blue" mr={3} onClick={onDetailClose}>
-                Close
-              </Button>
+              <Button colorScheme="blue" onClick={onDetailClose}>Close</Button>
             </ModalFooter>
           </ModalContent>
         </Modal>
       )}
 
-      {/* Help Modal */}
+      {/* Help Modal - Same as original */}
       <Modal isOpen={isHelpOpen} onClose={onHelpClose} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -527,11 +549,17 @@ export default function CardSearch() {
                 <Heading size="sm">Keywords</Heading>
                 <Text>Use <Code>id:</Code> to search for cards by their ID or code prefix.</Text>
                 <Text>Use <Code>pack:</Code> to filter for cards within a specific pack.</Text>
+                <Text>
+                  Use <Code>have:</Code> to search for cards that contain a bracketed keyword in their effect or trigger. <br />
+                  <b>You can use multiple <Code>have:</Code> keywords (e.g., <Code>have:blocker have:rush</Code>), and <u>all</u> must be present on the card (AND logic).</b>
+                </Text>
               </Box>
               <Box>
                 <Heading size="sm">Examples</Heading>
                 <VStack align="stretch" mt={2}>
-                   <Text><Code>roronoa zoro</Code> - Fuzzy search for card text.</Text>
+                   <Text><Code>have:blocker</Code> - Finds all cards with [Blocker] in their effect or trigger.</Text>
+                   <Text><Code>have:blocker have:rush</Code> - Finds cards with both [Blocker] and [Rush].</Text>
+                   <Text><Code>zoro have:rush</Code> - Fuzzy search for "zoro" and has [Rush].</Text>
                    <Text><Code>id:ST01-001</Code> - Finds cards with an ID starting with "ST01-001".</Text>
                    <Text><Code>pack:OP01</Code> - Shows only cards from packs starting with "OP01".</Text>
                    <Text><Code>zoro id:ST01- pack:ST01</Code> - A combined search.</Text>

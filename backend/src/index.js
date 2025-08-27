@@ -318,8 +318,9 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
 
   try {
     let fuzzyText = sanitizedKeyword;
-    const criteria = { id: null, pack: null, color: null };
+    const criteria = { id: null, pack: null, color: null, have: [] };
 
+    // Updated regex to include have: and allow multiple
     const regex = /(\w+):("([^"]+)"|(\S+))/g;
     let match;
     while ((match = regex.exec(sanitizedKeyword)) !== null) {
@@ -328,12 +329,13 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       if (key === 'id' && value.length > 0) criteria.id = value;
       if (key === 'pack' && value.length > 0) criteria.pack = value;
       if (key === 'color' && value.length > 0) criteria.color = value;
+      if (key === 'have' && value.length > 0) criteria.have.push(value);
     }
 
     fuzzyText = sanitizedKeyword.replace(regex, '').trim();
 
     // If all search fields are empty, reject the search
-    if (!fuzzyText && !criteria.id && !criteria.pack && !criteria.color) {
+    if (!fuzzyText && !criteria.id && !criteria.pack && !criteria.color && (!criteria.have || criteria.have.length === 0)) {
       return res.status(400).json({ error: 'Search keyword cannot be empty' });
     }
 
@@ -395,6 +397,18 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       whereClauses.push(`c.color ILIKE $${paramIndex}`);
       params.push(`%${criteria.color}%`);
       paramIndex++;
+    }
+
+    // --- HAVE keyword support (AND logic for multiple keywords) ---
+    if (criteria.have && criteria.have.length > 0) {
+      for (const haveKey of criteria.have) {
+        whereClauses.push(`(
+          (c.effect ILIKE $${paramIndex}) OR
+          (c.trigger_effect ILIKE $${paramIndex})
+        )`);
+        params.push(`%[${haveKey.replace(/[\[\]]/g, '')}]%`);
+        paramIndex++;
+      }
     }
 
     // Updated owned-only filter logic

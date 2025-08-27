@@ -4,8 +4,8 @@ import { Box, Input, Text } from '@chakra-ui/react';
 import React from 'react';
 
 const AdvancedSearchInput = ({ value, onChange, ...props }) => {
-  // Regex to match keyword:value
-  const regex = /(id:\S*|pack:\S*|color:\S*)/gi;
+  // Regex to match keyword:value, now includes have:
+  const regex = /(id:\S*|pack:\S*|color:\S*|have:\S*)/gi;
   const parts = [];
   let lastIndex = 0;
   let match;
@@ -127,4 +127,3 @@ const AdvancedSearchInput = ({ value, onChange, ...props }) => {
 };
 
 export default AdvancedSearchInput;
-
