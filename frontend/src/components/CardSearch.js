@@ -134,23 +134,23 @@ export default function CardSearch() {
   };
 
   useEffect(() => {
-    // Extract if advanced search keywords are present
-    const advancedKeywordRegex = /(?:\b(id|pack|color):\S+)/gi;
+    // Extract if advanced search keywords are present (updated to include exact:)
+    const advancedKeywordRegex = /(?:\b(id|pack|color|exact):\S+)/gi;
     const hasAdvancedKeyword = advancedKeywordRegex.test(searchTerm);
 
     if (searchTerm.length < 3 && !hasAdvancedKeyword) {
-       setResults([]);
-       setError(null);
-       return;
+      setResults([]);
+      setError(null);
+      return;
     }
 
     const delayDebounceFn = setTimeout(() => {
       setLoading(true);
       setError(null);
       const searchParams = new URLSearchParams({
-          keyword: searchTerm,
-          ownedOnly: showOnlyOwned,
-          showProxies: showProxies,
+        keyword: searchTerm,
+        ownedOnly: showOnlyOwned,
+        showProxies: showProxies,
       });
       fetch(`${apiUrl}/api/cards/search?${searchParams.toString()}`, {
         credentials: 'include'
@@ -158,6 +158,7 @@ export default function CardSearch() {
       .then((res) => {
         if (!res.ok) {
           return res.json().then(errData => {
+            // Handle specific error cases
             if (res.status === 400) {
               throw new Error('Invalid search parameters. Please check your search criteria.');
             } else if (res.status === 500) {
@@ -166,12 +167,14 @@ export default function CardSearch() {
               throw new Error(errData.message || `Search failed with status ${res.status}`);
             }
           }).catch(jsonError => {
+            // If response is not JSON, create a generic error
             throw new Error(`Search failed: ${res.statusText || 'Unknown error'}`);
           });
         }
         return res.json();
       })
       .then((data) => {
+        // Ensure data is an array
         if (!Array.isArray(data)) {
           console.warn('Search API returned non-array data:', data);
           setResults([]);
@@ -181,6 +184,7 @@ export default function CardSearch() {
       })
       .catch((error) => {
         console.error("Failed to fetch search results:", error);
+        // Provide user-friendly error messages
         let errorMessage = 'Failed to fetch search results.';
 
         if (error.message.includes('could not determine data type')) {
@@ -199,7 +203,7 @@ export default function CardSearch() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm, apiUrl, showOnlyOwned, showProxies]);
 
-  // --- Subtle Status Message Styles ---
+    // --- Subtle Status Message Styles ---
   const subtleBoxStyle = (color, borderColor) => ({
     mb: 4,
     p: 3,
@@ -563,34 +567,38 @@ export default function CardSearch() {
         </Modal>
       )}
 
-      {/* Help Modal - Same as original */}
       <Modal isOpen={isHelpOpen} onClose={onHelpClose} isCentered>
         <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Advanced Search Syntax</ModalHeader>
-          <ModalBody>
-            <VStack spacing={4} align="stretch">
-              <Text>You can combine general text with special keywords to narrow down your search.</Text>
-              <Box>
-                <Heading size="sm">Keywords</Heading>
-                <Text>Use <Code>id:</Code> to search for cards by their ID or code prefix.</Text>
-                <Text>Use <Code>pack:</Code> to filter for cards within a specific pack.</Text>
-              </Box>
-              <Box>
-                <Heading size="sm">Examples</Heading>
-                <VStack align="stretch" mt={2}>
-                   <Text><Code>roronoa zoro</Code> - Fuzzy search for card text.</Text>
-                   <Text><Code>id:ST01-001</Code> - Finds cards with an ID starting with "ST01-001".</Text>
-                   <Text><Code>pack:OP01</Code> - Shows only cards from packs starting with "OP01".</Text>
-                   <Text><Code>zoro id:ST01- pack:ST01</Code> - A combined search.</Text>
-                </VStack>
-              </Box>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="blue" onClick={onHelpClose}>Got it!</Button>
-          </ModalFooter>
-        </ModalContent>
+          <ModalContent>
+             <ModalHeader>Advanced Search Syntax</ModalHeader>
+               <ModalBody>
+                 <VStack spacing={4} align="stretch">
+                   <Text>You can combine general text with special keywords to narrow down your search.</Text>
+                     <Box>
+                       <Heading size="sm">Keywords</Heading>
+                       <Text>Use <Code>id:</Code> to search for cards by their ID or code prefix.</Text>
+                       <Text>Use <Code>pack:</Code> to filter for cards within a specific pack.</Text>
+                       <Text>Use <Code>color:</Code> to filter by card color.</Text>
+                       <Text>Use <Code>exact:"term"</Code> to search for exact word matches.</Text>
+                     </Box>
+                     <Box>
+                       <Heading size="sm">Examples</Heading>
+                       <VStack align="stretch" mt={2}>
+                         <Text><Code>roronoa zoro</Code> - Fuzzy search for card text.</Text>
+                         <Text><Code>exact:"Roronoa Zoro"</Code> - Exact match for "Roronoa Zoro".</Text>
+                         <Text><Code>exact:"DON!!" exact:"Rush"</Code> - Cards with both "DON!!" and "Rush".</Text>
+                         <Text><Code>id:ST01-001</Code> - Finds cards with an ID starting with "ST01-001".</Text>
+                         <Text><Code>pack:OP01</Code> - Shows only cards from packs starting with "OP01".</Text>
+                         <Text><Code>color:red</Code> - Shows only red cards.</Text>
+                         <Text><Code>zoro exact:"Leader" color:green</Code> - Combined search.</Text>
+                       </VStack>
+                     </Box>
+                   </VStack>
+                 </ModalBody>
+               <ModalFooter>
+             <Button colorScheme="blue" onClick={onHelpClose}>Got it!</Button>
+             </ModalFooter>
+          </ModalContent>
       </Modal>
     </Box>
   );

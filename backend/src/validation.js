@@ -163,6 +163,39 @@ export const validateSearchQuery = (req, res, next) => {
         });
     }
 
+    // Updated validation for advanced syntax - now including exact:
+    // Check for malformed exact: syntax (unclosed quotes)
+    const exactQuoteRegex = /exact:"[^"]*$/;
+    if (exactQuoteRegex.test(sanitizedKeyword)) {
+        return res.status(400).json({
+            message: "Unclosed quotes in exact: syntax. Please close all quotes.",
+            code: 'MALFORMED_EXACT_SYNTAX'
+        });
+    }
+
+    // Check for empty exact: values
+    const emptyExactRegex = /exact:(""|''|(?!\S))/;
+    if (emptyExactRegex.test(sanitizedKeyword)) {
+        return res.status(400).json({
+            message: "Empty exact: search terms are not allowed.",
+            code: 'EMPTY_EXACT_TERM'
+        });
+    }
+
+    // Validate that advanced syntax doesn't contain dangerous characters
+    const advancedSyntaxRegex = /(id|pack|color|exact):("[^"]*"|[^\s]*)/gi;
+    let match;
+    while ((match = advancedSyntaxRegex.exec(sanitizedKeyword)) !== null) {
+        const value = match[2];
+        // Check for potential SQL injection patterns
+        if (/[';--]/g.test(value)) {
+            return res.status(400).json({
+                message: "Invalid characters in search syntax.",
+                code: 'INVALID_SYNTAX_CHARACTERS'
+            });
+        }
+    }
+
     // Validate boolean query parameters
     if (ownedOnly && !['true', 'false'].includes(ownedOnly)) {
         return res.status(400).json({

@@ -302,6 +302,8 @@ app.post('/api/collection/update', isAuthenticated, async (req, res) => {
     }
 });
 
+// backend/src/index.js - Updated search endpoint implementation
+
 app.get('/api/cards/search', isAuthenticated, async (req, res) => {
   const { keyword, ownedOnly, showProxies } = req.query;
   const userId = req.user.id;
@@ -318,24 +320,28 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
 
   try {
     let fuzzyText = sanitizedKeyword;
-    const criteria = { id: null, pack: null, color: null, have: null };
+    const criteria = { id: null, pack: null, color: null };
+    const exactTerms = []; // New: Array to store exact search terms
 
-    // Updated regex to include the new "have:" keyword
+    // Updated regex to include exact: syntax with quotes
     const regex = /(\w+):("([^"]+)"|(\S+))/g;
     let match;
     while ((match = regex.exec(sanitizedKeyword)) !== null) {
       const key = match[1].toLowerCase();
       const value = (match[3] || match[4]).trim();
+
       if (key === 'id' && value.length > 0) criteria.id = value;
       if (key === 'pack' && value.length > 0) criteria.pack = value;
       if (key === 'color' && value.length > 0) criteria.color = value;
-      if (key === 'have' && value.length > 0) criteria.have = value.toLowerCase();
+      // New: Handle exact search terms
+      if (key === 'exact' && value.length > 0) exactTerms.push(value);
     }
 
+    // Remove all advanced syntax from fuzzy text
     fuzzyText = sanitizedKeyword.replace(regex, '').trim();
 
     // If all search fields are empty, reject the search
-    if (!fuzzyText && !criteria.id && !criteria.pack && !criteria.color && !criteria.have) {
+    if (!fuzzyText && !criteria.id && !criteria.pack && !criteria.color && exactTerms.length === 0) {
       return res.status(400).json({ error: 'Search keyword cannot be empty' });
     }
 
@@ -352,32 +358,47 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
                COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
                COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count
         FROM owned_cards
-        WHERE user_id = $1
+        WHERE user_id = $2
         GROUP BY card_id
       ) AS oc ON c.id = oc.card_id
       LEFT JOIN card_pack_appearances cpa ON c.id = cpa.card_id
     `;
 
     const whereClauses = [];
-    const params = [userId];
-    let paramIndex = 2;
+    const params = [fuzzyText || '', userId];
+    let paramIndex = 3;
 
-    // Only add fuzzy search if fuzzyText exists
+    // Fuzzy search logic (only if fuzzyText exists)
     if (fuzzyText && fuzzyText.length > 0) {
       whereClauses.push(`GREATEST(
-          similarity(COALESCE(c.name, ''), $${paramIndex}),
-          similarity(COALESCE(c.id, ''), $${paramIndex}),
-          similarity(COALESCE(c.card_code, ''), $${paramIndex}),
-          similarity(COALESCE(c.effect, ''), $${paramIndex}),
-          similarity(COALESCE(c.category, ''), $${paramIndex}),
-          similarity(COALESCE(c.trigger_effect, ''), $${paramIndex}),
-          similarity(array_to_string(COALESCE(c.attributes, ARRAY[]::TEXT[]), ' '), $${paramIndex}),
-          similarity(array_to_string(COALESCE(c.types, ARRAY[]::TEXT[]), ' '), $${paramIndex})
+          similarity(COALESCE(c.name, ''), $1),
+          similarity(COALESCE(c.id, ''), $1),
+          similarity(COALESCE(c.card_code, ''), $1),
+          similarity(COALESCE(c.effect, ''), $1),
+          similarity(COALESCE(c.category, ''), $1),
+          similarity(COALESCE(c.trigger_effect, ''), $1),
+          similarity(array_to_string(COALESCE(c.attributes, ARRAY[]::TEXT[]), ' '), $1),
+          similarity(array_to_string(COALESCE(c.types, ARRAY[]::TEXT[]), ' '), $1)
         ) > 0.15`);
-      params.push(fuzzyText);
-      paramIndex++;
     }
 
+    // New: Exact search logic - each exact term must match
+    exactTerms.forEach(exactTerm => {
+      whereClauses.push(`(
+        c.name ILIKE '%' || $${paramIndex} || '%' OR
+        c.id ILIKE '%' || $${paramIndex} || '%' OR
+        c.card_code ILIKE '%' || $${paramIndex} || '%' OR
+        c.effect ILIKE '%' || $${paramIndex} || '%' OR
+        c.category ILIKE '%' || $${paramIndex} || '%' OR
+        c.trigger_effect ILIKE '%' || $${paramIndex} || '%' OR
+        array_to_string(COALESCE(c.attributes, ARRAY[]::TEXT[]), ' ') ILIKE '%' || $${paramIndex} || '%' OR
+        array_to_string(COALESCE(c.types, ARRAY[]::TEXT[]), ' ') ILIKE '%' || $${paramIndex} || '%'
+      )`);
+      params.push(exactTerm);
+      paramIndex++;
+    });
+
+    // Existing criteria logic
     if (criteria.id) {
       whereClauses.push(`(c.id ILIKE $${paramIndex} OR c.card_code ILIKE $${paramIndex})`);
       params.push(`${criteria.id}%`);
@@ -399,24 +420,7 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       paramIndex++;
     }
 
-    // Handle the new "have:" keyword
-    if (criteria.have) {
-      if (criteria.have === 'true' || criteria.have === 'yes' || criteria.have === '1') {
-        // Show only cards that are owned (owned_count > 0 OR proxy_count > 0)
-        whereClauses.push(`(oc.owned_count > 0 OR oc.proxy_count > 0)`);
-      } else if (criteria.have === 'false' || criteria.have === 'no' || criteria.have === '0') {
-        // Show only cards that are NOT owned (owned_count = 0 AND proxy_count = 0)
-        whereClauses.push(`(COALESCE(oc.owned_count, 0) = 0 AND COALESCE(oc.proxy_count, 0) = 0)`);
-      } else if (criteria.have === 'owned') {
-        // Show only owned cards (not proxies)
-        whereClauses.push(`oc.owned_count > 0`);
-      } else if (criteria.have === 'proxy') {
-        // Show only proxy cards
-        whereClauses.push(`oc.proxy_count > 0`);
-      }
-    }
-
-    // Updated owned-only filter logic (this works in combination with have:)
+    // Updated owned-only filter logic
     if (ownedOnly === 'true') {
       if (showProxies === 'true') {
         // When showProxies is true, consider both owned and proxy cards as "in collection"
@@ -437,6 +441,7 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       oc.owned_count, oc.proxy_count
     `;
 
+    // Enhanced ordering logic
     const orderByClauses = [];
     if (criteria.color) {
         const colorParamIndex = params.findIndex(p => p === `%${criteria.color}%`) + 1;
@@ -450,15 +455,23 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
             orderByClauses.push(`CASE WHEN c.id ILIKE $${idParamIndex} OR c.card_code ILIKE $${idParamIndex} THEN 0 ELSE 1 END`);
         }
     }
-    if (fuzzyText && fuzzyText.length > 0) {
-        const fuzzyParamIndex = params.findIndex(p => p === fuzzyText) + 1;
-        if (fuzzyParamIndex > 0) {
-            orderByClauses.push(`GREATEST(
-              similarity(c.name, $${fuzzyParamIndex}),
-              similarity(c.id, $${fuzzyParamIndex}),
-              similarity(c.card_code, $${fuzzyParamIndex})
-            ) DESC`);
+
+    // New: Boost exact matches in ordering
+    if (exactTerms.length > 0) {
+      exactTerms.forEach((exactTerm, index) => {
+        const exactParamIndex = params.findIndex(p => p === exactTerm) + 1;
+        if (exactParamIndex > 0) {
+          orderByClauses.push(`CASE WHEN c.name ILIKE '%' || $${exactParamIndex} || '%' THEN 0 ELSE 1 END`);
         }
+      });
+    }
+
+    if (fuzzyText && fuzzyText.length > 0) {
+        orderByClauses.push(`GREATEST(
+          similarity(c.name, $1),
+          similarity(c.id, $1),
+          similarity(c.card_code, $1)
+        ) DESC`);
     }
     orderByClauses.push('c.name ASC');
 
@@ -466,9 +479,6 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
         baseQuery += ' ORDER BY ' + orderByClauses.join(', ');
     }
     baseQuery += ' LIMIT 50;';
-
-    console.log('Executing query:', baseQuery);
-    console.log('With params:', params);
 
     const results = await query(baseQuery, params);
     res.json(results.rows);
