@@ -318,9 +318,9 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
 
   try {
     let fuzzyText = sanitizedKeyword;
-    const criteria = { id: null, pack: null, color: null, have: [] };
+    const criteria = { id: null, pack: null, color: null, have: null };
 
-    // Updated regex to include have: and allow multiple
+    // Updated regex to include the new "have:" keyword
     const regex = /(\w+):("([^"]+)"|(\S+))/g;
     let match;
     while ((match = regex.exec(sanitizedKeyword)) !== null) {
@@ -329,13 +329,13 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       if (key === 'id' && value.length > 0) criteria.id = value;
       if (key === 'pack' && value.length > 0) criteria.pack = value;
       if (key === 'color' && value.length > 0) criteria.color = value;
-      if (key === 'have' && value.length > 0) criteria.have.push(value);
+      if (key === 'have' && value.length > 0) criteria.have = value.toLowerCase();
     }
 
     fuzzyText = sanitizedKeyword.replace(regex, '').trim();
 
     // If all search fields are empty, reject the search
-    if (!fuzzyText && !criteria.id && !criteria.pack && !criteria.color && (!criteria.have || criteria.have.length === 0)) {
+    if (!fuzzyText && !criteria.id && !criteria.pack && !criteria.color && !criteria.have) {
       return res.status(400).json({ error: 'Search keyword cannot be empty' });
     }
 
@@ -399,19 +399,24 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       paramIndex++;
     }
 
-    // --- HAVE keyword support (AND logic for multiple keywords) ---
-    if (criteria.have && criteria.have.length > 0) {
-      for (const haveKey of criteria.have) {
-        whereClauses.push(`(
-          (c.effect ILIKE $${paramIndex}) OR
-          (c.trigger_effect ILIKE $${paramIndex})
-        )`);
-        params.push(`%[${haveKey.replace(/[\[\]]/g, '')}]%`);
-        paramIndex++;
+    // Handle the new "have:" keyword
+    if (criteria.have) {
+      if (criteria.have === 'true' || criteria.have === 'yes' || criteria.have === '1') {
+        // Show only cards that are owned (owned_count > 0 OR proxy_count > 0)
+        whereClauses.push(`(oc.owned_count > 0 OR oc.proxy_count > 0)`);
+      } else if (criteria.have === 'false' || criteria.have === 'no' || criteria.have === '0') {
+        // Show only cards that are NOT owned (owned_count = 0 AND proxy_count = 0)
+        whereClauses.push(`(COALESCE(oc.owned_count, 0) = 0 AND COALESCE(oc.proxy_count, 0) = 0)`);
+      } else if (criteria.have === 'owned') {
+        // Show only owned cards (not proxies)
+        whereClauses.push(`oc.owned_count > 0`);
+      } else if (criteria.have === 'proxy') {
+        // Show only proxy cards
+        whereClauses.push(`oc.proxy_count > 0`);
       }
     }
 
-    // Updated owned-only filter logic
+    // Updated owned-only filter logic (this works in combination with have:)
     if (ownedOnly === 'true') {
       if (showProxies === 'true') {
         // When showProxies is true, consider both owned and proxy cards as "in collection"

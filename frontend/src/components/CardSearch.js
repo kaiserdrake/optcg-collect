@@ -5,7 +5,7 @@ import {
   Box, Text, VStack, HStack, Tag, Spinner, Stat, StatLabel, StatNumber, Wrap, WrapItem, Image,
   Flex, Heading, StackDivider, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader,
   ModalFooter, ModalBody, ModalCloseButton, Button, IconButton, Code, FormControl, FormLabel, Switch,
-  Grid, GridItem, Tooltip
+  Grid, GridItem, Tooltip, Slider, SliderTrack, SliderFilledTrack, SliderThumb
 } from '@chakra-ui/react';
 import { QuestionOutlineIcon, ViewIcon, HamburgerIcon } from '@chakra-ui/icons';
 import AdvancedSearchInput from './AdvancedSearchInput';
@@ -100,6 +100,7 @@ export default function CardSearch() {
   const [showProxies, setShowProxies] = useState(false);
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'thumbnail'
+  const [thumbnailSize, setThumbnailSize] = useState(160); // thumbnail size in pixels, default small
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const [selectedCard, setSelectedCard] = useState(null);
@@ -217,6 +218,7 @@ export default function CardSearch() {
   // Thumbnail Card Component
   const ThumbnailCard = ({ card }) => {
     const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
+    const imageHeight = Math.floor(thumbnailSize * 1.4); // maintain aspect ratio
 
     return (
       <Box
@@ -229,15 +231,15 @@ export default function CardSearch() {
         borderRadius="lg"
         shadow="md"
         overflow="hidden"
-        w="200px"
+        w={`${thumbnailSize}px`}
         h="auto"
       >
         {/* Card Image */}
-        <Box position="relative" w="100%" h="280px">
+        <Box position="relative" w="100%" h={`${imageHeight}px`}>
           <Image
             src={card.img_url}
             alt={card.name}
-            fallbackSrc='https://via.placeholder.com/200x280?text=No+Image'
+            fallbackSrc={`https://via.placeholder.com/${thumbnailSize}x${imageHeight}?text=No+Image`}
             w="100%"
             h="100%"
             objectFit="cover"
@@ -353,23 +355,9 @@ export default function CardSearch() {
 
       {/* Filters and View Toggle */}
       <HStack mb={4} justify="space-between" wrap="wrap" spacing={4}>
-        <HStack spacing={4}>
-          <FormControl display="flex" alignItems="center">
-            <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
-              Show Proxies
-            </FormLabel>
-            <Switch id="show-proxies" isChecked={showProxies} onChange={(e) => setShowProxies(e.target.checked)} />
-          </FormControl>
-          <FormControl display="flex" alignItems="center">
-            <FormLabel htmlFor="owned-only" mb="0" fontSize="sm">
-              Owned Only
-            </FormLabel>
-            <Switch id="owned-only" isChecked={showOnlyOwned} onChange={(e) => setShowOnlyOwned(e.target.checked)} />
-          </FormControl>
-        </HStack>
-
-        {/* View Toggle Buttons */}
+        {/* View Toggle Buttons - Left Side */}
         <HStack spacing={2}>
+          <Text fontSize="sm" color="gray.600">View:</Text>
           <Tooltip label="List View">
             <IconButton
               aria-label="List View"
@@ -390,6 +378,44 @@ export default function CardSearch() {
               onClick={() => setViewMode('thumbnail')}
             />
           </Tooltip>
+
+          {/* Thumbnail Size Slider - Only show when in thumbnail mode */}
+          {viewMode === 'thumbnail' && (
+            <HStack spacing={2} ml={4}>
+              <Text fontSize="xs" color="gray.500">Size:</Text>
+              <Box w="80px">
+                <Slider
+                  min={120}
+                  max={250}
+                  step={10}
+                  value={thumbnailSize}
+                  onChange={setThumbnailSize}
+                  size="sm"
+                >
+                  <SliderTrack>
+                    <SliderFilledTrack />
+                  </SliderTrack>
+                  <SliderThumb />
+                </Slider>
+              </Box>
+            </HStack>
+          )}
+        </HStack>
+
+        {/* Controls - Right Side */}
+        <HStack spacing={4}>
+          <FormControl display="flex" alignItems="center">
+            <FormLabel htmlFor="owned-only" mb="0" fontSize="sm">
+              In Collection
+            </FormLabel>
+            <Switch id="owned-only" isChecked={showOnlyOwned} onChange={(e) => setShowOnlyOwned(e.target.checked)} />
+          </FormControl>
+          <FormControl display="flex" alignItems="center">
+            <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
+              Show Proxies
+            </FormLabel>
+            <Switch id="show-proxies" isChecked={showProxies} onChange={(e) => setShowProxies(e.target.checked)} />
+          </FormControl>
         </HStack>
       </HStack>
 
@@ -473,7 +499,7 @@ export default function CardSearch() {
         </VStack>
       ) : (
         <Grid
-          templateColumns="repeat(auto-fill, minmax(200px, 1fr))"
+          templateColumns={`repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))`}
           gap={6}
           justifyItems="center"
         >
@@ -549,17 +575,11 @@ export default function CardSearch() {
                 <Heading size="sm">Keywords</Heading>
                 <Text>Use <Code>id:</Code> to search for cards by their ID or code prefix.</Text>
                 <Text>Use <Code>pack:</Code> to filter for cards within a specific pack.</Text>
-                <Text>
-                  Use <Code>have:</Code> to search for cards that contain a bracketed keyword in their effect or trigger. <br />
-                  <b>You can use multiple <Code>have:</Code> keywords (e.g., <Code>have:blocker have:rush</Code>), and <u>all</u> must be present on the card (AND logic).</b>
-                </Text>
               </Box>
               <Box>
                 <Heading size="sm">Examples</Heading>
                 <VStack align="stretch" mt={2}>
-                   <Text><Code>have:blocker</Code> - Finds all cards with [Blocker] in their effect or trigger.</Text>
-                   <Text><Code>have:blocker have:rush</Code> - Finds cards with both [Blocker] and [Rush].</Text>
-                   <Text><Code>zoro have:rush</Code> - Fuzzy search for "zoro" and has [Rush].</Text>
+                   <Text><Code>roronoa zoro</Code> - Fuzzy search for card text.</Text>
                    <Text><Code>id:ST01-001</Code> - Finds cards with an ID starting with "ST01-001".</Text>
                    <Text><Code>pack:OP01</Code> - Shows only cards from packs starting with "OP01".</Text>
                    <Text><Code>zoro id:ST01- pack:ST01</Code> - A combined search.</Text>
