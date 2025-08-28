@@ -43,21 +43,29 @@ const getTagStyles = (colorString) => {
   return { bgGradient: gradient, color: 'white', variant: 'solid' };
 };
 
+// Enhanced function to extract keywords with their styling
 const extractStyledKeywords = (effect, triggerEffect) => {
   const combinedText = `${effect || ''} ${triggerEffect || ''}`;
   const regex = /\[([^\]]+)\]/g;
-  const keywordSet = new Set();
+  const keywordArray = [];
   let match;
   while ((match = regex.exec(combinedText)) !== null) {
     const keyword = match[1];
     const keywordLower = keyword.toLowerCase();
-    const isExactMatch = !!keywordStyles[keywordLower];
-    const isPatternMatch = keywordPatterns.some(p => p.regex.test(keyword));
-    if (isExactMatch || isPatternMatch) {
-      keywordSet.add(keyword);
+    const style = keywordStyles[keywordLower];
+
+    if (style) {
+      keywordArray.push({ text: keyword, style });
+    } else {
+      const patternMatch = keywordPatterns.find(p => p.regex.test(keyword));
+      if (patternMatch) {
+        keywordArray.push({ text: keyword, style: patternMatch.style });
+      }
+      // Only include keywords that match keywordStyles or keywordPatterns
+      // Ignore card names and other bracketed text
     }
   }
-  return Array.from(keywordSet);
+  return keywordArray;
 };
 
 // Style helpers
@@ -138,40 +146,18 @@ export default function CardSearch() {
             } else if (res.status === 500) {
               throw new Error('Server error occurred. Please try again later.');
             } else {
-              throw new Error(errData.message || `Search failed with status ${res.status}`);
+              throw new Error(errData.error || 'An unexpected error occurred.');
             }
-          }).catch(jsonError => {
-            // If response is not JSON, create a generic error
-            throw new Error(`Search failed: ${res.statusText || 'Unknown error'}`);
           });
         }
         return res.json();
       })
       .then((data) => {
-        // Ensure data is an array
-        if (!Array.isArray(data)) {
-          console.warn('Search API returned non-array data:', data);
-          setResults([]);
-        } else {
-          setResults(data);
-        }
+        setResults(data);
+        setLoading(false);
       })
-      .catch((error) => {
-        console.error("Failed to fetch search results:", error);
-        // Provide user-friendly error messages
-        let errorMessage = 'Failed to fetch search results.';
-
-        if (error.message.includes('could not determine data type')) {
-          errorMessage = 'Search query contains invalid characters. Please try different search terms.';
-        } else if (error.message.includes('fetch')) {
-          errorMessage = 'Unable to connect to server. Please check your connection and try again.';
-        } else {
-          errorMessage = error.message || 'An unexpected error occurred.';
-        }
-
-        setError(errorMessage);
-      })
-      .finally(() => {
+      .catch((err) => {
+        setError(err.message);
         setLoading(false);
       });
     }, 300);
@@ -181,42 +167,44 @@ export default function CardSearch() {
 
   // Thumbnail Card Component
   const ThumbnailCard = ({ card }) => {
+    const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
+
     return (
       <Box
-        key={card.id}
-        borderWidth="1px"
-        borderRadius="lg"
+        borderRadius="md"
         overflow="hidden"
         cursor="pointer"
         onClick={() => handleCardClick(card)}
-        _hover={{ shadow: 'lg', transform: 'translateY(-2px)' }}
+        _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
         transition="all 0.2s"
         bg="white"
-        w={`${thumbnailSize}px`}
-        h="auto"
+        shadow="md"
+        position="relative"
       >
-        {/* Card Image */}
-        <Box position="relative">
-          <Image
-            src={card.img_url}
-            alt={card.name}
-            fallbackSrc='https://via.placeholder.com/250x350?text=No+Image'
-            w="100%"
-            h={`${Math.round(thumbnailSize * 1.4)}px`}
-            objectFit="cover"
-          />
-        </Box>
+        <Image
+          width={`${thumbnailSize}px`}
+          height={`${Math.floor(thumbnailSize * 1.4)}px`}
+          src={card.img_url}
+          alt={card.name}
+          fallbackSrc='https://via.placeholder.com/160x224?text=No+Image'
+          objectFit="cover"
+        />
 
-        {/* Card Info Overlay */}
-        <Box p={3} bg="white">
-          <Text fontSize="sm" fontWeight="bold" noOfLines={2} mb={2} textAlign="center">
+        <Box
+          position="absolute"
+          bottom="0"
+          left="0"
+          right="0"
+          bg="rgba(0,0,0,0.8)"
+          color="white"
+          p={2}
+        >
+          <Text fontSize="xs" fontWeight="bold" noOfLines={1} mb={1}>
             {card.name}
           </Text>
-
-          {/* Count Information - Subtle */}
-          <Flex justify="center" align="center" gap={4}>
+          <Flex justify="space-between" align="center" fontSize="xs">
             <VStack spacing={0}>
-              <Text fontSize="xs" color="gray.500" fontWeight="medium">
+              <Text fontSize="xs" color="gray.400" fontWeight="medium">
                 Owned
               </Text>
               <Text fontSize="sm" fontWeight="bold" color="blue.600">
@@ -286,9 +274,9 @@ export default function CardSearch() {
             {keywords.length > 0 ? (
               <Wrap align="center" pt={1}>
                 <Text fontSize="xs" fontWeight="bold" color="gray.500" mr={2}>Keywords:</Text>
-                {keywords.map(kw => (
-                  <WrapItem key={kw}>
-                    <Tag size="sm" variant="subtle" colorScheme="gray">{kw}</Tag>
+                {keywords.map((kw, index) => (
+                  <WrapItem key={index}>
+                    <Tag size="sm" {...kw.style}>{kw.text}</Tag>
                   </WrapItem>
                 ))}
               </Wrap>

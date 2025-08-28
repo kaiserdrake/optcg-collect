@@ -6,7 +6,7 @@ import {
 } from '@chakra-ui/react';
 import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
-import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
+import StyledTextRenderer from './StyledTextRenderer';
 
 // Helper functions (moved from CardSearch)
 const colorMap = {
@@ -27,66 +27,6 @@ const getTagStyles = (colorString) => {
   }
   const gradient = `linear(to-r, ${colors.join(', ')})`;
   return { bgGradient: gradient, color: 'white', variant: 'solid' };
-};
-
-const StyledTextRenderer = ({ text }) => {
-  if (!text || text.trim() === '' || text.trim() === '-') {
-    return <Text as="span">&nbsp;</Text>;
-  }
-
-  const parts = text.split(/(\[.*?\])/g);
-
-  return (
-    <Box display="flex" flexWrap="wrap" alignItems="center" gap={1}>
-      {parts.map((part, index) => {
-        if (part.match(/^\[.*\]$/)) {
-          const keyword = part.slice(1, -1).toLowerCase();
-          const style = keywordStyles[keyword];
-          if (style) {
-            return (
-              <Tag
-                key={index}
-                {...style}
-                display="inline-flex"
-                flexShrink={0}
-                whiteSpace="nowrap"
-              >
-                {part.slice(1, -1)}
-              </Tag>
-            );
-          }
-          const patternMatch = keywordPatterns.find(p => p.regex.test(part.slice(1, -1)));
-          if (patternMatch) {
-            return (
-              <Tag
-                key={index}
-                {...patternMatch.style}
-                display="inline-flex"
-                flexShrink={0}
-                whiteSpace="nowrap"
-              >
-                {part.slice(1, -1)}
-              </Tag>
-            );
-          }
-        }
-        // Only render non-empty text parts
-        if (part.trim()) {
-          return (
-            <Text
-              key={index}
-              as="span"
-              display="inline"
-              whiteSpace="pre-wrap"
-            >
-              {part}
-            </Text>
-          );
-        }
-        return null;
-      })}
-    </Box>
-  );
 };
 
 const CardDetailModal = ({
@@ -159,8 +99,12 @@ const CardDetailModal = ({
                 )}
               </HStack>
               <VStack spacing={4} align="stretch" pt={2}>
-                <StyledTextRenderer text={selectedCard.effect} />
-                <StyledTextRenderer text={selectedCard.trigger_effect} />
+                {selectedCard.effect && (
+                  <StyledTextRenderer text={selectedCard.effect} />
+                )}
+                {selectedCard.trigger_effect && (
+                  <StyledTextRenderer text={selectedCard.trigger_effect} />
+                )}
               </VStack>
               <Box pt={2}>
                 <Heading size="sm" mb={1}>Appears In</Heading>
