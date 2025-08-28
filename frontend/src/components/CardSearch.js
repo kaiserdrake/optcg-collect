@@ -232,6 +232,11 @@ export default function CardSearch() {
   const ListCard = ({ card }) => {
     const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
 
+    // Helper function to determine the cost label
+    const getCostLabel = (card) => {
+      return card.category === 'LEADER' ? 'Life' : 'Cost';
+    };
+
     return (
       <Box
         key={card.id}
@@ -258,7 +263,7 @@ export default function CardSearch() {
                   <Tag size="sm" variant="outline" colorScheme="gray">{toTitleCase(attr)}</Tag>
                 </WrapItem>
               ))}
-              {card.cost !== null && <WrapItem fontSize="sm">Cost: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.cost}</Text></WrapItem>}
+              {card.cost !== null && <WrapItem fontSize="sm">{getCostLabel(card)}: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.cost}</Text></WrapItem>}
               {card.power !== null && <WrapItem fontSize="sm">Power: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.power}</Text></WrapItem>}
               {card.counter !== null && <WrapItem fontSize="sm">Counter: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.counter}</Text></WrapItem>}
             </Wrap>
@@ -281,8 +286,8 @@ export default function CardSearch() {
                 ))}
               </Wrap>
             ) : (
-              <Box h="22px" />
-            )}
+                <Box h="22px" />
+              )}
           </VStack>
           <HStack spacing={4} ml={4}>
             {showProxies && (

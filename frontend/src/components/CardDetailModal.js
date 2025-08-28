@@ -38,6 +38,11 @@ const CardDetailModal = ({
 }) => {
   if (!selectedCard) return null;
 
+  // Helper function to determine the cost label
+  const getCostLabel = (card) => {
+    return card.category === 'LEADER' ? 'Life' : 'Cost';
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
       <ModalOverlay />
@@ -81,7 +86,7 @@ const CardDetailModal = ({
               <HStack spacing={6} divider={<StackDivider />} pt={1}>
                 {selectedCard.cost !== null && (
                   <Stat>
-                    <StatLabel>Cost</StatLabel>
+                    <StatLabel>{getCostLabel(selectedCard)}</StatLabel>
                     <StatNumber>{selectedCard.cost}</StatNumber>
                   </Stat>
                 )}
