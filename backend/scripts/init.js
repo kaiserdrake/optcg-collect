@@ -26,6 +26,138 @@ const waitForDatabase = async () => {
   throw new Error('INIT: Could not connect to database after maximum retries');
 };
 
+// Reprint handling utility functions
+const isReprint = (cardCode) => {
+  if (!cardCode) return false;
+  return /_r\d+$/.test(cardCode); // Only match _rN patterns, not _pN
+};
+
+const getBaseCardId = (cardCode) => {
+  return cardCode.replace(/_r\d+$/, ''); // Only remove _rN suffixes, not _pN
+};
+
+const handleCardWithReprintLogic = async (cardData, packCode) => {
+  let attributesArray = cardData.attributes;
+  if (attributesArray && typeof attributesArray === 'string') {
+    attributesArray = attributesArray.split('/').map(attr => attr.trim()).filter(attr => attr.length > 0);
+  }
+
+  let typesArray = cardData.types;
+  if (typesArray && typeof typesArray === 'string') {
+    typesArray = typesArray.split('/').map(type => type.trim()).filter(type => type.length > 0);
+  }
+
+  const safeParseInt = (v) => (v === null || v === undefined || v === '' || isNaN(parseInt(v))) ? null : parseInt(v);
+
+  const cardCode = cardData.card_code;
+  const cardId = cardData.card_id;
+
+  // Debug logging for reprints only (_rN, not _pN)
+  if (cardId && cardId.includes('_r')) {
+    console.log(`INIT: Processing potential reprint - cardId: ${cardId}, cardCode: ${cardCode}`);
+  }
+
+  // Check both card_id and card_code for reprint patterns (only _rN)
+  const isReprintId = isReprint(cardId);
+  const isReprintCode = isReprint(cardCode);
+
+  if (isReprintId || isReprintCode) {
+    // Use card_id for reprint detection since that's where the _rN pattern appears
+    const baseCardId = isReprintId ? getBaseCardId(cardId) : getBaseCardId(cardCode);
+
+    console.log(`INIT: Detected reprint - original: ${cardId}, base: ${baseCardId}`);
+
+    // Check if the base card already exists (by id)
+    const existingCardQuery = `
+      SELECT id, card_code FROM cards
+      WHERE id = $1
+    `;
+    const existingCardResult = await query(existingCardQuery, [baseCardId]);
+
+    if (existingCardResult.rows.length > 0) {
+      // Base card exists, just add the pack appearance using baseCardId
+      console.log(`INIT: Found existing base card ${baseCardId}, adding pack appearance for ${packCode}`);
+      await query(
+        `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
+        [baseCardId, packCode]
+      );
+      return false; // No new card inserted
+    } else {
+      // Base card doesn't exist, create it with card_code = card_id (no _rN suffix)
+      console.log(`INIT: Creating new base card ${baseCardId} from reprint ${cardId}`);
+
+      const cardValues = [
+        baseCardId,        // id (use base card ID)
+        baseCardId,        // card_code (same as ID, no _rN suffix)
+        cardData.name,
+        cardData.rarity,
+        cardData.category,
+        cardData.color,
+        safeParseInt(cardData.cost),
+        safeParseInt(cardData.power),
+        safeParseInt(cardData.counter),
+        cardData.effect,
+        cardData.trigger,
+        cardData.img_url,
+        attributesArray,
+        typesArray,
+        safeParseInt(cardData.block)
+      ];
+
+      const cardInsertQuery = `
+        INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (id) DO NOTHING;
+      `;
+
+      const cardResult = await query(cardInsertQuery, cardValues);
+
+      // Add pack appearance using the base card ID (not the original cardId with _rN)
+      await query(
+        `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
+        [baseCardId, packCode]
+      );
+
+      return cardResult.rowCount > 0;
+    }
+  } else {
+    // Not a reprint (includes parallels _pN), handle normally
+    const cardValues = [
+      cardId,
+      cardCode || cardId, // Use card_code if available, otherwise use card_id
+      cardData.name,
+      cardData.rarity,
+      cardData.category,
+      cardData.color,
+      safeParseInt(cardData.cost),
+      safeParseInt(cardData.power),
+      safeParseInt(cardData.counter),
+      cardData.effect,
+      cardData.trigger,
+      cardData.img_url,
+      attributesArray,
+      typesArray,
+      safeParseInt(cardData.block)
+    ];
+
+    const cardInsertQuery = `
+      INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      ON CONFLICT (id) DO NOTHING;
+    `;
+
+    const cardResult = await query(cardInsertQuery, cardValues);
+
+    // Add pack appearance
+    await query(
+      `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
+      [cardId, packCode]
+    );
+
+    return cardResult.rowCount > 0;
+  }
+};
+
 const createTables = async () => {
   console.log('INIT: Dropping all existing tables...');
   await query('DROP TABLE IF EXISTS owned_cards;');
@@ -113,61 +245,60 @@ const waitForScraperAPI = async () => {
   const maxRetries = 30;
   let retries = 0;
 
+  console.log('INIT: Waiting for scraper API to become ready...');
+
   while (retries < maxRetries) {
     try {
-      const response = await fetch('http://opcc-scraper-api:8080/packs?format=json');
-      if (response.ok) {
-        console.log('INIT: Scraper API connection established.');
+      // Try the /packs endpoint directly since we know it works
+      const response = await fetch('http://opcc-scraper-api:8080/packs');
+
+      if (response && response.ok) {
+        console.log('INIT: Scraper API is ready.');
         return;
       }
     } catch (err) {
-      // Connection failed, continue retrying
+      // Scraper not ready yet, continue trying
     }
 
     retries++;
     console.log(`INIT: Waiting for scraper API... (attempt ${retries}/${maxRetries})`);
-    await sleep(3000);
+    await sleep(2000);
   }
 
-  throw new Error('INIT: Could not connect to scraper API after maximum retries');
+  throw new Error('INIT: Scraper API did not become ready in time');
 };
 
 const populateMasterData = async () => {
-    console.log('INIT: Fetching all card data from scraper...');
+    console.log('INIT: Fetching master pack list...');
     let packs;
     try {
-        const response = await fetch('http://opcc-scraper-api:8080/packs?format=json');
+        const response = await fetch('http://opcc-scraper-api:8080/packs');
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // The scraper API returns a JSON string that needs to be parsed twice
         const responseText = await response.text();
-        console.log('INIT: Raw response received, parsing...');
-
         try {
-            // First parse to get the JSON string
+            // The scraper API returns a JSON string that needs to be parsed twice
             const jsonString = JSON.parse(responseText);
-            // Second parse to get the actual array
             packs = JSON.parse(jsonString);
         } catch (parseError) {
             // If double parsing fails, try single parsing
-            console.log('INIT: Double parsing failed, trying single parse...');
             packs = JSON.parse(responseText);
         }
-
-        console.log(`INIT: Fetched ${packs.length} packs from scraper.`);
     } catch (err) {
-        console.error('INIT: Error fetching pack list:', err);
+        console.error('INIT: Error fetching master pack list:', err.message);
         throw err;
     }
 
-    if (!Array.isArray(packs) || packs.length === 0) {
-        console.log('INIT: No packs returned from scraper API or invalid format.');
+    if (!Array.isArray(packs)) {
+        console.error('INIT: Invalid pack data format - expected array');
         console.log('INIT: Received data type:', typeof packs);
         console.log('INIT: First few items:', packs ? packs.slice(0, 3) : 'null');
-        return;
+        throw new Error('Invalid pack data format received from scraper');
     }
+
+    console.log(`INIT: Found ${packs.length} packs to process.`);
 
     // Insert packs first
     console.log('INIT: Inserting pack definitions...');
@@ -237,49 +368,11 @@ const populateMasterData = async () => {
             }
 
             try {
-                let attributesArray = cardData.attributes;
-                // The scraper can return a single string or an array, so we handle both.
-                if (attributesArray && typeof attributesArray === 'string') {
-                    attributesArray = attributesArray.split('/').map(attr => attr.trim());
-                }
-
-                let typesArray = cardData.types;
-                if (typesArray && typeof typesArray === 'string') {
-                    typesArray = typesArray.split('/').map(type => type.trim());
-                }
-
-                const safeParseInt = (v) => (v === null || v === undefined || v === '' || isNaN(parseInt(v))) ? null : parseInt(v);
-                const cardValues = [
-                  cardData.card_id,
-                  cardData.card_code,
-                  cardData.name,
-                  cardData.rarity,
-                  cardData.category,
-                  cardData.color,
-                  safeParseInt(cardData.cost),
-                  safeParseInt(cardData.power),
-                  safeParseInt(cardData.counter),
-                  cardData.effect,
-                  cardData.trigger,
-                  cardData.img_url,
-                  attributesArray, // Use the processed array
-                  typesArray,      // Use the processed array
-                  safeParseInt(cardData.block)
-                ];
-
-                const cardInsertQuery = `
-                    INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                    ON CONFLICT (id) DO NOTHING;
-                `;
-                const cardResult = await query(cardInsertQuery, cardValues);
-                if (cardResult.rowCount > 0) {
+                const cardInserted = await handleCardWithReprintLogic(cardData, pack.code);
+                if (cardInserted) {
                     packCardsInserted++;
                     totalCardsInserted++;
                 }
-
-                await query(`INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`, [cardData.card_id, pack.code]);
-
             } catch (err) {
                 console.warn(`INIT: Failed to insert card ${cardData.card_id}:`, err.message);
             }
@@ -359,18 +452,21 @@ const main = async () => {
             }
 
             await query('COMMIT');
-            console.log('INIT: Database initialization complete! 🚀');
-        } catch (e) {
+            console.log('INIT: Database initialization complete!');
+
+        } catch (err) {
             await query('ROLLBACK');
-            console.error('INIT: An error occurred during initialization. Transaction rolled back.', e);
-            throw e;
+            console.error('INIT: Error during initialization:', err);
+            throw err;
         }
-    } catch (error) {
-        console.error('INIT: Fatal error:', error);
+
+    } catch (err) {
+        console.error('INIT: Fatal error during database initialization:', err);
         process.exit(1);
-    } finally {
-        process.exit(0);
     }
 };
 
-main();
+// Execute if this file is run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+    main();
+}

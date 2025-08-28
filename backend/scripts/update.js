@@ -1,89 +1,220 @@
 import { query } from '../src/db.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const waitForScraperAPI = async () => {
-  const maxRetries = 10;
-  let retries = 0;
-
-  while (retries < maxRetries) {
-    try {
-      const response = await fetch('http://opcc-scraper-api:8080/packs?format=json');
-      if (response.ok) {
-        console.log('UPDATE: Scraper API connection established.');
-        return;
-      }
-    } catch (err) {
-      // Connection failed, continue retrying
-    }
-
-    retries++;
-    console.log(`UPDATE: Waiting for scraper API... (attempt ${retries}/${maxRetries})`);
-    await sleep(3000);
-  }
-
-  throw new Error('UPDATE: Could not connect to scraper API after maximum retries');
+// Reprint handling utility functions
+const isReprint = (cardCode) => {
+  if (!cardCode) return false;
+  return /_r\d+$/.test(cardCode); // Only match _rN patterns, not _pN
 };
 
-const updateData = async () => {
-  console.log('UPDATE: Starting thorough update process...');
+const getBaseCardId = (cardCode) => {
+  return cardCode.replace(/_r\d+$/, ''); // Only remove _rN suffixes, not _pN
+};
 
-  try {
-    // Wait for scraper API to be available
-    await waitForScraperAPI();
-  } catch (error) {
-    console.error('UPDATE: Scraper API unavailable. Aborting update.');
-    process.exit(1);
+const handleCardWithReprintLogic = async (cardData, packCode) => {
+  let attributesArray = cardData.attributes;
+  if (attributesArray && typeof attributesArray === 'string') {
+    attributesArray = attributesArray.split('/').map(attr => attr.trim()).filter(attr => attr.length > 0);
   }
 
-  let allLatestPacks;
-  try {
-    const response = await fetch('http://opcc-scraper-api:8080/packs?format=json');
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
+  let typesArray = cardData.types;
+  if (typesArray && typeof typesArray === 'string') {
+    typesArray = typesArray.split('/').map(type => type.trim()).filter(type => type.length > 0);
+  }
 
-    const responseText = await response.text();
+  const safeParseInt = (v) => {
+    if (v === null || v === undefined || v === '' || isNaN(parseInt(v))) {
+      return null;
+    }
+    return parseInt(v);
+  };
+
+  const cardCode = cardData.card_code;
+  const cardId = cardData.card_id;
+
+  if (isReprint(cardCode)) {
+    const baseCardId = getBaseCardId(cardCode);
+
+    // Check if the base card already exists (by id)
+    const existingCardQuery = `
+      SELECT id, card_code FROM cards
+      WHERE id = $1
+    `;
+    const existingCardResult = await query(existingCardQuery, [baseCardId]);
+
+    if (existingCardResult.rows.length > 0) {
+      // Base card exists, just add the pack appearance
+      console.log(`UPDATE: Found existing base card ${baseCardId}, adding pack appearance for ${packCode}`);
+      await query(
+        `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
+        [baseCardId, packCode]
+      );
+      return false; // No new card inserted
+    } else {
+      // Base card doesn't exist, create it with card_code = card_id (no _rN suffix)
+      console.log(`UPDATE: Creating new base card ${baseCardId} from reprint ${cardCode}`);
+
+      const cardValues = [
+        baseCardId,        // id (use base card ID)
+        baseCardId,        // card_code (same as ID, no _rN suffix)
+        cardData.name,
+        cardData.rarity || null,
+        cardData.category || null,
+        cardData.color || null,
+        safeParseInt(cardData.cost),
+        safeParseInt(cardData.power),
+        safeParseInt(cardData.counter),
+        cardData.effect || null,
+        cardData.trigger || null,
+        cardData.img_url || null,
+        attributesArray || null,
+        typesArray || null,
+        safeParseInt(cardData.block)
+      ];
+
+      const cardInsertQuery = `
+        INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (id) DO UPDATE SET
+          card_code = EXCLUDED.card_code,
+          name = EXCLUDED.name,
+          rarity = EXCLUDED.rarity,
+          category = EXCLUDED.category,
+          color = EXCLUDED.color,
+          cost = EXCLUDED.cost,
+          power = EXCLUDED.power,
+          counter = EXCLUDED.counter,
+          effect = EXCLUDED.effect,
+          trigger_effect = EXCLUDED.trigger_effect,
+          img_url = EXCLUDED.img_url,
+          attributes = EXCLUDED.attributes,
+          types = EXCLUDED.types,
+          block = EXCLUDED.block;
+      `;
+
+      const cardResult = await query(cardInsertQuery, cardValues);
+
+      // Add pack appearance using the base card ID
+      await query(
+        `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
+        [baseCardId, packCode]
+      );
+
+      return cardResult.rowCount > 0;
+    }
+  } else {
+    // Not a reprint, handle normally
+    const cardValues = [
+      cardId,
+      cardCode || cardId, // Use card_code if available, otherwise use card_id
+      cardData.name,
+      cardData.rarity || null,
+      cardData.category || null,
+      cardData.color || null,
+      safeParseInt(cardData.cost),
+      safeParseInt(cardData.power),
+      safeParseInt(cardData.counter),
+      cardData.effect || null,
+      cardData.trigger || null,
+      cardData.img_url || null,
+      attributesArray || null,
+      typesArray || null,
+      safeParseInt(cardData.block)
+    ];
+
+    const cardInsertQuery = `
+      INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      ON CONFLICT (id) DO UPDATE SET
+        card_code = EXCLUDED.card_code,
+        name = EXCLUDED.name,
+        rarity = EXCLUDED.rarity,
+        category = EXCLUDED.category,
+        color = EXCLUDED.color,
+        cost = EXCLUDED.cost,
+        power = EXCLUDED.power,
+        counter = EXCLUDED.counter,
+        effect = EXCLUDED.effect,
+        trigger_effect = EXCLUDED.trigger_effect,
+        img_url = EXCLUDED.img_url,
+        attributes = EXCLUDED.attributes,
+        types = EXCLUDED.types,
+        block = EXCLUDED.block;
+    `;
+
+    const cardResult = await query(cardInsertQuery, cardValues);
+
+    // Add pack appearance
+    await query(
+      `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
+      [cardId, packCode]
+    );
+
+    return cardResult.rowCount > 0;
+  }
+};
+
+const main = async () => {
+  let newCardsFound = 0;
+  let packsProcessed = 0;
+  const errors = [];
+
+  console.log('UPDATE: Starting card database update...');
+
+  try {
+    await query('BEGIN');
+
+    // Fetch all latest packs
+    console.log('UPDATE: Fetching latest pack list from scraper...');
+    let allLatestPacks;
     try {
-      // The scraper API returns a JSON string that needs to be parsed twice
-      const jsonString = JSON.parse(responseText);
-      allLatestPacks = JSON.parse(jsonString);
-    } catch (parseError) {
-      // If double parsing fails, try single parsing
-      console.log('UPDATE: Double parsing failed, trying single parse...');
-      allLatestPacks = JSON.parse(responseText);
-    }
-  } catch (err) {
-    console.error('UPDATE: Error fetching pack list. Aborting.', err);
-    process.exit(1);
-  }
-
-  if (!Array.isArray(allLatestPacks) || allLatestPacks.length === 0) {
-      console.log('UPDATE: No packs found from scraper. Aborting.');
-      process.exit(0);
-  }
-
-  console.log(`UPDATE: Found ${allLatestPacks.length} total packs to check.`);
-
-  await query('BEGIN');
-  try {
-    let newCardsFound = 0;
-    let packsProcessed = 0;
-    let errors = [];
-
-    for (let i = 0; i < allLatestPacks.length; i++) {
-      const pack = allLatestPacks[i];
-      if (!pack || typeof pack !== 'object' || !pack.series || !pack.code || !pack.name) {
-        console.warn(`UPDATE: Skipping invalid pack at index ${i}:`, pack);
-        continue;
+      const response = await fetch('http://opcc-scraper-api:8080/packs');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      console.log(`UPDATE: Checking pack ${i + 1}/${allLatestPacks.length}: ${pack.name}`);
+      const responseText = await response.text();
+      try {
+        // The scraper API returns a JSON string that needs to be parsed twice
+        const jsonString = JSON.parse(responseText);
+        allLatestPacks = JSON.parse(jsonString);
+      } catch (parseError) {
+        // If double parsing fails, try single parsing
+        allLatestPacks = JSON.parse(responseText);
+      }
+    } catch (err) {
+      throw new Error(`Failed to fetch pack list: ${err.message}`);
+    }
 
+    console.log(`UPDATE: Found ${allLatestPacks.length} packs to process.`);
+
+    // Insert any new packs first
+    for (const pack of allLatestPacks) {
+      if (!pack || typeof pack !== 'object' || !pack.series || !pack.code || !pack.name) {
+        continue;
+      }
       try {
         await query('INSERT INTO packs (code, series_id, name) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING',
           [pack.code, pack.series, pack.name]);
+      } catch (err) {
+        console.warn(`UPDATE: Failed to insert pack ${pack.code}:`, err.message);
+      }
+    }
 
+    // Process each pack for cards
+    for (const pack of allLatestPacks) {
+      if (!pack || typeof pack !== 'object' || !pack.series) {
+        console.warn(`UPDATE: Skipping invalid pack: ${pack?.name || pack?.code || 'unknown'}`);
+        continue;
+      }
+
+      console.log(`UPDATE: Processing pack: ${pack.name} (${pack.series})`);
+
+      try {
         let cardsFromPack;
         try {
           const response = await fetch(`http://opcc-scraper-api:8080/cards/${pack.series}?format=json`);
@@ -120,67 +251,10 @@ const updateData = async () => {
               continue;
             }
 
-            let attributesArray = cardData.attributes;
-            if (attributesArray && typeof attributesArray === 'string') {
-                attributesArray = attributesArray.split('/').map(attr => attr.trim()).filter(attr => attr.length > 0);
+            const cardInserted = await handleCardWithReprintLogic(cardData, pack.code);
+            if (cardInserted) {
+              newCardsFound++;
             }
-
-            let typesArray = cardData.types;
-            if (typesArray && typeof typesArray === 'string') {
-                typesArray = typesArray.split('/').map(type => type.trim()).filter(type => type.length > 0);
-            }
-
-            const safeParseInt = (v) => {
-              if (v === null || v === undefined || v === '' || isNaN(parseInt(v))) {
-                return null;
-              }
-              return parseInt(v);
-            };
-
-            const cardValues = [
-              cardData.card_id,
-              cardData.card_code || null,
-              cardData.name,
-              cardData.rarity || null,
-              cardData.category || null,
-              cardData.color || null,
-              safeParseInt(cardData.cost),
-              safeParseInt(cardData.power),
-              safeParseInt(cardData.counter),
-              cardData.effect || null,
-              cardData.trigger || null,
-              cardData.img_url || null,
-              attributesArray || null,
-              typesArray || null,
-              safeParseInt(cardData.block)
-            ];
-
-            const cardInsertResult = await query(`
-                INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                ON CONFLICT (id) DO UPDATE SET
-                  card_code = EXCLUDED.card_code,
-                  name = EXCLUDED.name,
-                  rarity = EXCLUDED.rarity,
-                  category = EXCLUDED.category,
-                  color = EXCLUDED.color,
-                  cost = EXCLUDED.cost,
-                  power = EXCLUDED.power,
-                  counter = EXCLUDED.counter,
-                  effect = EXCLUDED.effect,
-                  trigger_effect = EXCLUDED.trigger_effect,
-                  img_url = EXCLUDED.img_url,
-                  attributes = EXCLUDED.attributes,
-                  types = EXCLUDED.types,
-                  block = EXCLUDED.block;
-            `, cardValues);
-
-            if (cardInsertResult.rowCount > 0) {
-                newCardsFound++;
-            }
-
-            await query(`INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
-              [cardData.card_id, pack.code]);
 
           } catch (cardErr) {
             const error = `Failed to process card ${cardData.card_id} in pack ${pack.code}: ${cardErr.message}`;
@@ -215,24 +289,14 @@ const updateData = async () => {
       }
     }
 
-  } catch (e) {
+  } catch (err) {
     await query('ROLLBACK');
-    console.error('UPDATE: Fatal error during update transaction:', e);
+    console.error('UPDATE: Fatal error during update process:', err);
     process.exit(1);
-  } finally {
-    process.exit(0);
   }
 };
 
-// Handle process signals gracefully
-process.on('SIGINT', () => {
-  console.log('\nUPDATE: Received SIGINT, shutting down gracefully...');
-  process.exit(1);
-});
-
-process.on('SIGTERM', () => {
-  console.log('\nUPDATE: Received SIGTERM, shutting down gracefully...');
-  process.exit(1);
-});
-
-updateData();
+// Execute if this file is run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

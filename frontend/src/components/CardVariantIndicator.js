@@ -2,28 +2,24 @@
 
 import { HStack, Icon, Text, Tooltip } from '@chakra-ui/react'
 import { PiParallelogram } from 'react-icons/pi';
-import { LuBookCopy } from 'react-icons/lu';
 
 const CardVariantIndicator = ({ cardId }) => {
-    // Regex to find a suffix like _p1 or _r2 at the end of the ID
-    const match = cardId.match(/_([pr])(\d+)$/);
+    // Regex to find a suffix like _p1 or _p2 at the end of the ID
+    // No longer checking for _r patterns since reprints are consolidated
+    const match = cardId.match(/_p(\d+)$/);
 
     if (!match) {
-        return null; // This is not a variant card, render nothing
+        return null; // This is not a parallel card, render nothing
     }
 
-    const type = match[1];   // 'p' or 'r'
-    const number = match[2]; // '1', '2', etc.
-
-    const isParallel = type === 'p';
-    const label = isParallel ? `Alternate Art #${number}` : `Reprint #${number}`;
-    const icon = isParallel ? PiParallelogram : LuBookCopy;
-    const color = 'gray.300';
+    const number = match[1]; // '1', '2', etc.
+    const label = `Alternate Art #${number}`;
+    const color = 'gray.400';
 
     return (
         <Tooltip label={label} fontSize="sm" hasArrow placement="top">
             <HStack spacing={1} align="center">
-                <Icon as={icon} color={color} boxSize={4} />
+                <Icon as={PiParallelogram} color={color} boxSize={4} />
             </HStack>
         </Tooltip>
     );
