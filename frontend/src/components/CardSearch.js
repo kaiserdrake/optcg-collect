@@ -277,14 +277,14 @@ export default function CardSearch() {
         borderWidth="1px"
         borderColor="gray.200"
         borderRadius="md"
-        p={4}
+        p={2}
         bg="white"
         _hover={{ shadow: 'md', borderColor: 'blue.300' }}
         cursor="pointer"
         onClick={() => handleCardClick(card)}
         transition="all 0.2s"
       >
-        <Flex align="center" gap={4}>
+        <Flex align="center" gap={2}>
           <Image
             width="80px"
             height="112px"
@@ -297,46 +297,49 @@ export default function CardSearch() {
             flexShrink={0}
           />
 
-          <VStack align="start" spacing={2} flex={1}>
-            <HStack wrap="wrap" spacing={2}>
-              <Tag size="md" {...getTagStyles(card.color)}>
+          <VStack align="start" spacing={1} flex={1} h="100%" justify="center" minH="90px">
+            <HStack wrap="wrap" spacing={1}>
+              <Tag size="sm" {...getTagStyles(card.color)}>
                 {card.card_code}
               </Tag>
-              <Tag size="md" colorScheme="gray" variant="outline">
+              <Tag size="sm" colorScheme="gray" variant="outline">
                 {card.category}
               </Tag>
-              <Tag size="md" colorScheme="purple" variant="outline">
+              <Tag size="sm" colorScheme="purple" variant="outline">
                 {card.rarity}
               </Tag>
               {card.cost !== null && (
-                <Tag size="md" colorScheme="orange" variant="outline">
+                <Tag size="sm" colorScheme="orange" variant="outline">
                   {getCostLabel(card)}: {card.cost}
                 </Tag>
               )}
               {card.power && (
-                <Tag size="md" colorScheme="red" variant="outline">
+                <Tag size="sm" colorScheme="red" variant="outline">
                   Power: {card.power.toLocaleString()}
+                </Tag>
+              )}
+              {card.counter && (
+                <Tag size="sm" colorScheme="yellow" variant="outline">
+                  Counter: +{card.counter}
                 </Tag>
               )}
               <CardVariantIndicator cardId={card.id} />
             </HStack>
 
-            <Text fontSize="lg" fontWeight="bold" color="gray.800">
+            <Text fontSize="md" fontWeight="bold" color="gray.800" noOfLines={1}>
               {card.name}
             </Text>
 
-            {/* Effect text: show empty line if effect is empty or "-", otherwise cleaned text */}
-            <Text fontSize="sm" color="gray.600" noOfLines={2}>
+            <Text fontSize="xs" color="gray.600" noOfLines={1}>
               {effectDisplay === '' ? '\u00A0' : effectDisplay}
             </Text>
-            {/* Trigger line, only render if trigger exists (always show line, even if empty, for alignment) */}
-            <Text fontSize="sm" color="gray.600" noOfLines={1}>
+            <Text fontSize="xs" color="gray.600" noOfLines={1}>
               {triggerDisplay === '' ? '\u00A0' : triggerDisplay}
             </Text>
 
             {keywords.length > 0 && (
               <Wrap align="center" pt={1}>
-                <Text fontSize="xs" fontWeight="bold" color="gray.500" mr={2}>Keywords:</Text>
+                <Text fontSize="xs" color="gray.500" mr={2}>Keywords:</Text>
                 {keywords.map((kw, index) => (
                   <WrapItem key={index}>
                     <Tag size="sm" {...kw.style}>{kw.text}</Tag>
@@ -346,7 +349,7 @@ export default function CardSearch() {
             )}
           </VStack>
 
-          <HStack spacing={4} ml={4}>
+          <HStack spacing={2} ml={2} align="center">
             {showProxies && (
               <VStack spacing={0}>
                 <Text fontSize="xs" color="gray.500">Proxy</Text>
