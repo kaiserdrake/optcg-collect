@@ -29,6 +29,14 @@ const getTagStyles = (colorString) => {
   return { bgGradient: gradient, color: 'white', variant: 'solid' };
 };
 
+// Utility function to safely provide an image URL or fallback to local image
+const getSafeImageUrl = (url) => {
+  if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
+    return '/placeholder.png';
+  }
+  return url;
+};
+
 const CardDetailModal = ({
   isOpen,
   onClose,
@@ -60,9 +68,9 @@ const CardDetailModal = ({
               <Image
                 borderRadius="lg"
                 width={{ base: '100%', md: '250px' }}
-                src={selectedCard.img_url}
+                src={getSafeImageUrl(selectedCard.img_url)}
                 alt={selectedCard.name}
-                fallbackSrc='https://via.placeholder.com/250x350?text=No+Image'
+                fallbackSrc="/placeholder.png"
               />
             </Box>
             <VStack align="stretch" spacing={3} flex={1}>

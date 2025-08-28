@@ -83,6 +83,15 @@ const subtleTextStyle = (color) => ({
   color: color
 });
 
+// Utility function to safely provide an image URL or fallback to local image
+const getSafeImageUrl = (url) => {
+  if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
+    // Use local fallback if img_url is null, empty, or not a valid http(s) url
+    return '/placeholder.png';
+  }
+  return url;
+};
+
 export default function CardSearch() {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState([]);
@@ -184,10 +193,11 @@ export default function CardSearch() {
         <Image
           width={`${thumbnailSize}px`}
           height={`${Math.floor(thumbnailSize * 1.4)}px`}
-          src={card.img_url}
+          src={getSafeImageUrl(card.img_url)}
           alt={card.name}
-          fallbackSrc='https://via.placeholder.com/160x224?text=No+Image'
+          fallbackSrc="/placeholder.png"
           objectFit="cover"
+          ignoreFallback={false}
         />
 
         <Box
