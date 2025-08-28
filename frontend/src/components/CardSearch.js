@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Text, VStack, HStack, Tag, Spinner, Wrap, WrapItem, Image,
   Flex, useDisclosure, Button, IconButton, FormControl, FormLabel, Switch,
@@ -61,8 +61,6 @@ const extractStyledKeywords = (effect, triggerEffect) => {
       if (patternMatch) {
         keywordArray.push({ text: keyword, style: patternMatch.style });
       }
-      // Only include keywords that match keywordStyles or keywordPatterns
-      // Ignore card names and other bracketed text
     }
   }
   return keywordArray;
@@ -86,7 +84,6 @@ const subtleTextStyle = (color) => ({
 // Utility function to safely provide an image URL or fallback to local image
 const getSafeImageUrl = (url) => {
   if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
-    // Use local fallback if img_url is null, empty, or not a valid http(s) url
     return '/placeholder.png';
   }
   return url;
@@ -99,12 +96,18 @@ export default function CardSearch() {
   const [error, setError] = useState(null);
   const [showProxies, setShowProxies] = useState(false);
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'thumbnail'
-  const [thumbnailSize, setThumbnailSize] = useState(160); // thumbnail size in pixels, default small
+  const [viewMode, setViewMode] = useState('list');
+  const [thumbnailSize, setThumbnailSize] = useState(160);
+  const [isClient, setIsClient] = useState(false); // Add client-side check
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const [selectedCard, setSelectedCard] = useState(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  // Fix hydration issues by ensuring client-side rendering
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const handleCardClick = (card) => {
     setSelectedCard(card);
@@ -117,7 +120,6 @@ export default function CardSearch() {
         card.id === cardId ? { ...card, ...newCounts } : card
       )
     );
-    // Also update the selected card if it's the same card
     if (selectedCard && selectedCard.id === cardId) {
       setSelectedCard(current => ({ ...current, ...newCounts }));
     }
@@ -125,7 +127,8 @@ export default function CardSearch() {
 
   // Search functionality
   useEffect(() => {
-    // Extract if advanced search keywords are present - now includes exact:
+    if (!isClient) return; // Don't run search until client-side
+
     const advancedKeywordRegex = /(?:\b(id|pack|color|exact):\S+)/gi;
     const hasAdvancedKeyword = advancedKeywordRegex.test(searchTerm);
 
@@ -149,7 +152,6 @@ export default function CardSearch() {
       .then((res) => {
         if (!res.ok) {
           return res.json().then(errData => {
-            // Handle specific error cases
             if (res.status === 400) {
               throw new Error('Invalid search parameters. Please check your search criteria.');
             } else if (res.status === 500) {
@@ -172,20 +174,11 @@ export default function CardSearch() {
     }, 300);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, showOnlyOwned, showProxies, apiUrl]);
+  }, [searchTerm, showOnlyOwned, showProxies, apiUrl, isClient]);
 
-  // Thumbnail Card Component (updated as per request)
+  // Improved Thumbnail Card Component with better error handling
   const ThumbnailCard = ({ card }) => {
-    const nameMaxLength = 20;
-    let displayName = card.name;
-    if (displayName && displayName.length > nameMaxLength) {
-      displayName = displayName.slice(0, nameMaxLength - 1) + '…';
-    }
-
-    let countDisplay = `${card.owned_count}`;
-    if (showProxies) {
-      countDisplay += ` : ${card.proxy_count}`;
-    }
+    const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
 
     return (
       <Box
@@ -198,6 +191,7 @@ export default function CardSearch() {
         bg="white"
         shadow="md"
         position="relative"
+        suppressHydrationWarning={true}
       >
         <Image
           width={`${thumbnailSize}px`}
@@ -206,7 +200,10 @@ export default function CardSearch() {
           alt={card.name}
           fallbackSrc="/placeholder.png"
           objectFit="cover"
-          ignoreFallback={false}
+          loading="lazy"
+          onError={(e) => {
+            e.target.src = '/placeholder.png';
+          }}
         />
 
         <Box
@@ -214,88 +211,105 @@ export default function CardSearch() {
           bottom="0"
           left="0"
           right="0"
-          px={2}
-          py={1}
-          bg="rgba(0,0,0,0.58)"
+          bg="rgba(0,0,0,0.8)"
           color="white"
-          fontSize="xs"
-          lineHeight="1.3"
-          borderBottomRadius="md"
+          p={2}
         >
-          {/* First line: Card name (truncated with ellipsis if too long) */}
-          <Text
-            fontWeight="bold"
-            fontSize="xs"
-            noOfLines={1}
-            title={card.name}
-            mb="1px"
-            textShadow="0 1px 2px rgba(0,0,0,0.7)"
-          >
-            {displayName}
+          <Text fontSize="xs" fontWeight="bold" noOfLines={1} mb={1}>
+            {card.name}
           </Text>
-          {/* Second line: Card code and counts */}
-          <HStack spacing={2} fontSize="xs" justify="space-between">
-            <Tag size="xs" {...getTagStyles(card.color)} fontWeight="semibold" px={2}>
-              {card.card_code}
-            </Tag>
-            <Text fontSize="xs" fontWeight="bold" color="white" letterSpacing="wide" ml={1}>
-              {countDisplay}
-            </Text>
-          </HStack>
+          <Flex justify="space-between" align="center" fontSize="xs">
+            <VStack spacing={0}>
+              <Text fontSize="xs" color="gray.400" fontWeight="medium">
+                Owned
+              </Text>
+              <Text fontSize="sm" fontWeight="bold" color="blue.300">
+                {card.owned_count || 0}
+              </Text>
+            </VStack>
+
+            {showProxies && (
+              <VStack spacing={0}>
+                <Text fontSize="xs" color="gray.400" fontWeight="medium">
+                  Proxy
+                </Text>
+                <Text fontSize="sm" fontWeight="bold" color="gray.400">
+                  {card.proxy_count || 0}
+                </Text>
+              </VStack>
+            )}
+          </Flex>
         </Box>
       </Box>
     );
   };
 
-  // List Card Component (unchanged)
+  // List Card Component
   const ListCard = ({ card }) => {
     const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
 
-    // Helper function to determine the cost label
     const getCostLabel = (card) => {
       return card.category === 'LEADER' ? 'Life' : 'Cost';
     };
 
     return (
       <Box
-        key={card.id}
-        p={3}
-        shadow="sm"
         borderWidth="1px"
+        borderColor="gray.200"
         borderRadius="md"
-        onClick={() => handleCardClick(card)}
+        p={4}
+        bg="white"
+        _hover={{ shadow: 'md', borderColor: 'blue.300' }}
         cursor="pointer"
-        _hover={{ shadow: 'md', bg: 'gray.50' }}
+        onClick={() => handleCardClick(card)}
+        transition="all 0.2s"
       >
-        <Flex justify="space-between" align="center">
-          <VStack align="start" spacing={1.5} flex={1} minW={0}>
-            <Wrap spacingX={4} spacingY={1} align="center">
-              <WrapItem>
-                <HStack>
-                  <Text fontWeight="bold" fontSize="md" noOfLines={1}>{card.name}</Text>
-                  <CardVariantIndicator cardId={card.id} />
-                </HStack>
-              </WrapItem>
-              {card.category && <WrapItem fontSize="sm" color="gray.600">{toTitleCase(card.category)}</WrapItem>}
-              {card.attributes && card.attributes.length > 0 && card.attributes.map(attr => (
-                <WrapItem key={attr}>
-                  <Tag size="sm" variant="outline" colorScheme="gray">{toTitleCase(attr)}</Tag>
-                </WrapItem>
-              ))}
-              {card.cost !== null && <WrapItem fontSize="sm">{getCostLabel(card)}: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.cost}</Text></WrapItem>}
-              {card.power !== null && <WrapItem fontSize="sm">Power: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.power}</Text></WrapItem>}
-              {card.counter !== null && <WrapItem fontSize="sm">Counter: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.counter}</Text></WrapItem>}
-            </Wrap>
-            <Wrap spacingX={4} spacingY={1} align="center">
-              <WrapItem><Tag size="sm" {...getTagStyles(card.color)}>{card.card_code}</Tag></WrapItem>
-              {card.rarity && <WrapItem fontSize="sm" color="gray.800" fontWeight="semibold">{card.rarity}</WrapItem>}
-              {card.types && card.types.length > 0 && card.types.map(type => (
-                <WrapItem key={type}>
-                  <Tag size="sm" variant="outline">{toTitleCase(type)}</Tag>
-                </WrapItem>
-              ))}
-            </Wrap>
-            {keywords.length > 0 ? (
+        <Flex align="center" gap={4}>
+          <Image
+            width="80px"
+            height="112px"
+            src={getSafeImageUrl(card.img_url)}
+            alt={card.name}
+            fallbackSrc="/placeholder.png"
+            borderRadius="md"
+            objectFit="cover"
+            loading="lazy"
+            flexShrink={0}
+          />
+
+          <VStack align="start" spacing={2} flex={1}>
+            <HStack wrap="wrap" spacing={2}>
+              <Tag size="md" {...getTagStyles(card.color)}>
+                {card.card_code}
+              </Tag>
+              <Tag size="md" colorScheme="gray" variant="outline">
+                {card.category}
+              </Tag>
+              <Tag size="md" colorScheme="purple" variant="outline">
+                {card.rarity}
+              </Tag>
+              {card.cost !== null && (
+                <Tag size="md" colorScheme="orange" variant="outline">
+                  {getCostLabel(card)}: {card.cost}
+                </Tag>
+              )}
+              {card.power && (
+                <Tag size="md" colorScheme="red" variant="outline">
+                  Power: {card.power.toLocaleString()}
+                </Tag>
+              )}
+              <CardVariantIndicator cardId={card.id} />
+            </HStack>
+
+            <Text fontSize="lg" fontWeight="bold" color="gray.800">
+              {card.name}
+            </Text>
+
+            <Text fontSize="sm" color="gray.600" noOfLines={2}>
+              {card.effect || 'No effect text available.'}
+            </Text>
+
+            {keywords.length > 0 && (
               <Wrap align="center" pt={1}>
                 <Text fontSize="xs" fontWeight="bold" color="gray.500" mr={2}>Keywords:</Text>
                 {keywords.map((kw, index) => (
@@ -304,10 +318,9 @@ export default function CardSearch() {
                   </WrapItem>
                 ))}
               </Wrap>
-            ) : (
-                <Box h="22px" />
-              )}
+            )}
           </VStack>
+
           <HStack spacing={4} ml={4}>
             {showProxies && (
               <VStack spacing={0}>
@@ -325,8 +338,20 @@ export default function CardSearch() {
     );
   };
 
+  // Don't render until client-side to prevent hydration mismatch
+  if (!isClient) {
+    return (
+      <Box>
+        <VStack spacing={4} align="center" py={8}>
+          <Spinner size="lg" color="blue.500" />
+          <Text color="gray.500">Loading card search...</Text>
+        </VStack>
+      </Box>
+    );
+  }
+
   return (
-    <Box>
+    <Box suppressHydrationWarning={true}>
       <HStack mb={4}>
         <AdvancedSearchInput
           placeholder="Search cards by name, effect, or use advanced syntax..."
@@ -348,7 +373,6 @@ export default function CardSearch() {
 
       {/* Filters and View Toggle */}
       <HStack mb={4} justify="space-between" wrap="wrap" spacing={4}>
-        {/* View Toggle Buttons - Left Side */}
         <HStack spacing={2}>
           <Text fontSize="sm" color="gray.600">View:</Text>
           <Tooltip label="List View">
@@ -372,7 +396,6 @@ export default function CardSearch() {
             />
           </Tooltip>
 
-          {/* Thumbnail Size Slider - Only show when in thumbnail mode */}
           {viewMode === 'thumbnail' && (
             <HStack spacing={2} ml={4}>
               <Text fontSize="xs" color="gray.500">Size:</Text>
@@ -395,7 +418,6 @@ export default function CardSearch() {
           )}
         </HStack>
 
-        {/* Controls - Right Side */}
         <HStack spacing={4}>
           <FormControl display="flex" alignItems="center">
             <FormLabel htmlFor="owned-only" mb="0" fontSize="sm">
@@ -433,7 +455,6 @@ export default function CardSearch() {
         </Box>
       )}
 
-      {/* No Results State */}
       {!loading && !error && searchTerm.length >= 3 && results.length === 0 && (
         <Box {...subtleBoxStyle('yellow.50', 'yellow.100')}>
           <HStack justify="space-between" align="center">
@@ -452,7 +473,6 @@ export default function CardSearch() {
         </Box>
       )}
 
-      {/* Results Summary */}
       {!loading && results.length > 0 && (
         <Box {...subtleBoxStyle('green.50', 'green.100')}>
           <HStack justify="space-between" align="center">
@@ -476,38 +496,34 @@ export default function CardSearch() {
           ))}
         </VStack>
       ) : (
-        <Suspense fallback={
-          <Box w="100%" py={8} textAlign="center">
-            <Spinner size="xl" color="blue.500" />
-            <Text mt={2}>Loading cards...</Text>
-          </Box>
-        }>
-          <Grid
-            templateColumns={`repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))`}
-            gap={6}
-            justifyItems="center"
-          >
-            {results.map((card) => (
-              <ThumbnailCard key={card.id} card={card} />
-            ))}
-          </Grid>
-        </Suspense>
+        <Grid
+          templateColumns={`repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))`}
+          gap={6}
+          justifyItems="center"
+        >
+          {results.map((card) => (
+            <ThumbnailCard key={card.id} card={card} />
+          ))}
+        </Grid>
       )}
 
       {/* Modals */}
-      <CardDetailModal
-        isOpen={isDetailOpen}
-        onClose={onDetailClose}
-        selectedCard={selectedCard}
-        showProxies={showProxies}
-        onCountUpdate={handleCountUpdate}
-      />
+      {isClient && (
+        <>
+          <CardDetailModal
+            isOpen={isDetailOpen}
+            onClose={onDetailClose}
+            selectedCard={selectedCard}
+            showProxies={showProxies}
+            onCountUpdate={handleCountUpdate}
+          />
 
-      <SearchHelpModal
-        isOpen={isHelpOpen}
-        onClose={onHelpClose}
-      />
+          <SearchHelpModal
+            isOpen={isHelpOpen}
+            onClose={onHelpClose}
+          />
+        </>
+      )}
     </Box>
   );
 }
-
