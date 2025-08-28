@@ -1,3 +1,4 @@
+// components/CardSearch.js
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -13,7 +14,9 @@ import CardVariantIndicator from './CardVariantIndicator';
 import CardDetailModal from './CardDetailModal';
 import SearchHelpModal from './SearchHelpModal';
 import StyledTextRenderer from './StyledTextRenderer';
+import CardImage from './CardImage';
 import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
+import { getSafeImageUrl } from '@/utils/imageUtils';
 
 const colorMap = {
   Red: '#E53E3E',
@@ -82,14 +85,6 @@ const subtleTextStyle = (color) => ({
   color: color
 });
 
-// Utility function to safely provide an image URL or fallback to local image
-const getSafeImageUrl = (url) => {
-  if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
-    return '/placeholder.png';
-  }
-  return url;
-};
-
 export default function CardSearch() {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState([]);
@@ -99,7 +94,7 @@ export default function CardSearch() {
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const [thumbnailSize, setThumbnailSize] = useState(160);
-  const [isClient, setIsClient] = useState(false); // Add client-side check
+  const [isClient, setIsClient] = useState(false);
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const [selectedCard, setSelectedCard] = useState(null);
@@ -128,7 +123,7 @@ export default function CardSearch() {
 
   // Search functionality
   useEffect(() => {
-    if (!isClient) return; // Don't run search until client-side
+    if (!isClient) return;
 
     const advancedKeywordRegex = /(?:\b(id|pack|color|exact):\S+)/gi;
     const hasAdvancedKeyword = advancedKeywordRegex.test(searchTerm);
@@ -177,9 +172,8 @@ export default function CardSearch() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm, showOnlyOwned, showProxies, apiUrl, isClient]);
 
-  // Improved Thumbnail Card Component with better error handling
+  // Improved Thumbnail Card Component
   const ThumbnailCard = ({ card }) => {
-    // Format for count display
     const countDisplay = showProxies ? `${card.owned_count} : ${card.proxy_count}` : `${card.owned_count}`;
     const tagStyles = getTagStyles(card.color);
 
@@ -196,17 +190,14 @@ export default function CardSearch() {
         position="relative"
         suppressHydrationWarning={true}
       >
-        <Image
+        <CardImage
           width={`${thumbnailSize}px`}
           height={`${Math.floor(thumbnailSize * 1.4)}px`}
-          src={getSafeImageUrl(card.img_url)}
+          src={card.img_url}
           alt={card.name}
           fallbackSrc="/placeholder.png"
           objectFit="cover"
           loading="lazy"
-          onError={(e) => {
-            e.target.src = '/placeholder.png';
-          }}
         />
 
         <Box
@@ -225,7 +216,6 @@ export default function CardSearch() {
               {card.name}
             </Text>
             <HStack justify="space-between" align="center">
-              {/* Card ID with color styling */}
               <Tag
                 size="sm"
                 {...tagStyles}
@@ -242,8 +232,6 @@ export default function CardSearch() {
               >
                 {card.id}
               </Tag>
-
-              {/* Counter display on the right */}
               <Text fontSize="m" fontWeight="bold" color="blue.300" ml={2} minW="36px" textAlign="right">
                 {countDisplay}
               </Text>
@@ -254,7 +242,7 @@ export default function CardSearch() {
     );
   };
 
-  // List Card Component
+  // List Card Component - FIXED VERSION
   const ListCard = ({ card }) => {
     const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
 
@@ -262,10 +250,8 @@ export default function CardSearch() {
       return card.category === 'LEADER' ? 'Life' : 'Cost';
     };
 
-    // Helper to clean effect/trigger text per requirements
     const cleanEffectText = (text) => {
       if (!text || text.trim() === '' || text.trim() === '-') return '';
-      // Remove all HTML tags (e.g., <br>, <b>, etc.)
       return text.replace(/<[^>]*>/g, '').trim();
     };
 
@@ -285,10 +271,10 @@ export default function CardSearch() {
         transition="all 0.2s"
       >
         <Flex align="center" gap={2}>
-          <Image
+          <CardImage
             width="80px"
             height="112px"
-            src={getSafeImageUrl(card.img_url)}
+            src={card.img_url}
             alt={card.name}
             fallbackSrc="/placeholder.png"
             borderRadius="md"
@@ -349,16 +335,27 @@ export default function CardSearch() {
             )}
           </VStack>
 
+          {/* FIXED: Count Control Section */}
           <HStack spacing={2} ml={2} align="center">
             {showProxies && (
               <VStack spacing={0}>
                 <Text fontSize="xs" color="gray.500">Proxy</Text>
-                <CountControl cardId={card.id} type="proxy" count={card.proxy_count} onUpdate={handleCountUpdate} />
+                <CountControl
+                  cardId={card.id}
+                  type="proxy"
+                  count={card.proxy_count || 0}
+                  onUpdate={handleCountUpdate}
+                />
               </VStack>
             )}
             <VStack spacing={0}>
               <Text fontSize="xs" color="gray.500">Owned</Text>
-              <CountControl cardId={card.id} type="owned" count={card.owned_count} onUpdate={handleCountUpdate} />
+              <CountControl
+                cardId={card.id}
+                type="owned"
+                count={card.owned_count || 0}
+                onUpdate={handleCountUpdate}
+              />
             </VStack>
           </HStack>
         </Flex>
@@ -423,69 +420,63 @@ export default function CardSearch() {
               onClick={() => setViewMode('thumbnail')}
             />
           </Tooltip>
-
-          {viewMode === 'thumbnail' && (
-            <HStack spacing={2} ml={4}>
-              <Text fontSize="xs" color="gray.500">Size:</Text>
-              <Box w="80px">
-                <Slider
-                  min={120}
-                  max={250}
-                  step={10}
-                  value={thumbnailSize}
-                  onChange={setThumbnailSize}
-                  size="sm"
-                >
-                  <SliderTrack>
-                    <SliderFilledTrack />
-                  </SliderTrack>
-                  <SliderThumb />
-                </Slider>
-              </Box>
-            </HStack>
-          )}
         </HStack>
 
         <HStack spacing={4}>
           <FormControl display="flex" alignItems="center">
             <FormLabel htmlFor="owned-only" mb="0" fontSize="sm">
-              In Collection
+              Owned Only
             </FormLabel>
-            <Switch id="owned-only" isChecked={showOnlyOwned} onChange={(e) => setShowOnlyOwned(e.target.checked)} />
+            <Switch
+              id="owned-only"
+              isChecked={showOnlyOwned}
+              onChange={(e) => setShowOnlyOwned(e.target.checked)}
+            />
           </FormControl>
+
           <FormControl display="flex" alignItems="center">
             <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
               Show Proxies
             </FormLabel>
-            <Switch id="show-proxies" isChecked={showProxies} onChange={(e) => setShowProxies(e.target.checked)} />
+            <Switch
+              id="show-proxies"
+              isChecked={showProxies}
+              onChange={(e) => setShowProxies(e.target.checked)}
+            />
           </FormControl>
         </HStack>
       </HStack>
 
-      {loading && (
-        <Box {...subtleBoxStyle('blue.50', 'blue.100')}>
-          <HStack justify="space-between" align="center">
-            <HStack>
-              <Spinner size="sm" color="blue.500" />
-              <Text {...subtleTextStyle('blue.700')}>
-                Searching for "{searchTerm}"...
-              </Text>
-            </HStack>
-            <Button
-              size="xs"
-              colorScheme="blue"
-              variant="ghost"
-              onClick={onHelpOpen}
-            >
-              Help
-            </Button>
-          </HStack>
+      {/* Thumbnail Size Slider (only show in thumbnail mode) */}
+      {viewMode === 'thumbnail' && (
+        <Box mb={4}>
+          <Text fontSize="sm" color="gray.600" mb={2}>Thumbnail Size:</Text>
+          <Slider
+            value={thumbnailSize}
+            onChange={(value) => setThumbnailSize(value)}
+            min={120}
+            max={250}
+            step={10}
+            width="200px"
+          >
+            <SliderTrack>
+              <SliderFilledTrack />
+            </SliderTrack>
+            <SliderThumb />
+          </Slider>
         </Box>
       )}
 
-      {!loading && !error && searchTerm.length >= 3 && results.length === 0 && (
+      {loading && (
+        <Box textAlign="center" py={8}>
+          <Spinner size="lg" color="blue.500" />
+          <Text mt={4} color="gray.500">Searching cards...</Text>
+        </Box>
+      )}
+
+      {!loading && searchTerm.length >= 3 && results.length === 0 && !error && (
         <Box {...subtleBoxStyle('yellow.50', 'yellow.100')}>
-          <HStack justify="space-between" align="center">
+          <HStack>
             <Text {...subtleTextStyle('yellow.700')}>
               No cards found for "{searchTerm}". Try adjusting your search terms.
             </Text>

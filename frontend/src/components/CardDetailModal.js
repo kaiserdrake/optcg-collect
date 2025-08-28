@@ -1,14 +1,15 @@
 import React from 'react';
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-  Box, Text, VStack, HStack, Tag, Stat, StatLabel, StatNumber, Wrap, WrapItem, Image,
+  Box, Text, VStack, HStack, Tag, Stat, StatLabel, StatNumber, Wrap, WrapItem,
   Flex, Heading, StackDivider, Button
 } from '@chakra-ui/react';
 import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
 import StyledTextRenderer from './StyledTextRenderer';
+import CardImage from './CardImage';
 
-// Helper functions (moved from CardSearch)
+// Helper functions
 const colorMap = {
   Red: '#E53E3E',
   Green: '#48BB78',
@@ -29,14 +30,6 @@ const getTagStyles = (colorString) => {
   return { bgGradient: gradient, color: 'white', variant: 'solid' };
 };
 
-// Utility function to safely provide an image URL or fallback to local image
-const getSafeImageUrl = (url) => {
-  if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
-    return '/placeholder.png';
-  }
-  return url;
-};
-
 const CardDetailModal = ({
   isOpen,
   onClose,
@@ -46,7 +39,6 @@ const CardDetailModal = ({
 }) => {
   if (!selectedCard) return null;
 
-  // Helper function to determine the cost label
   const getCostLabel = (card) => {
     return card.category === 'LEADER' ? 'Life' : 'Cost';
   };
@@ -64,15 +56,18 @@ const CardDetailModal = ({
         <ModalCloseButton />
         <ModalBody>
           <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
+            {/* FIXED: Use CardImage instead of standard Image */}
             <Box flexShrink={0}>
-              <Image
+              <CardImage
                 borderRadius="lg"
                 width={{ base: '100%', md: '250px' }}
-                src={getSafeImageUrl(selectedCard.img_url)}
+                height={{ base: '350px', md: '350px' }}
+                src={selectedCard.img_url}
                 alt={selectedCard.name}
                 fallbackSrc="/placeholder.png"
               />
             </Box>
+
             <VStack align="stretch" spacing={3} flex={1}>
               <Wrap spacing={2}>
                 <WrapItem>
@@ -90,72 +85,144 @@ const CardDetailModal = ({
                     {selectedCard.rarity}
                   </Tag>
                 </WrapItem>
-              </Wrap>
-              <HStack spacing={6} divider={<StackDivider />} pt={1}>
                 {selectedCard.cost !== null && (
-                  <Stat>
-                    <StatLabel>{getCostLabel(selectedCard)}</StatLabel>
-                    <StatNumber>{selectedCard.cost}</StatNumber>
-                  </Stat>
+                  <WrapItem>
+                    <Tag size="lg" colorScheme="orange">
+                      {getCostLabel(selectedCard)}: {selectedCard.cost}
+                    </Tag>
+                  </WrapItem>
                 )}
-                {selectedCard.power !== null && (
-                  <Stat>
-                    <StatLabel>Power</StatLabel>
-                    <StatNumber>{selectedCard.power}</StatNumber>
-                  </Stat>
+                {selectedCard.power && (
+                  <WrapItem>
+                    <Tag size="lg" colorScheme="red">
+                      Power: {selectedCard.power.toLocaleString()}
+                    </Tag>
+                  </WrapItem>
                 )}
-                {selectedCard.counter !== null && (
-                  <Stat>
-                    <StatLabel>Counter</StatLabel>
-                    <StatNumber>{selectedCard.counter}</StatNumber>
-                  </Stat>
+                {selectedCard.counter && (
+                  <WrapItem>
+                    <Tag size="lg" colorScheme="yellow">
+                      Counter: +{selectedCard.counter}
+                    </Tag>
+                  </WrapItem>
                 )}
-              </HStack>
-              <VStack spacing={4} align="stretch" pt={2}>
-                {selectedCard.effect && (
-                  <StyledTextRenderer text={selectedCard.effect} />
+                {selectedCard.block && (
+                  <WrapItem>
+                    <Tag size="lg" colorScheme="cyan">
+                      Block: +{selectedCard.block}
+                    </Tag>
+                  </WrapItem>
                 )}
-                {selectedCard.trigger_effect && (
-                  <StyledTextRenderer text={selectedCard.trigger_effect} />
+              </Wrap>
+
+              <VStack align="stretch" spacing={4} divider={<StackDivider />}>
+                {selectedCard.effect && selectedCard.effect.trim() !== '' && selectedCard.effect.trim() !== '-' && (
+                  <Box>
+                    <Heading size="sm" mb={2}>Effect</Heading>
+                    <StyledTextRenderer text={selectedCard.effect} />
+                  </Box>
                 )}
+
+                {selectedCard.trigger_effect && selectedCard.trigger_effect.trim() !== '' && selectedCard.trigger_effect.trim() !== '-' && (
+                  <Box>
+                    <Heading size="sm" mb={2}>Trigger Effect</Heading>
+                    <StyledTextRenderer text={selectedCard.trigger_effect} />
+                  </Box>
+                )}
+
+                {selectedCard.attributes && selectedCard.attributes.length > 0 && (
+                  <Box>
+                    <Heading size="sm" mb={2}>Attributes</Heading>
+                    <Wrap>
+                      {selectedCard.attributes.map((attr, index) => (
+                        <WrapItem key={index}>
+                          <Tag colorScheme="teal">{attr}</Tag>
+                        </WrapItem>
+                      ))}
+                    </Wrap>
+                  </Box>
+                )}
+
+                {selectedCard.types && selectedCard.types.length > 0 && (
+                  <Box>
+                    <Heading size="sm" mb={2}>Types</Heading>
+                    <Wrap>
+                      {selectedCard.types.map((type, index) => (
+                        <WrapItem key={index}>
+                          <Tag colorScheme="purple">{type}</Tag>
+                        </WrapItem>
+                      ))}
+                    </Wrap>
+                  </Box>
+                )}
+
+                {selectedCard.packs && (
+                  <Box>
+                    <Heading size="sm" mb={2}>Appears In</Heading>
+                    <Wrap>
+                      {selectedCard.packs.split(', ').map(pack => (
+                        <WrapItem key={pack}>
+                          <Tag size="sm">{pack}</Tag>
+                        </WrapItem>
+                      ))}
+                    </Wrap>
+                  </Box>
+                )}
+
+                <HStack spacing={4}>
+                  {selectedCard.owned_count !== undefined && (
+                    <Stat>
+                      <StatLabel>Owned</StatLabel>
+                      <StatNumber>{selectedCard.owned_count}</StatNumber>
+                    </Stat>
+                  )}
+                  {showProxies && selectedCard.proxy_count !== undefined && (
+                    <Stat>
+                      <StatLabel>Proxies</StatLabel>
+                      <StatNumber>{selectedCard.proxy_count}</StatNumber>
+                    </Stat>
+                  )}
+                </HStack>
               </VStack>
-              <Box pt={2}>
-                <Heading size="sm" mb={1}>Appears In</Heading>
-                <Wrap>
-                  {selectedCard.packs?.split(', ').map(pack => (
-                    <WrapItem key={pack}>
-                      <Tag size="sm">{pack}</Tag>
-                    </WrapItem>
-                  ))}
-                </Wrap>
-              </Box>
-              <HStack justify="flex-start" pt={3} borderTopWidth="1px" borderColor="gray.200" spacing={10}>
-                <VStack spacing={0}>
-                  <Text fontSize="sm" fontWeight="bold" color="gray.500">Owned</Text>
-                  <CountControl
-                    cardId={selectedCard.id}
-                    type="owned"
-                    count={selectedCard.owned_count}
-                    onUpdate={onCountUpdate}
-                  />
-                </VStack>
-                {showProxies && (
-                  <VStack spacing={0}>
-                    <Text fontSize="sm" fontWeight="bold" color="gray.500">Proxy</Text>
-                    <CountControl
-                      cardId={selectedCard.id}
-                      type="proxy"
-                      count={selectedCard.proxy_count}
-                      onUpdate={onCountUpdate}
-                    />
-                  </VStack>
-                )}
-              </HStack>
             </VStack>
           </Flex>
         </ModalBody>
+
         <ModalFooter>
-          <Button colorScheme="blue" onClick={onClose}>Close</Button>
+          <HStack spacing={4} width="100%" justify="space-between">
+            {/* Count Controls */}
+            <HStack spacing={8}>
+              <Box textAlign="center">
+                <Text fontSize="sm" fontWeight="bold" color="gray.600" mb={2}>
+                  Owned Cards
+                </Text>
+                <CountControl
+                  cardId={selectedCard.id}
+                  type="owned"
+                  count={selectedCard.owned_count || 0}
+                  onUpdate={onCountUpdate}
+                />
+              </Box>
+
+              {showProxies && (
+                <Box textAlign="center">
+                  <Text fontSize="sm" fontWeight="bold" color="gray.600" mb={2}>
+                    Proxy Cards
+                  </Text>
+                  <CountControl
+                    cardId={selectedCard.id}
+                    type="proxy"
+                    count={selectedCard.proxy_count || 0}
+                    onUpdate={onCountUpdate}
+                  />
+                </Box>
+              )}
+            </HStack>
+
+            <Button colorScheme="blue" onClick={onClose}>
+              Close
+            </Button>
+          </HStack>
         </ModalFooter>
       </ModalContent>
     </Modal>
