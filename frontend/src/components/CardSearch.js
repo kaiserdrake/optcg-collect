@@ -83,6 +83,37 @@ const subtleTextStyle = (color) => ({
   color: color
 });
 
+// Helper functions to sanitize card properties and prevent React error #418
+const sanitizeCardProps = (card) => {
+  // Ensure img_url is a valid string or fallback
+  const img_url = (typeof card.img_url === 'string' && card.img_url.trim() !== '') 
+    ? card.img_url 
+    : 'https://via.placeholder.com/160x224?text=No+Image';
+  
+  // Ensure name is a valid string or fallback
+  const name = (typeof card.name === 'string' && card.name.trim() !== '') 
+    ? card.name 
+    : 'Unknown Card';
+  
+  // Ensure counts are always numbers
+  const owned_count = typeof card.owned_count === 'number' ? card.owned_count : 0;
+  const proxy_count = typeof card.proxy_count === 'number' ? card.proxy_count : 0;
+  
+  // Ensure id is a valid string for key usage
+  const id = (typeof card.id === 'string' && card.id.trim() !== '') 
+    ? card.id 
+    : `card-${Math.random().toString(36).substr(2, 9)}`;
+  
+  return {
+    ...card,
+    img_url,
+    name,
+    owned_count,
+    proxy_count,
+    id
+  };
+};
+
 export default function CardSearch() {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState([]);
@@ -167,14 +198,16 @@ export default function CardSearch() {
 
   // Thumbnail Card Component
   const ThumbnailCard = ({ card }) => {
-    const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
+    // Sanitize card properties to prevent React error #418
+    const safeCard = sanitizeCardProps(card);
+    const keywords = extractStyledKeywords(safeCard.effect, safeCard.trigger_effect);
 
     return (
       <Box
         borderRadius="md"
         overflow="hidden"
         cursor="pointer"
-        onClick={() => handleCardClick(card)}
+        onClick={() => handleCardClick(safeCard)}
         _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
         transition="all 0.2s"
         bg="white"
@@ -184,8 +217,8 @@ export default function CardSearch() {
         <Image
           width={`${thumbnailSize}px`}
           height={`${Math.floor(thumbnailSize * 1.4)}px`}
-          src={card.img_url}
-          alt={card.name}
+          src={safeCard.img_url}
+          alt={safeCard.name}
           fallbackSrc='https://via.placeholder.com/160x224?text=No+Image'
           objectFit="cover"
         />
@@ -200,7 +233,7 @@ export default function CardSearch() {
           p={2}
         >
           <Text fontSize="xs" fontWeight="bold" noOfLines={1} mb={1}>
-            {card.name}
+            {safeCard.name}
           </Text>
           <Flex justify="space-between" align="center" fontSize="xs">
             <VStack spacing={0}>
@@ -208,7 +241,7 @@ export default function CardSearch() {
                 Owned
               </Text>
               <Text fontSize="sm" fontWeight="bold" color="blue.600">
-                {card.owned_count || 0}
+                {safeCard.owned_count}
               </Text>
             </VStack>
 
@@ -218,7 +251,7 @@ export default function CardSearch() {
                   Proxy
                 </Text>
                 <Text fontSize="sm" fontWeight="bold" color="gray.500">
-                  {card.proxy_count || 0}
+                  {safeCard.proxy_count}
                 </Text>
               </VStack>
             )}
@@ -452,9 +485,12 @@ export default function CardSearch() {
       {/* Results Display */}
       {viewMode === 'list' ? (
         <VStack spacing={2} align="stretch">
-          {results.map((card) => (
-            <ListCard key={card.id} card={card} />
-          ))}
+          {results.map((card, index) => {
+            const safeCard = sanitizeCardProps(card);
+            return (
+              <ListCard key={safeCard.id} card={card} />
+            );
+          })}
         </VStack>
       ) : (
         <Grid
@@ -462,9 +498,12 @@ export default function CardSearch() {
           gap={6}
           justifyItems="center"
         >
-          {results.map((card) => (
-            <ThumbnailCard key={card.id} card={card} />
-          ))}
+          {results.map((card, index) => {
+            const safeCard = sanitizeCardProps(card);
+            return (
+              <ThumbnailCard key={safeCard.id} card={card} />
+            );
+          })}
         </Grid>
       )}
 
