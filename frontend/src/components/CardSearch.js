@@ -178,7 +178,9 @@ export default function CardSearch() {
 
   // Improved Thumbnail Card Component with better error handling
   const ThumbnailCard = ({ card }) => {
-    const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
+    // Format for count display
+    const countDisplay = showProxies ? `${card.owned_count} : ${card.proxy_count}` : `${card.owned_count}`;
+    const tagStyles = getTagStyles(card.color);
 
     return (
       <Box
@@ -211,34 +213,41 @@ export default function CardSearch() {
           bottom="0"
           left="0"
           right="0"
-          bg="rgba(0,0,0,0.8)"
+          bg="rgba(0,0,0,0.5)"
           color="white"
-          p={2}
+          pt={2}
+          pb={2}
+          px={2}
         >
-          <Text fontSize="xs" fontWeight="bold" noOfLines={1} mb={1}>
-            {card.name}
-          </Text>
-          <Flex justify="space-between" align="center" fontSize="xs">
-            <VStack spacing={0}>
-              <Text fontSize="xs" color="gray.400" fontWeight="medium">
-                Owned
-              </Text>
-              <Text fontSize="sm" fontWeight="bold" color="blue.300">
-                {card.owned_count || 0}
-              </Text>
-            </VStack>
+          <VStack spacing={1} align="stretch">
+            <Text fontSize="xs" fontWeight="bold" noOfLines={1}>
+              {card.name}
+            </Text>
+            <HStack justify="space-between" align="center">
+              {/* Card ID with color styling */}
+              <Tag
+                size="sm"
+                {...tagStyles}
+                fontWeight="bold"
+                fontSize="xs"
+                px={2}
+                py={0.5}
+                lineHeight="1.1"
+                borderRadius="md"
+                maxW="80%"
+                overflow="hidden"
+                textOverflow="ellipsis"
+                whiteSpace="nowrap"
+              >
+                {card.id}
+              </Tag>
 
-            {showProxies && (
-              <VStack spacing={0}>
-                <Text fontSize="xs" color="gray.400" fontWeight="medium">
-                  Proxy
-                </Text>
-                <Text fontSize="sm" fontWeight="bold" color="gray.400">
-                  {card.proxy_count || 0}
-                </Text>
-              </VStack>
-            )}
-          </Flex>
+              {/* Counter display on the right */}
+              <Text fontSize="m" fontWeight="bold" color="blue.300" ml={2} minW="36px" textAlign="right">
+                {countDisplay}
+              </Text>
+            </HStack>
+          </VStack>
         </Box>
       </Box>
     );

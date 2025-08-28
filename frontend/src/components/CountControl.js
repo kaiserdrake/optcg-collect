@@ -32,14 +32,7 @@ export default function CountControl({ cardId, type, count, onUpdate }) {
         const actionText = action === 'increment' ? 'Added' : 'Removed';
         const typeText = type === 'proxy' ? 'proxy' : 'owned card';
 
-        toast({
-          title: `${actionText} ${typeText}`,
-          status: "success",
-          duration: 1000,
-          isClosable: false,
-          position: "bottom-right",
-          size: "sm"
-        });
+        // No need toast here
       } else {
         toast({
           title: "Update Failed",
