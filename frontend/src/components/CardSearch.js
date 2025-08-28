@@ -2,15 +2,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Box, Text, VStack, HStack, Tag, Spinner, Stat, StatLabel, StatNumber, Wrap, WrapItem, Image,
-  Flex, Heading, StackDivider, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader,
-  ModalFooter, ModalBody, ModalCloseButton, Button, IconButton, Code, FormControl, FormLabel, Switch,
-  Grid, GridItem, Tooltip, Slider, SliderTrack, SliderFilledTrack, SliderThumb
+  Box, Text, VStack, HStack, Tag, Spinner, Wrap, WrapItem, Image,
+  Flex, useDisclosure, Button, IconButton, FormControl, FormLabel, Switch,
+  Grid, Tooltip, Slider, SliderTrack, SliderFilledTrack, SliderThumb
 } from '@chakra-ui/react';
 import { QuestionOutlineIcon, ViewIcon, HamburgerIcon } from '@chakra-ui/icons';
 import AdvancedSearchInput from './AdvancedSearchInput';
 import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
+import CardDetailModal from './CardDetailModal';
+import SearchHelpModal from './SearchHelpModal';
 
 const colorMap = {
   Red: '#E53E3E',
@@ -22,12 +23,23 @@ const colorMap = {
 };
 
 const toTitleCase = (str) => {
-    if (!str) return '';
-    return str
-        .toLowerCase()
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+const getTagStyles = (colorString) => {
+  if (!colorString) return { variant: 'subtle' };
+  const colors = colorString.split('/').map(c => colorMap[c.trim()]).filter(Boolean);
+  if (colors.length === 0) return { variant: 'subtle' };
+  if (colors.length === 1) {
+    return { bg: colors[0], color: 'white', variant: 'solid' };
+  }
+  const gradient = `linear(to-r, ${colors.join(', ')})`;
+  return { bgGradient: gradient, color: 'white', variant: 'solid' };
 };
 
 const keywordStyles = {
@@ -51,46 +63,40 @@ const keywordStyles = {
 };
 
 const keywordPatterns = [
-    { regex: /DON!! [x-]\d+/i, style: { bg: 'black', color: 'white', variant: 'solid' } }
+  { regex: /DON!! [x-]\d+/i, style: { bg: 'black', color: 'white', variant: 'solid' } }
 ];
 
-const StyledTextRenderer = ({ text }) => {
-    if (!text || text.trim() === '' || text.trim() === '-') {
-        return <Text as="span">&nbsp;</Text>;
+const extractStyledKeywords = (effect, triggerEffect) => {
+  const combinedText = `${effect || ''} ${triggerEffect || ''}`;
+  const regex = /\[([^\]]+)\]/g;
+  const keywordSet = new Set();
+  let match;
+  while ((match = regex.exec(combinedText)) !== null) {
+    const keyword = match[1];
+    const keywordLower = keyword.toLowerCase();
+    const isExactMatch = !!keywordStyles[keywordLower];
+    const isPatternMatch = keywordPatterns.some(p => p.regex.test(keyword));
+    if (isExactMatch || isPatternMatch) {
+      keywordSet.add(keyword);
     }
-    const parts = text.split(/(\[.*?\])/g);
-    return parts.map((part, index) => {
-        if (part.match(/^\[.*\]$/)) {
-            const keyword = part.slice(1, -1).toLowerCase();
-            const style = keywordStyles[keyword];
-            if (style) {
-                return <Tag key={index} {...style} mr={1}>{part.slice(1, -1)}</Tag>;
-            }
-            const patternMatch = keywordPatterns.find(p => p.regex.test(part.slice(1, -1)));
-            if (patternMatch) {
-                return <Tag key={index} {...patternMatch.style} mr={1}>{part.slice(1, -1)}</Tag>;
-            }
-        }
-        return <Text key={index} as="span">{part}</Text>;
-    });
+  }
+  return Array.from(keywordSet);
 };
 
-const extractStyledKeywords = (effect, triggerEffect) => {
-    const combinedText = `${effect || ''} ${triggerEffect || ''}`;
-    const regex = /\[([^\]]+)\]/g;
-    const keywordSet = new Set();
-    let match;
-    while ((match = regex.exec(combinedText)) !== null) {
-        const keyword = match[1];
-        const keywordLower = keyword.toLowerCase();
-        const isExactMatch = !!keywordStyles[keywordLower];
-        const isPatternMatch = keywordPatterns.some(p => p.regex.test(keyword));
-        if (isExactMatch || isPatternMatch) {
-            keywordSet.add(keyword);
-        }
-    }
-    return Array.from(keywordSet);
-};
+// Style helpers
+const subtleBoxStyle = (bgColor, borderColor) => ({
+  p: 3,
+  bg: bgColor,
+  borderWidth: '1px',
+  borderColor: borderColor,
+  borderRadius: 'md',
+  mb: 4
+});
+
+const subtleTextStyle = (color) => ({
+  fontSize: 'sm',
+  color: color
+});
 
 export default function CardSearch() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,22 +123,13 @@ export default function CardSearch() {
         card.id === cardId ? { ...card, ...newCounts } : card
       )
     );
+    // Also update the selected card if it's the same card
     if (selectedCard && selectedCard.id === cardId) {
-      setSelectedCard(currentCard => ({ ...currentCard, ...newCounts }));
+      setSelectedCard(current => ({ ...current, ...newCounts }));
     }
   };
 
-  const getTagStyles = (colorString) => {
-    if (!colorString) return { variant: 'subtle' };
-    const colors = colorString.split('/').map(c => colorMap[c.trim()]).filter(Boolean);
-    if (colors.length === 0) return { variant: 'subtle' };
-    if (colors.length === 1) {
-      return { bg: colors[0], color: 'white', variant: 'solid' };
-    }
-    const gradient = `linear(to-r, ${colors.join(', ')})`;
-    return { bgGradient: gradient, color: 'white', variant: 'solid' };
-  };
-
+  // Search functionality
   useEffect(() => {
     // Extract if advanced search keywords are present - now includes exact:
     const advancedKeywordRegex = /(?:\b(id|pack|color|exact):\S+)/gi;
@@ -191,61 +188,44 @@ export default function CardSearch() {
           errorMessage = 'Search query contains invalid characters. Please try different search terms.';
         } else if (error.message.includes('fetch')) {
           errorMessage = 'Unable to connect to server. Please check your connection and try again.';
-        } else if (error.message) {
-          errorMessage = error.message;
+        } else {
+          errorMessage = error.message || 'An unexpected error occurred.';
         }
 
         setError(errorMessage);
-        setResults([]);
       })
-      .finally(() => { setLoading(false); });
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, apiUrl, showOnlyOwned, showProxies]);
+      .finally(() => {
+        setLoading(false);
+      });
+    }, 300);
 
-    // --- Subtle Status Message Styles ---
-  const subtleBoxStyle = (color, borderColor) => ({
-    mb: 4,
-    p: 3,
-    bg: color,
-    borderRadius: 'md',
-    borderLeft: '4px',
-    borderColor: borderColor,
-  });
-  const subtleTextStyle = (color = 'gray.600', fontSize = 'sm') => ({
-    color: color,
-    fontSize: fontSize,
-    fontWeight: 'normal',
-    lineHeight: '1.5',
-  });
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, showOnlyOwned, showProxies, apiUrl]);
 
   // Thumbnail Card Component
   const ThumbnailCard = ({ card }) => {
-    const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
-    const imageHeight = Math.floor(thumbnailSize * 1.4); // maintain aspect ratio
-
     return (
       <Box
-        position="relative"
+        key={card.id}
+        borderWidth="1px"
+        borderRadius="lg"
+        overflow="hidden"
         cursor="pointer"
         onClick={() => handleCardClick(card)}
-        _hover={{ transform: 'scale(1.05)', transition: 'all 0.2s' }}
+        _hover={{ shadow: 'lg', transform: 'translateY(-2px)' }}
         transition="all 0.2s"
         bg="white"
-        borderRadius="lg"
-        shadow="md"
-        overflow="hidden"
         w={`${thumbnailSize}px`}
         h="auto"
       >
         {/* Card Image */}
-        <Box position="relative" w="100%" h={`${imageHeight}px`}>
+        <Box position="relative">
           <Image
             src={card.img_url}
             alt={card.name}
-            fallbackSrc={`https://via.placeholder.com/${thumbnailSize}x${imageHeight}?text=No+Image`}
+            fallbackSrc='https://via.placeholder.com/250x350?text=No+Image'
             w="100%"
-            h="100%"
+            h={`${Math.round(thumbnailSize * 1.4)}px`}
             objectFit="cover"
           />
         </Box>
@@ -283,7 +263,7 @@ export default function CardSearch() {
     );
   };
 
-  // List Card Component (existing implementation)
+  // List Card Component
   const ListCard = ({ card }) => {
     const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
 
@@ -308,7 +288,11 @@ export default function CardSearch() {
                 </HStack>
               </WrapItem>
               {card.category && <WrapItem fontSize="sm" color="gray.600">{toTitleCase(card.category)}</WrapItem>}
-              {card.attributes && card.attributes.length > 0 && card.attributes.map(attr => (<WrapItem key={attr}><Tag size="sm" variant="outline" colorScheme="gray">{toTitleCase(attr)}</Tag></WrapItem>))}
+              {card.attributes && card.attributes.length > 0 && card.attributes.map(attr => (
+                <WrapItem key={attr}>
+                  <Tag size="sm" variant="outline" colorScheme="gray">{toTitleCase(attr)}</Tag>
+                </WrapItem>
+              ))}
               {card.cost !== null && <WrapItem fontSize="sm">Cost: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.cost}</Text></WrapItem>}
               {card.power !== null && <WrapItem fontSize="sm">Power: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.power}</Text></WrapItem>}
               {card.counter !== null && <WrapItem fontSize="sm">Counter: <Text as="span" fontWeight="semibold" color="black" ml={1}>{card.counter}</Text></WrapItem>}
@@ -316,20 +300,36 @@ export default function CardSearch() {
             <Wrap spacingX={4} spacingY={1} align="center">
               <WrapItem><Tag size="sm" {...getTagStyles(card.color)}>{card.card_code}</Tag></WrapItem>
               {card.rarity && <WrapItem fontSize="sm" color="gray.800" fontWeight="semibold">{card.rarity}</WrapItem>}
-              {card.types && card.types.length > 0 && card.types.map(type => (<WrapItem key={type}><Tag size="sm" variant="outline">{toTitleCase(type)}</Tag></WrapItem>))}
+              {card.types && card.types.length > 0 && card.types.map(type => (
+                <WrapItem key={type}>
+                  <Tag size="sm" variant="outline">{toTitleCase(type)}</Tag>
+                </WrapItem>
+              ))}
             </Wrap>
             {keywords.length > 0 ? (
               <Wrap align="center" pt={1}>
                 <Text fontSize="xs" fontWeight="bold" color="gray.500" mr={2}>Keywords:</Text>
                 {keywords.map(kw => (
-                    <WrapItem key={kw}><Tag size="sm" variant="subtle" colorScheme="gray">{kw}</Tag></WrapItem>
+                  <WrapItem key={kw}>
+                    <Tag size="sm" variant="subtle" colorScheme="gray">{kw}</Tag>
+                  </WrapItem>
                 ))}
               </Wrap>
-            ) : ( <Box h="22px" /> )}
+            ) : (
+              <Box h="22px" />
+            )}
           </VStack>
           <HStack spacing={4} ml={4}>
-            {showProxies && (<VStack spacing={0}><Text fontSize="xs" color="gray.500">Proxy</Text><CountControl cardId={card.id} type="proxy" count={card.proxy_count} onUpdate={handleCountUpdate} /></VStack>)}
-            <VStack spacing={0}><Text fontSize="xs" color="gray.500">Owned</Text><CountControl cardId={card.id} type="owned" count={card.owned_count} onUpdate={handleCountUpdate} /></VStack>
+            {showProxies && (
+              <VStack spacing={0}>
+                <Text fontSize="xs" color="gray.500">Proxy</Text>
+                <CountControl cardId={card.id} type="proxy" count={card.proxy_count} onUpdate={handleCountUpdate} />
+              </VStack>
+            )}
+            <VStack spacing={0}>
+              <Text fontSize="xs" color="gray.500">Owned</Text>
+              <CountControl cardId={card.id} type="owned" count={card.owned_count} onUpdate={handleCountUpdate} />
+            </VStack>
           </HStack>
         </Flex>
       </Box>
@@ -448,42 +448,27 @@ export default function CardSearch() {
       {!loading && !error && searchTerm.length >= 3 && results.length === 0 && (
         <Box {...subtleBoxStyle('yellow.50', 'yellow.100')}>
           <HStack justify="space-between" align="center">
-            <VStack align="start" spacing={1} flex={1}>
-              <Text {...subtleTextStyle('yellow.700')}>
-                No cards found for "{searchTerm}"
-              </Text>
-              <Text {...subtleTextStyle('yellow.600', 'xs')}>
-                Try different keywords or remove filters
-              </Text>
-            </VStack>
-            <HStack spacing={1}>
-              <Button
-                size="xs"
-                colorScheme="yellow"
-                variant="outline"
-                onClick={() => setSearchTerm('')}
-              >
-                Clear
-              </Button>
-              <Button
-                size="xs"
-                colorScheme="blue"
-                variant="ghost"
-                onClick={onHelpOpen}
-              >
-                Tips
-              </Button>
-            </HStack>
+            <Text {...subtleTextStyle('yellow.700')}>
+              No cards found for "{searchTerm}". Try adjusting your search terms.
+            </Text>
+            <Button
+              size="xs"
+              colorScheme="yellow"
+              variant="ghost"
+              onClick={onHelpOpen}
+            >
+              Search Help
+            </Button>
           </HStack>
         </Box>
       )}
 
-      {/* Results Counter */}
-      {!loading && !error && results.length > 0 && (
-        <Box {...subtleBoxStyle('gray.50', 'gray.200')}>
+      {/* Results Summary */}
+      {!loading && results.length > 0 && (
+        <Box {...subtleBoxStyle('green.50', 'green.100')}>
           <HStack justify="space-between" align="center">
-            <Text {...subtleTextStyle('gray.500')}>
-              Found {results.length} card{results.length !== 1 ? 's' : ''} for "{searchTerm}"
+            <Text {...subtleTextStyle('green.700')}>
+              Found {results.length} result{results.length !== 1 ? 's' : ''} for "{searchTerm}"
             </Text>
             <Text fontSize="xs" color="gray.500">
               Viewing as: {viewMode === 'list' ? 'List' : 'Thumbnails'}
@@ -513,92 +498,19 @@ export default function CardSearch() {
         </Grid>
       )}
 
-      {/* Card Detail Modal - Same as original */}
-      {selectedCard && (
-        <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="4xl" isCentered>
-          <ModalOverlay />
-          <ModalContent>
-            <ModalHeader>
-                <HStack>
-                    <Text>{selectedCard.name}</Text>
-                    <CardVariantIndicator cardId={selectedCard.id} />
-                </HStack>
-            </ModalHeader>
-            <ModalCloseButton />
-            <ModalBody>
-              <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
-                <Box flexShrink={0}>
-                  <Image borderRadius="lg" width={{ base: '100%', md: '250px' }} src={selectedCard.img_url} alt={selectedCard.name} fallbackSrc='https://via.placeholder.com/250x350?text=No+Image' />
-                </Box>
-                <VStack align="stretch" spacing={3} flex={1}>
-                  <Wrap spacing={2}>
-                    <WrapItem><Tag size="lg" {...getTagStyles(selectedCard.color)}>{selectedCard.card_code}</Tag></WrapItem>
-                    <WrapItem><Tag size="lg" colorScheme="gray">{selectedCard.category}</Tag></WrapItem>
-                    <WrapItem><Tag size="lg" colorScheme="gray">{selectedCard.rarity}</Tag></WrapItem>
-                  </Wrap>
-                  <HStack spacing={6} divider={<StackDivider />} pt={1}>
-                    {selectedCard.cost !== null && <Stat><StatLabel>Cost</StatLabel><StatNumber>{selectedCard.cost}</StatNumber></Stat>}
-                    {selectedCard.power !== null && <Stat><StatLabel>Power</StatLabel><StatNumber>{selectedCard.power}</StatNumber></Stat>}
-                    {selectedCard.counter !== null && <Stat><StatLabel>Counter</StatLabel><StatNumber>{selectedCard.counter}</StatNumber></Stat>}
-                  </HStack>
-                  <VStack spacing={4} align="stretch" pt={2}>
-                    <StyledTextRenderer text={selectedCard.effect} />
-                    <StyledTextRenderer text={selectedCard.trigger_effect} />
-                  </VStack>
-                   <Box pt={2}>
-                    <Heading size="sm" mb={1}>Appears In</Heading>
-                    <Wrap>
-                      {selectedCard.packs?.split(', ').map(pack => (
-                        <WrapItem key={pack}><Tag size="sm">{pack}</Tag></WrapItem>
-                      ))}
-                    </Wrap>
-                  </Box>
-                  <HStack justify="flex-start" pt={3} borderTopWidth="1px" borderColor="gray.200" spacing={10}>
-                      <VStack spacing={0}><Text fontSize="sm" fontWeight="bold" color="gray.500">Owned</Text><CountControl cardId={selectedCard.id} type="owned" count={selectedCard.owned_count} onUpdate={handleCountUpdate} /></VStack>
-                      {showProxies && (<VStack spacing={0}><Text fontSize="sm" fontWeight="bold" color="gray.500">Proxy</Text><CountControl cardId={selectedCard.id} type="proxy" count={selectedCard.proxy_count} onUpdate={handleCountUpdate} /></VStack>)}
-                  </HStack>
-                </VStack>
-              </Flex>
-            </ModalBody>
-            <ModalFooter>
-              <Button colorScheme="blue" onClick={onDetailClose}>Close</Button>
-            </ModalFooter>
-          </ModalContent>
-        </Modal>
-      )}
+      {/* Modals */}
+      <CardDetailModal
+        isOpen={isDetailOpen}
+        onClose={onDetailClose}
+        selectedCard={selectedCard}
+        showProxies={showProxies}
+        onCountUpdate={handleCountUpdate}
+      />
 
-      <Modal isOpen={isHelpOpen} onClose={onHelpClose} isCentered>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Advanced Search Syntax</ModalHeader>
-          <ModalBody>
-            <VStack spacing={4} align="stretch">
-              <Text>You can combine general text with special keywords to narrow down your search.</Text>
-              <Box>
-                <Heading size="sm">Keywords</Heading>
-                <Text>Use <Code>id:</Code> to search for cards by their ID or code prefix.</Text>
-                <Text>Use <Code>pack:</Code> to filter for cards within a specific pack.</Text>
-                <Text>Use <Code>color:</Code> to filter for cards of a specific color.</Text>
-                <Text>Use <Code>exact:</Code> to search for exact text matches in card names and effects.</Text>
-              </Box>
-              <Box>
-                <Heading size="sm">Examples</Heading>
-                <VStack align="stretch" mt={2}>
-                   <Text><Code>roronoa zoro</Code> - Fuzzy search for card text.</Text>
-                   <Text><Code>id:ST01-001</Code> - Finds cards with an ID starting with "ST01-001".</Text>
-                   <Text><Code>pack:OP01</Code> - Shows only cards from packs starting with "OP01".</Text>
-                   <Text><Code>color:red</Code> - Shows only red cards.</Text>
-                   <Text><Code>exact:"rush"</Code> - Finds cards containing exactly "rush" in name or effects.</Text>
-                   <Text><Code>zoro color:red id:ST01- pack:ST01</Code> - A combined search.</Text>
-                </VStack>
-              </Box>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="blue" onClick={onHelpClose}>Got it!</Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      <SearchHelpModal
+        isOpen={isHelpOpen}
+        onClose={onHelpClose}
+      />
     </Box>
   );
 }
