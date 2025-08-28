@@ -12,6 +12,7 @@ import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
 import CardDetailModal from './CardDetailModal';
 import SearchHelpModal from './SearchHelpModal';
+import StyledTextRenderer from './StyledTextRenderer';
 import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
 
 const colorMap = {
@@ -213,7 +214,7 @@ export default function CardSearch() {
           bottom="0"
           left="0"
           right="0"
-          bg="rgba(0,0,0,0.5)"
+          bg="rgba(0,0,0,0.7)"
           color="white"
           pt={2}
           pb={2}
@@ -260,6 +261,16 @@ export default function CardSearch() {
     const getCostLabel = (card) => {
       return card.category === 'LEADER' ? 'Life' : 'Cost';
     };
+
+    // Helper to clean effect/trigger text per requirements
+    const cleanEffectText = (text) => {
+      if (!text || text.trim() === '' || text.trim() === '-') return '';
+      // Remove all HTML tags (e.g., <br>, <b>, etc.)
+      return text.replace(/<[^>]*>/g, '').trim();
+    };
+
+    const effectDisplay = cleanEffectText(card.effect);
+    const triggerDisplay = cleanEffectText(card.trigger_effect);
 
     return (
       <Box
@@ -314,8 +325,13 @@ export default function CardSearch() {
               {card.name}
             </Text>
 
+            {/* Effect text: show empty line if effect is empty or "-", otherwise cleaned text */}
             <Text fontSize="sm" color="gray.600" noOfLines={2}>
-              {card.effect || 'No effect text available.'}
+              {effectDisplay === '' ? '\u00A0' : effectDisplay}
+            </Text>
+            {/* Trigger line, only render if trigger exists (always show line, even if empty, for alignment) */}
+            <Text fontSize="sm" color="gray.600" noOfLines={1}>
+              {triggerDisplay === '' ? '\u00A0' : triggerDisplay}
             </Text>
 
             {keywords.length > 0 && (
