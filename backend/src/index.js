@@ -302,6 +302,7 @@ app.post('/api/collection/update', isAuthenticated, async (req, res) => {
     }
 });
 
+// Fixed search endpoint in backend/src/index.js
 app.get('/api/cards/search', isAuthenticated, async (req, res) => {
   const { keyword, ownedOnly, showProxies } = req.query;
   const userId = req.user.id;
@@ -333,8 +334,10 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
 
     fuzzyText = sanitizedKeyword.replace(regex, '').trim();
 
-    // If all search fields are empty, reject the search
-    if (!fuzzyText && !criteria.id && !criteria.pack && !criteria.color && !criteria.exact) {
+    const hasValidCriteria = (fuzzyText && fuzzyText.length > 0) ||
+                             criteria.id || criteria.pack || criteria.color || criteria.exact;
+
+    if (!hasValidCriteria) {
       return res.status(400).json({ error: 'Search keyword cannot be empty' });
     }
 
@@ -432,32 +435,37 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
     `;
 
     const orderByClauses = [];
+
+    // FIXED: More robust parameter finding for ORDER BY clauses
     if (criteria.color) {
-        const colorParamIndex = params.findIndex(p => p === `%${criteria.color}%`) + 1;
-        if (colorParamIndex > 0) {
-            orderByClauses.push(`CASE WHEN c.color ILIKE $${colorParamIndex} THEN 0 ELSE 1 END`);
+        const colorParamValue = `%${criteria.color}%`;
+        const colorParamIndex = params.indexOf(colorParamValue);
+        if (colorParamIndex !== -1) {
+            orderByClauses.push(`CASE WHEN c.color ILIKE $${colorParamIndex + 1} THEN 0 ELSE 1 END`);
         }
     }
     if (criteria.id) {
-        const idParamIndex = params.findIndex(p => p === `${criteria.id}%`) + 1;
-        if (idParamIndex > 0) {
-            orderByClauses.push(`CASE WHEN c.id ILIKE $${idParamIndex} OR c.card_code ILIKE $${idParamIndex} THEN 0 ELSE 1 END`);
+        const idParamValue = `${criteria.id}%`;
+        const idParamIndex = params.indexOf(idParamValue);
+        if (idParamIndex !== -1) {
+            orderByClauses.push(`CASE WHEN c.id ILIKE $${idParamIndex + 1} OR c.card_code ILIKE $${idParamIndex + 1} THEN 0 ELSE 1 END`);
         }
     }
     if (criteria.exact) {
-        const exactParamIndex = params.findIndex(p => p === `%${criteria.exact}%`) + 1;
-        if (exactParamIndex > 0) {
-            orderByClauses.push(`CASE WHEN c.name ILIKE $${exactParamIndex} THEN 0 ELSE 1 END`);
+        const exactParamValue = `%${criteria.exact}%`;
+        const exactParamIndex = params.indexOf(exactParamValue);
+        if (exactParamIndex !== -1) {
+            orderByClauses.push(`CASE WHEN c.name ILIKE $${exactParamIndex + 1} THEN 0 ELSE 1 END`);
         }
     }
     if (fuzzyText && fuzzyText.length > 0) {
         // Find the fuzzyText parameter index for ordering
-        const fuzzyParamIndex = params.findIndex(p => p === fuzzyText) + 1;
-        if (fuzzyParamIndex > 0) {
+        const fuzzyParamIndex = params.indexOf(fuzzyText);
+        if (fuzzyParamIndex !== -1) {
             orderByClauses.push(`GREATEST(
-              similarity(c.name, $${fuzzyParamIndex}),
-              similarity(c.id, $${fuzzyParamIndex}),
-              similarity(c.card_code, $${fuzzyParamIndex})
+              similarity(c.name, $${fuzzyParamIndex + 1}),
+              similarity(c.id, $${fuzzyParamIndex + 1}),
+              similarity(c.card_code, $${fuzzyParamIndex + 1})
             ) DESC`);
         }
     }
@@ -478,6 +486,7 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
     res.status(500).json({ error: 'Internal server error', message: err.message });
   }
 });
+
 
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`);
