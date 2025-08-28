@@ -56,21 +56,60 @@ const StyledTextRenderer = ({ text }) => {
   if (!text || text.trim() === '' || text.trim() === '-') {
     return <Text as="span">&nbsp;</Text>;
   }
+
   const parts = text.split(/(\[.*?\])/g);
-  return parts.map((part, index) => {
-    if (part.match(/^\[.*\]$/)) {
-      const keyword = part.slice(1, -1).toLowerCase();
-      const style = keywordStyles[keyword];
-      if (style) {
-        return <Tag key={index} {...style} mr={1}>{part.slice(1, -1)}</Tag>;
-      }
-      const patternMatch = keywordPatterns.find(p => p.regex.test(part.slice(1, -1)));
-      if (patternMatch) {
-        return <Tag key={index} {...patternMatch.style} mr={1}>{part.slice(1, -1)}</Tag>;
-      }
-    }
-    return <Text key={index} as="span">{part}</Text>;
-  });
+
+  return (
+    <Box display="flex" flexWrap="wrap" alignItems="center" gap={1}>
+      {parts.map((part, index) => {
+        if (part.match(/^\[.*\]$/)) {
+          const keyword = part.slice(1, -1).toLowerCase();
+          const style = keywordStyles[keyword];
+          if (style) {
+            return (
+              <Tag
+                key={index}
+                {...style}
+                display="inline-flex"
+                flexShrink={0}
+                whiteSpace="nowrap"
+              >
+                {part.slice(1, -1)}
+              </Tag>
+            );
+          }
+          const patternMatch = keywordPatterns.find(p => p.regex.test(part.slice(1, -1)));
+          if (patternMatch) {
+            return (
+              <Tag
+                key={index}
+                {...patternMatch.style}
+                display="inline-flex"
+                flexShrink={0}
+                whiteSpace="nowrap"
+              >
+                {part.slice(1, -1)}
+              </Tag>
+            );
+          }
+        }
+        // Only render non-empty text parts
+        if (part.trim()) {
+          return (
+            <Text
+              key={index}
+              as="span"
+              display="inline"
+              whiteSpace="pre-wrap"
+            >
+              {part}
+            </Text>
+          );
+        }
+        return null;
+      })}
+    </Box>
+  );
 };
 
 const CardDetailModal = ({
