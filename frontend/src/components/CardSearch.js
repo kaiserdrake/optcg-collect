@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import {
   Box, Text, VStack, HStack, Tag, Spinner, Wrap, WrapItem, Image,
   Flex, useDisclosure, Button, IconButton, FormControl, FormLabel, Switch,
@@ -174,9 +174,18 @@ export default function CardSearch() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm, showOnlyOwned, showProxies, apiUrl]);
 
-  // Thumbnail Card Component
+  // Thumbnail Card Component (updated as per request)
   const ThumbnailCard = ({ card }) => {
-    const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
+    const nameMaxLength = 20;
+    let displayName = card.name;
+    if (displayName && displayName.length > nameMaxLength) {
+      displayName = displayName.slice(0, nameMaxLength - 1) + '…';
+    }
+
+    let countDisplay = `${card.owned_count}`;
+    if (showProxies) {
+      countDisplay += ` : ${card.proxy_count}`;
+    }
 
     return (
       <Box
@@ -205,40 +214,40 @@ export default function CardSearch() {
           bottom="0"
           left="0"
           right="0"
-          bg="rgba(0,0,0,0.8)"
+          px={2}
+          py={1}
+          bg="rgba(0,0,0,0.58)"
           color="white"
-          p={2}
+          fontSize="xs"
+          lineHeight="1.3"
+          borderBottomRadius="md"
         >
-          <Text fontSize="xs" fontWeight="bold" noOfLines={1} mb={1}>
-            {card.name}
+          {/* First line: Card name (truncated with ellipsis if too long) */}
+          <Text
+            fontWeight="bold"
+            fontSize="xs"
+            noOfLines={1}
+            title={card.name}
+            mb="1px"
+            textShadow="0 1px 2px rgba(0,0,0,0.7)"
+          >
+            {displayName}
           </Text>
-          <Flex justify="space-between" align="center" fontSize="xs">
-            <VStack spacing={0}>
-              <Text fontSize="xs" color="gray.400" fontWeight="medium">
-                Owned
-              </Text>
-              <Text fontSize="sm" fontWeight="bold" color="blue.600">
-                {card.owned_count || 0}
-              </Text>
-            </VStack>
-
-            {showProxies && (
-              <VStack spacing={0}>
-                <Text fontSize="xs" color="gray.400" fontWeight="medium">
-                  Proxy
-                </Text>
-                <Text fontSize="sm" fontWeight="bold" color="gray.500">
-                  {card.proxy_count || 0}
-                </Text>
-              </VStack>
-            )}
-          </Flex>
+          {/* Second line: Card code and counts */}
+          <HStack spacing={2} fontSize="xs" justify="space-between">
+            <Tag size="xs" {...getTagStyles(card.color)} fontWeight="semibold" px={2}>
+              {card.card_code}
+            </Tag>
+            <Text fontSize="xs" fontWeight="bold" color="white" letterSpacing="wide" ml={1}>
+              {countDisplay}
+            </Text>
+          </HStack>
         </Box>
       </Box>
     );
   };
 
-  // List Card Component
+  // List Card Component (unchanged)
   const ListCard = ({ card }) => {
     const keywords = extractStyledKeywords(card.effect, card.trigger_effect);
 
@@ -467,15 +476,22 @@ export default function CardSearch() {
           ))}
         </VStack>
       ) : (
-        <Grid
-          templateColumns={`repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))`}
-          gap={6}
-          justifyItems="center"
-        >
-          {results.map((card) => (
-            <ThumbnailCard key={card.id} card={card} />
-          ))}
-        </Grid>
+        <Suspense fallback={
+          <Box w="100%" py={8} textAlign="center">
+            <Spinner size="xl" color="blue.500" />
+            <Text mt={2}>Loading cards...</Text>
+          </Box>
+        }>
+          <Grid
+            templateColumns={`repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))`}
+            gap={6}
+            justifyItems="center"
+          >
+            {results.map((card) => (
+              <ThumbnailCard key={card.id} card={card} />
+            ))}
+          </Grid>
+        </Suspense>
       )}
 
       {/* Modals */}
@@ -494,3 +510,4 @@ export default function CardSearch() {
     </Box>
   );
 }
+
