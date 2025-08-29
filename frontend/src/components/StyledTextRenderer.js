@@ -2,13 +2,27 @@ import React from 'react';
 import { Box, Text, Tag } from '@chakra-ui/react';
 import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
 
+// Decode HTML entities like &lt; and &gt;
+function decodeHTMLEntities(str) {
+  if (!str) return str;
+  return str
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 const StyledTextRenderer = ({ text }) => {
   if (!text || text.trim() === '' || text.trim() === '-') {
     return <Text as="span">&nbsp;</Text>;
   }
 
+  // Decode HTML entities before processing
+  const decodedText = decodeHTMLEntities(text);
+
   // First, handle HTML tags like <br> by splitting the text
-  const htmlParts = text.split(/(<br\s*\/?>)/gi);
+  const htmlParts = decodedText.split(/(<br\s*\/?>)/gi);
 
   return (
     <Box>

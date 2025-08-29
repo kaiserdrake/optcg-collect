@@ -307,8 +307,8 @@ export default function CardSearch() {
           {/* Card Image */}
           <Box flexShrink={0} mr={4}>
             <CardImage
-              width="120px"
-              height="168px"
+              width="80px"
+              height="112px"
               src={card.img_url || ''}
               alt={card.name || 'Card'}
               fallbackSrc="/placeholder.png"
@@ -319,60 +319,41 @@ export default function CardSearch() {
           </Box>
 
           {/* Card Info */}
-          <VStack align="stretch" flex={1} spacing={2}>
-            <HStack justify="space-between" align="flex-start">
-              <VStack align="stretch" spacing={1} flex={1}>
-                <HStack justify="space-between" align="center">
-                  <Text fontSize="lg" fontWeight="bold" color="gray.800">
-                    {card.name || 'Unknown Card'}
-                  </Text>
-                  <CardVariantIndicator cardId={card.id} />
-                </HStack>
-
-                <HStack spacing={4}>
-                  <Tag {...getTagStyles(card.color)} size="sm" fontWeight="bold">
-                    {card.card_code || 'N/A'}
-                  </Tag>
-                  <Tag variant="outline" size="sm">
-                    {toTitleCase(card.category || 'Unknown')}
-                  </Tag>
-                  <Tag variant="outline" size="sm">
-                    {getCostLabel(card)}: {renderCostValue(card)}
-                  </Tag>
-                  {card.power && (
-                    <Tag variant="outline" size="sm">
-                      Power: {card.power}
-                    </Tag>
-                  )}
-                </HStack>
-
-                {card.types && card.types.length > 0 && (
-                  <Wrap spacing={1}>
-                    {card.types.map((type, index) => (
-                      <WrapItem key={index}>
-                        <Tag size="xs" variant="subtle" colorScheme="purple">
-                          {type}
-                        </Tag>
-                      </WrapItem>
-                    ))}
-                  </Wrap>
-                )}
-
-                {card.attributes && card.attributes.length > 0 && (
-                  <Wrap spacing={1}>
-                    {card.attributes.map((attr, index) => (
-                      <WrapItem key={index}>
-                        <Tag size="xs" variant="subtle" colorScheme="cyan">
-                          {attr}
-                        </Tag>
-                      </WrapItem>
-                    ))}
-                  </Wrap>
-                )}
-              </VStack>
+          <VStack align="start" spacing={1} flex={1} h="100%" justify="center" minH="90px">
+            <HStack wrap="wrap" spacing={1}>
+              <Tag size="sm" {...getTagStyles(card.color)}>
+                {card.card_code}
+              </Tag>
+              <Tag size="sm" colorScheme="gray" variant="outline">
+                {card.category}
+              </Tag>
+              {card.cost !== null && (
+                <Tag size="sm" colorScheme="blue" variant="outline">
+                  {getCostLabel(card)}: {card.cost}
+                </Tag>
+              )}
+              {card.power && (
+                <Tag size="sm" colorScheme="red" variant="outline">
+                  Power: {card.power.toLocaleString()}
+                </Tag>
+              )}
+              {card.counter && (
+                <Tag size="sm" colorScheme="yellow" variant="outline">
+                  Counter: +{card.counter}
+                </Tag>
+              )}
+            </HStack>
+            <HStack>
+              <Text fontSize="md" fontWeight="bold" color="gray.800" noOfLines={1}>
+                {card.name}
+              </Text>
+              <Tag size="sm" colorScheme="gray" variant="outline">
+                {card.rarity}
+              </Tag>
+              <CardVariantIndicator cardId={card.id} />
             </HStack>
 
-            <Text fontSize="xs" color="gray.600" noOfLines={2}>
+            <Text fontSize="xs" color="gray.600" noOfLines={1}>
               {effectDisplay === '' ? '\u00A0' : effectDisplay}
             </Text>
             <Text fontSize="xs" color="gray.600" noOfLines={1}>
