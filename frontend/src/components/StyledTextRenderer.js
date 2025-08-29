@@ -1,17 +1,7 @@
 import React from 'react';
 import { Box, Text, Tag } from '@chakra-ui/react';
 import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
-
-// Decode HTML entities like &lt; and &gt;
-function decodeHTMLEntities(str) {
-  if (!str) return str;
-  return str
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
+import { decodeHTMLEntities } from '@/utils/cardStyles';
 
 const StyledTextRenderer = ({ text }) => {
   if (!text || text.trim() === '' || text.trim() === '-') {

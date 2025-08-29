@@ -16,35 +16,8 @@ import StyledTextRenderer from './StyledTextRenderer';
 import CardImage from './CardImage';
 import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
 import { getSafeImageUrl } from '@/utils/imageUtils';
-
-const colorMap = {
-  Red: '#E53E3E',
-  Green: '#48BB78',
-  Blue: '#4299E1',
-  Purple: '#9F7AEA',
-  Black: '#1A202C',
-  Yellow: '#D69E2E',
-};
-
-const toTitleCase = (str) => {
-  if (!str) return '';
-  return str
-    .toLowerCase()
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-};
-
-const getTagStyles = (colorString) => {
-  if (!colorString) return { variant: 'subtle' };
-  const colors = colorString.split('/').map(c => colorMap[c.trim()]).filter(Boolean);
-  if (colors.length === 0) return { variant: 'subtle' };
-  if (colors.length === 1) {
-    return { bg: colors[0], color: 'white', variant: 'solid' };
-  }
-  const gradient = `linear(to-r, ${colors.join(', ')})`;
-  return { bgGradient: gradient, color: 'white', variant: 'solid' };
-};
+import { colorMap, getTagStyles, toTitleCase, decodeHTMLEntities, stripHtml
+} from '@/utils/cardStyles';
 
 // Enhanced function to extract keywords with their styling
 const extractStyledKeywords = (effect, triggerEffect) => {
@@ -83,17 +56,6 @@ const subtleTextStyle = (color) => ({
   fontSize: 'sm',
   color: color
 });
-
-// Helper to decode HTML entities (copied from StyledTextRenderer.js)
-const decodeHTMLEntities = (str) => {
-  if (!str) return str;
-  return str
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-};
 
 export default function CardSearch() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -296,15 +258,6 @@ export default function CardSearch() {
       return card.cost || 0;
     };
 
-    // Remove all HTML tags and decode entities for effect and trigger text
-    const stripHtml = (str) => {
-      if (!str) return '';
-      // Remove tags
-      const noTags = str.replace(/<[^>]*>/g, ' ').trim();
-      // Decode entities
-      return decodeHTMLEntities(noTags);
-    };
-
     const effectDisplay = stripHtml(card.effect || '');
     const triggerDisplay = stripHtml(card.trigger_effect || '');
 
@@ -495,7 +448,7 @@ export default function CardSearch() {
 
           <FormControl display="flex" alignItems="center">
             <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
-              Show Proxies
+              Proxies
             </FormLabel>
             <Switch
               id="show-proxies"

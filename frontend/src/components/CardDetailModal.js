@@ -8,27 +8,7 @@ import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
 import StyledTextRenderer from './StyledTextRenderer';
 import CardImage from './CardImage';
-
-// Helper functions
-const colorMap = {
-  Red: '#E53E3E',
-  Green: '#48BB78',
-  Blue: '#4299E1',
-  Purple: '#9F7AEA',
-  Black: '#1A202C',
-  Yellow: '#D69E2E',
-};
-
-const getTagStyles = (colorString) => {
-  if (!colorString) return { variant: 'subtle' };
-  const colors = colorString.split('/').map(c => colorMap[c.trim()]).filter(Boolean);
-  if (colors.length === 0) return { variant: 'subtle' };
-  if (colors.length === 1) {
-    return { bg: colors[0], color: 'white', variant: 'solid' };
-  }
-  const gradient = `linear(to-r, ${colors.join(', ')})`;
-  return { bgGradient: gradient, color: 'white', variant: 'solid' };
-};
+import { getTagStyles } from '@/utils/cardStyles';
 
 const CardDetailModal = ({
   isOpen,
