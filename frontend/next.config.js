@@ -18,9 +18,6 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   },
 
-  // Disable telemetry
-  telemetry: false,
-
   // Experimental features for better Suspense handling
   experimental: {
     missingSuspenseWithCSRBailout: false,

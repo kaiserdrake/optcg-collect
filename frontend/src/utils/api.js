@@ -1,19 +1,4 @@
-// utils/api.js
-
-// Get API URL with fallbacks for different environments
-const getAPIBaseURL = () => {
-  // Browser environment - always use localhost
-  if (typeof window !== 'undefined') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  }
-
-  // Server environment - can use container names
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-};
-
-const API_BASE_URL = getAPIBaseURL();
-
-// Custom error class for API errors
+// Custom API Error class for better error handling
 export class APIError extends Error {
   constructor(message, status, code) {
     super(message);
@@ -23,61 +8,76 @@ export class APIError extends Error {
   }
 }
 
-// Sleep utility for retry delays
+// Retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelay: 1000,
+  maxDelay: 5000,
+  backoffFactor: 2,
+};
+
+// Sleep utility for retries
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Retry function with exponential backoff
-const retry = async (fn, retries = 3, baseDelay = 1000) => {
-  for (let i = 0; i < retries; i++) {
+// Retry wrapper with exponential backoff
+const retry = async (operation, customMaxRetries = RETRY_CONFIG.maxRetries) => {
+  let lastError;
+
+  for (let attempt = 0; attempt <= customMaxRetries; attempt++) {
     try {
-      return await fn();
+      return await operation();
     } catch (error) {
-      // Don't retry on client errors (4xx) except 408 (timeout) and 429 (rate limit)
-      if (error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) {
+      lastError = error;
+
+      // Don't retry on client errors (4xx) except for 408 (timeout)
+      if (error instanceof APIError && error.status >= 400 && error.status < 500 && error.status !== 408) {
         throw error;
       }
 
       // Don't retry on the last attempt
-      if (i === retries - 1) {
-        throw error;
+      if (attempt === customMaxRetries) {
+        break;
       }
 
-      // Exponential backoff: baseDelay * 2^i + random jitter
-      const delay = baseDelay * Math.pow(2, i) + Math.random() * 1000;
-      console.warn(`API request failed (attempt ${i + 1}/${retries}), retrying in ${Math.round(delay)}ms...`);
+      // Calculate delay with exponential backoff
+      const delay = Math.min(
+        RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffFactor, attempt),
+        RETRY_CONFIG.maxDelay
+      );
+
+      console.log(`API call failed (attempt ${attempt + 1}/${customMaxRetries + 1}), retrying in ${delay}ms...`);
       await sleep(delay);
     }
   }
+
+  throw lastError;
 };
 
-// Enhanced fetch function with better error handling
+// Core fetch function with error handling
 const apiFetch = async (endpoint, options = {}) => {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
-
-  console.log(`[API] Making request to: ${url}`);
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const url = `${baseUrl}${endpoint}`;
 
   const defaultOptions = {
-    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
     },
+    credentials: 'include',
+    ...options,
   };
 
-  const config = { ...defaultOptions, ...options };
+  // Add timeout (30 seconds)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
     const response = await fetch(url, {
-      ...config,
-      signal: controller.signal
+      ...defaultOptions,
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
-
-    console.log(`[API] Response status: ${response.status} for ${url}`);
 
     // Handle different response types
     const contentType = response.headers.get('content-type');
@@ -90,22 +90,28 @@ const apiFetch = async (endpoint, options = {}) => {
     }
 
     if (!response.ok) {
-      const errorMessage = data?.message || data || `HTTP ${response.status}: ${response.statusText}`;
-      const errorCode = data?.code || 'UNKNOWN_ERROR';
-      throw new APIError(errorMessage, response.status, errorCode);
+      if (response.status === 401) {
+        throw new APIError('Authentication required', response.status, 'NO_TOKEN');
+      } else if (response.status === 403) {
+        throw new APIError('Token expired', response.status, 'TOKEN_EXPIRED');
+      } else {
+        throw new APIError(data.message || data || `HTTP ${response.status}`, response.status, 'HTTP_ERROR');
+      }
     }
 
     return data;
-  } catch (error) {
-    console.error(`[API] Request failed for ${url}:`, error);
 
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    // Re-throw APIError as-is
     if (error instanceof APIError) {
       throw error;
     }
 
     // Handle network errors
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new APIError('Network error: Unable to connect to server. Make sure the backend is running.', 0, 'NETWORK_ERROR');
+      throw new APIError('Unable to connect to server. Make sure the backend is running.', 0, 'NETWORK_ERROR');
     }
 
     // Handle timeout errors
@@ -183,6 +189,7 @@ export const api = {
     me: () => api.get('/api/users/me'),
     updatePassword: (passwordData) => api.put('/api/users/change-password', passwordData),
     deleteAccount: () => api.delete('/api/users/me'),
+    deleteCollection: () => api.delete('/api/users/me/collection'), // New method
   }
 };
 
@@ -201,34 +208,9 @@ export const getErrorMessage = (error) => {
       return 'Please log in to continue.';
     case 'TOKEN_EXPIRED':
       return 'Your session has expired. Please log in again.';
-    case 'INSUFFICIENT_PRIVILEGES':
-      return 'You do not have permission to perform this action.';
-    case 'RATE_LIMITED':
-      return 'Too many requests. Please wait a moment before trying again.';
+    case 'HTTP_ERROR':
+      return 'Server returned an error. Please try again.';
     default:
-      return error.message || 'An error occurred';
+      return error.message || 'An unexpected error occurred';
   }
-};
-
-// Hook for handling API errors consistently
-export const useErrorHandler = (toast) => {
-  return (error) => {
-    const message = getErrorMessage(error);
-
-    console.error('[API Error]', error);
-
-    toast({
-      title: 'Error',
-      description: message,
-      status: 'error',
-      duration: error.status === 401 ? 3000 : 5000,
-      isClosable: true,
-    });
-
-    // Redirect to login if unauthorized
-    if (error.status === 401) {
-      // You might want to use router here
-      window.location.href = '/login';
-    }
-  };
 };

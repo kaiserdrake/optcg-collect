@@ -24,28 +24,51 @@ import {
   ModalCloseButton,
   useDisclosure,
   Link as ChakraLink,
+  Badge,
 } from '@chakra-ui/react';
 import { HamburgerIcon } from '@chakra-ui/icons';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-// Updated NavTab component for tab-based navigation instead of routing
-const NavTab = ({ isActive, onClick, children }) => {
+// Modern Tab Component
+const ModernTab = ({ isActive, onClick, children, badge }) => {
   return (
     <Button
       variant="ghost"
-      px={3}
+      px={4}
       py={2}
-      rounded={'md'}
+      h="auto"
+      minH="40px"
+      position="relative"
+      rounded="lg"
+      transition="all 0.2s"
       _hover={{
-        bg: 'gray.200',
+        bg: isActive ? 'blue.100' : 'gray.100',
+        transform: 'translateY(-1px)',
       }}
-      color={isActive ? 'gray.800' : 'gray.400'}
-      fontWeight="medium"
+      _active={{
+        transform: 'translateY(0px)',
+      }}
+      color={isActive ? 'blue.600' : 'gray.600'}
+      fontWeight={isActive ? "semibold" : "medium"}
       onClick={onClick}
-      bg={isActive ? 'gray.100' : 'transparent'}
+      bg={isActive ? 'blue.50' : 'transparent'}
+      borderBottom={isActive ? '2px solid' : '2px solid transparent'}
+      borderBottomColor={isActive ? 'blue.500' : 'transparent'}
+      borderRadius="lg lg 0 0"
     >
-      {children}
+      <HStack spacing={2}>
+        <Text>{children}</Text>
+        {badge && (
+          <Badge
+            colorScheme={isActive ? 'blue' : 'gray'}
+            size="sm"
+            variant={isActive ? 'solid' : 'subtle'}
+          >
+            {badge}
+          </Badge>
+        )}
+      </HStack>
     </Button>
   );
 };
@@ -74,7 +97,7 @@ const NavLink = ({ href, children }) => {
   );
 };
 
-export default function Navbar({ activeTab = 0, onTabChange }) {
+export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
   const { user, loading, logout } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncLogs, setSyncLogs] = useState([]);
@@ -115,59 +138,146 @@ export default function Navbar({ activeTab = 0, onTabChange }) {
       });
       eventSource.close();
       setIsSyncing(false);
-    }
+    };
   };
 
   return (
-    <Box bg="gray.100" px={4} shadow="sm">
-      <Flex h={16} alignItems="center" justifyContent="space-between">
-        <HStack spacing={8} alignItems="center">
-          <Text fontSize="xl" fontWeight="bold">OPTCG Manager</Text>
-        </HStack>
+    <>
+      {/* Main Navbar */}
+      <Box
+        bg="white"
+        borderBottom="1px"
+        borderColor="gray.200"
+        shadow="sm"
+        position="sticky"
+        top="0"
+        zIndex="1000"
+      >
+        <Flex
+          h="60px"
+          alignItems="center"
+          justifyContent="space-between"
+          px={4}
+          maxW="container.xl"
+          mx="auto"
+        >
+          {/* Left side - Logo and Tabs */}
+          <HStack spacing={6} alignItems="center" flex="1">
+            <Text
+              fontSize="lg"
+              fontWeight="bold"
+              color="gray.800"
+              letterSpacing="tight"
+              flexShrink={0}
+            >
+              JuanPiece
+            </Text>
 
-        <Flex alignItems="center">
-          {loading ? (
-            <Spinner />
-          ) : user ? (
-            <Menu>
-              <MenuButton
-                as={IconButton}
-                aria-label="Options"
-                icon={<HamburgerIcon />}
-                variant="outline"
-              />
-              <MenuList>
-                <Box px={4} py={2}>
-                  <Text fontWeight="bold">{user.name}</Text>
-                  <Text fontSize="sm" color="gray.500">{user.email}</Text>
-                </Box>
-                <MenuDivider />
-                <MenuItem as={Link} href="/settings">
-                  Settings
-                </MenuItem>
+            {/* Navigation Tabs - Hidden on small screens */}
+            <HStack spacing={2} display={{ base: 'none', md: 'flex' }}>
+              {tabs.map((tab, index) => (
+                <ModernTab
+                  key={index}
+                  isActive={activeTab === index}
+                  onClick={() => onTabChange?.(index)}
+                  badge={tab.badge}
+                >
+                  {tab.label}
+                </ModernTab>
+              ))}
+            </HStack>
+          </HStack>
 
-                {user.role === 'Admin' && (
-                  <>
-                    <MenuItem as={Link} href="/admin/users">
-                      Manage Users
-                    </MenuItem>
-                    <MenuItem onClick={handleSync} isDisabled={isSyncing}>
-                      Sync CardList
-                    </MenuItem>
-                  </>
-                )}
+          {/* Right side - User Menu */}
+          <Flex alignItems="center">
+            {loading ? (
+              <Spinner size="sm" color="gray.500" />
+            ) : user ? (
+              <Menu>
+                <MenuButton
+                  as={IconButton}
+                  aria-label="User menu"
+                  icon={<HamburgerIcon />}
+                  variant="ghost"
+                  size="sm"
+                  color="gray.600"
+                  _hover={{ bg: 'gray.100' }}
+                  _active={{ bg: 'gray.200' }}
+                />
+                <MenuList shadow="lg" border="1px" borderColor="gray.200">
+                  {/* User Info Header */}
+                  <Box px={4} py={3} bg="gray.50">
+                    <Text fontWeight="semibold" fontSize="sm" color="gray.800">
+                      {user.name}
+                    </Text>
+                    <Text fontSize="xs" color="gray.500" mt={1}>
+                      {user.email}
+                    </Text>
+                  </Box>
 
-                <MenuDivider />
-                <MenuItem onClick={logout}>Logout</MenuItem>
-              </MenuList>
-            </Menu>
-          ) : (
-            <Link href="/login" passHref>
-              <Button colorScheme="blue" size="sm">Login</Button>
-            </Link>
-          )}
+                  <MenuDivider m={0} />
+
+                  {/* Mobile Navigation - Only show on small screens */}
+                  <Box display={{ base: 'block', md: 'none' }}>
+                    {tabs.map((tab, index) => (
+                      <MenuItem
+                        key={index}
+                        onClick={() => onTabChange?.(index)}
+                        bg={activeTab === index ? 'blue.50' : 'transparent'}
+                        color={activeTab === index ? 'blue.600' : 'gray.700'}
+                        fontWeight={activeTab === index ? 'semibold' : 'normal'}
+                      >
+                        <HStack spacing={2}>
+                          <Text>{tab.label}</Text>
+                          {tab.badge && (
+                            <Badge
+                              colorScheme={activeTab === index ? 'blue' : 'gray'}
+                              size="sm"
+                            >
+                              {tab.badge}
+                            </Badge>
+                          )}
+                        </HStack>
+                      </MenuItem>
+                    ))}
+                    <MenuDivider />
+                  </Box>
+
+                  {/* Settings and Admin */}
+                  <MenuItem as={Link} href="/settings">
+                    Settings
+                  </MenuItem>
+
+                  {user.role === 'Admin' && (
+                    <>
+                      <MenuItem as={Link} href="/admin/users">
+                        Manage Users
+                      </MenuItem>
+                      <MenuItem onClick={handleSync} isDisabled={isSyncing}>
+                        <HStack spacing={2}>
+                          <Text>Sync CardList</Text>
+                          {isSyncing && <Spinner size="xs" />}
+                        </HStack>
+                      </MenuItem>
+                    </>
+                  )}
+
+                  <MenuDivider />
+                  <MenuItem onClick={logout} color="red.600">
+                    Logout
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+            ) : (
+              <Link href="/login" passHref>
+                <Button colorScheme="blue" size="sm">
+                  Login
+                </Button>
+              </Link>
+            )}
+          </Flex>
         </Flex>
-      </Flex>
+      </Box>
 
       {/* Sync Log Modal */}
       <Modal isOpen={isOpen} onClose={onClose} size="2xl" scrollBehavior="inside">
@@ -192,6 +302,6 @@ export default function Navbar({ activeTab = 0, onTabChange }) {
           </ModalBody>
         </ModalContent>
       </Modal>
-    </Box>
+    </>
   );
 }

@@ -163,6 +163,41 @@ app.delete('/api/users/me', isAuthenticated, async (req, res) => {
     }
 });
 
+app.delete('/api/users/me/collection', isAuthenticated, async (req, res) => {
+    const userId = req.user.id;
+
+    try {
+        await query('BEGIN');
+
+        // Count how many cards will be deleted (for response message)
+        const countResult = await query(
+            'SELECT COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count, COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count FROM owned_cards WHERE user_id = $1',
+            [userId]
+        );
+
+        const ownedCount = parseInt(countResult.rows[0].owned_count, 10);
+        const proxyCount = parseInt(countResult.rows[0].proxy_count, 10);
+        const totalCount = ownedCount + proxyCount;
+
+        // Delete all owned and proxy cards for this user
+        const deleteResult = await query('DELETE FROM owned_cards WHERE user_id = $1', [userId]);
+
+        await query('COMMIT');
+
+        res.json({
+            message: 'Collection deleted successfully.',
+            deletedCards: {
+                owned: ownedCount,
+                proxy: proxyCount,
+                total: totalCount
+            }
+        });
+    } catch (err) {
+        await query('ROLLBACK');
+        console.error('Error deleting collection:', err);
+        res.status(500).json({ message: 'Server error while deleting collection.' });
+    }
+});
 
 // --- ADMIN-ONLY USER MANAGEMENT ROUTES ---
 app.get('/api/users', isAuthenticated, isAdmin, async (req, res) => {
