@@ -27,8 +27,13 @@ import {
   Badge,
 } from '@chakra-ui/react';
 import { HamburgerIcon } from '@chakra-ui/icons';
+import { FiSettings, FiUsers, FiDownload } from 'react-icons/fi';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+
+// Import the modal components
+import SettingsModal from './SettingsModal';
+import UserManagementModal from './UserManagementModal';
 
 // Modern Tab Component
 const ModernTab = ({ isActive, onClick, children, badge }) => {
@@ -73,37 +78,26 @@ const ModernTab = ({ isActive, onClick, children, badge }) => {
   );
 };
 
-// Keep original NavLink for other navigation (like Settings, Admin)
-const NavLink = ({ href, children }) => {
-  const pathname = usePathname();
-  const isActive = pathname === href;
-
-  return (
-    <Link href={href} passHref>
-      <ChakraLink
-        px={3}
-        py={2}
-        rounded={'md'}
-        _hover={{
-          textDecoration: 'none',
-          bg: 'gray.200',
-        }}
-        color={isActive ? 'gray.800' : 'gray.400'}
-        fontWeight="medium"
-      >
-        {children}
-      </ChakraLink>
-    </Link>
-  );
-};
-
 export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
   const { user, loading, logout } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncLogs, setSyncLogs] = useState([]);
   const toast = useToast();
   const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  // Modal states
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: isSettingsOpen,
+    onOpen: onSettingsOpen,
+    onClose: onSettingsClose
+  } = useDisclosure();
+  const {
+    isOpen: isUsersOpen,
+    onOpen: onUsersOpen,
+    onClose: onUsersClose
+  } = useDisclosure();
+
   const logContainerRef = useRef(null);
 
   useEffect(() => {
@@ -243,18 +237,28 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                     <MenuDivider />
                   </Box>
 
-                  {/* Settings and Admin */}
-                  <MenuItem as={Link} href="/settings">
+                  {/* Settings and Admin - Now opens modals instead of navigation */}
+                  <MenuItem
+                    onClick={onSettingsOpen}
+                    icon={<FiSettings />}
+                  >
                     Settings
                   </MenuItem>
 
                   {user.role === 'Admin' && (
                     <>
-                      <MenuItem as={Link} href="/admin/users">
+                      <MenuItem
+                        onClick={onUsersOpen}
+                        icon={<FiUsers />}
+                      >
                         Manage Users
                       </MenuItem>
-                      <MenuItem onClick={handleSync} isDisabled={isSyncing}>
-                        <HStack spacing={2}>
+                      <MenuItem
+                        onClick={handleSync}
+                        isDisabled={isSyncing}
+                        icon={<FiDownload />}
+                      >
+                        <HStack spacing={2} w="full" justify="space-between">
                           <Text>Sync CardList</Text>
                           {isSyncing && <Spinner size="xs" />}
                         </HStack>
@@ -278,6 +282,20 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
           </Flex>
         </Flex>
       </Box>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={onSettingsClose}
+      />
+
+      {/* User Management Modal */}
+      {user?.role === 'Admin' && (
+        <UserManagementModal
+          isOpen={isUsersOpen}
+          onClose={onUsersClose}
+        />
+      )}
 
       {/* Sync Log Modal */}
       <Modal isOpen={isOpen} onClose={onClose} size="2xl" scrollBehavior="inside">
