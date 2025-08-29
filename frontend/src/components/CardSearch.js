@@ -1,4 +1,3 @@
-// components/CardSearch.js
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -84,6 +83,17 @@ const subtleTextStyle = (color) => ({
   fontSize: 'sm',
   color: color
 });
+
+// Helper to decode HTML entities (copied from StyledTextRenderer.js)
+const decodeHTMLEntities = (str) => {
+  if (!str) return str;
+  return str
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+};
 
 export default function CardSearch() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -286,8 +296,17 @@ export default function CardSearch() {
       return card.cost || 0;
     };
 
-    const effectDisplay = card.effect || '';
-    const triggerDisplay = card.trigger_effect || '';
+    // Remove all HTML tags and decode entities for effect and trigger text
+    const stripHtml = (str) => {
+      if (!str) return '';
+      // Remove tags
+      const noTags = str.replace(/<[^>]*>/g, ' ').trim();
+      // Decode entities
+      return decodeHTMLEntities(noTags);
+    };
+
+    const effectDisplay = stripHtml(card.effect || '');
+    const triggerDisplay = stripHtml(card.trigger_effect || '');
 
     return (
       <Box
