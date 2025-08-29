@@ -269,7 +269,7 @@ export default function CardSearch() {
     );
   };
 
-  // List Card Component - FIXED VERSION
+  // List Card Component
   const ListCard = ({ card }) => {
     if (!card) return null;
 
@@ -391,7 +391,7 @@ export default function CardSearch() {
             )}
           </VStack>
 
-          {/* FIXED: Count Control Section */}
+          {/* Count Control Section */}
           <HStack spacing={2} ml={2} align="center">
             {showProxies && (
               <VStack spacing={0}>
@@ -423,7 +423,7 @@ export default function CardSearch() {
   if (!isClient) {
     return (
       <Box suppressHydrationWarning={true}>
-        {/* FIXED: Initial loading now uses subtle box */}
+        {/* Initial loading now uses subtle box */}
         <Box {...subtleBoxStyle('blue.50', 'blue.100')}>
           <HStack spacing={4} align="center" justify="center" py={4}>
             <Spinner size="lg" color="blue.500" />
@@ -526,11 +526,11 @@ export default function CardSearch() {
         </Box>
       )}
 
-      {/* FIXED: Loading state now uses subtle box */}
+      {/* Loading state now uses subtle box */}
       {loading && (
         <Box {...subtleBoxStyle('blue.50', 'blue.100')}>
-          <HStack spacing={4} align="center" justify="center" py={4}>
-            <Spinner size="lg" color="blue.500" />
+          <HStack>
+            <Spinner size="xs" color="blue.500" />
             <Text {...subtleTextStyle('blue.700')}>Searching cards...</Text>
           </HStack>
         </Box>
@@ -567,7 +567,7 @@ export default function CardSearch() {
         </Box>
       )}
 
-      {/* FIXED: Error display now uses subtle box */}
+      {/* Error display now uses subtle box */}
       {error && (
         <Box {...subtleBoxStyle('red.50', 'red.100')}>
           <Text {...subtleTextStyle('red.700')}>Error: {error}</Text>
