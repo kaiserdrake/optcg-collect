@@ -1,8 +1,8 @@
 import React from 'react';
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-  Box, Text, VStack, HStack, Tag, Stat, StatLabel, StatNumber, Wrap, WrapItem,
-  Flex, Heading, StackDivider, Button
+  Box, Text, VStack, HStack, Tag, Grid, GridItem, Wrap, WrapItem,
+  Flex, Heading, Button, Table, Tbody, Tr, Td
 } from '@chakra-ui/react';
 import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
@@ -44,121 +44,143 @@ const CardDetailModal = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>
-          <HStack>
-            <Text>{selectedCard.name}</Text>
-            <CardVariantIndicator cardId={selectedCard.id} />
-          </HStack>
+    <Modal isOpen={isOpen} onClose={onClose} size="3xl" isCentered>
+      <ModalOverlay bg="blackAlpha.600" />
+      <ModalContent bg="white" borderRadius="xl" overflow="hidden">
+        {/* Header with card id, rarity, and type */}
+        <ModalHeader bg="black" color="white" textAlign="center" py={3}>
+          <VStack spacing={1}>
+            <HStack spacing={4} justify="center" align="center">
+              <Text fontSize="md" fontWeight="bold" letterSpacing="wider">
+                {selectedCard.id} | {selectedCard.rarity} | {selectedCard.category}
+              </Text>
+              <CardVariantIndicator cardId={selectedCard.id} />
+            </HStack>
+            <Text fontSize="2xl" fontWeight="bold" letterSpacing="wide">
+              {selectedCard.name}
+            </Text>
+          </VStack>
         </ModalHeader>
-        <ModalCloseButton />
-        <ModalBody>
-          <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
-            {/* FIXED: Use CardImage instead of standard Image */}
-            <Box flexShrink={0}>
-              <CardImage
-                borderRadius="lg"
-                width={{ base: '100%', md: '250px' }}
-                height={{ base: '350px', md: '350px' }}
-                src={selectedCard.img_url}
-                alt={selectedCard.name}
-                fallbackSrc="/placeholder.png"
-              />
-            </Box>
 
-            <VStack align="stretch" spacing={3} flex={1}>
-              <Wrap spacing={2}>
-                <WrapItem>
-                  <Tag size="lg" {...getTagStyles(selectedCard.color)}>
-                    {selectedCard.card_code}
-                  </Tag>
-                </WrapItem>
-                <WrapItem>
-                  <Tag size="lg" colorScheme="gray">
-                    {selectedCard.category}
-                  </Tag>
-                </WrapItem>
-                <WrapItem>
-                  <Tag size="lg" colorScheme="gray">
-                    {selectedCard.rarity}
-                  </Tag>
-                </WrapItem>
-                {selectedCard.cost !== null && (
-                  <WrapItem>
-                    <Tag size="lg" colorScheme="orange">
-                      {getCostLabel(selectedCard)}: {selectedCard.cost}
-                    </Tag>
-                  </WrapItem>
-                )}
-                {selectedCard.power && (
-                  <WrapItem>
-                    <Tag size="lg" colorScheme="red">
-                      Power: {selectedCard.power.toLocaleString()}
-                    </Tag>
-                  </WrapItem>
-                )}
-                {selectedCard.counter && (
-                  <WrapItem>
-                    <Tag size="lg" colorScheme="yellow">
-                      Counter: +{selectedCard.counter}
-                    </Tag>
-                  </WrapItem>
-                )}
-                {selectedCard.block && (
-                  <WrapItem>
-                    <Tag size="lg" colorScheme="cyan">
-                      Block: +{selectedCard.block}
-                    </Tag>
-                  </WrapItem>
-                )}
-              </Wrap>
+        <ModalCloseButton color="white" size="lg" />
 
-              <VStack align="stretch" spacing={4} divider={<StackDivider />}>
-                {selectedCard.effect && selectedCard.effect.trim() !== '' && selectedCard.effect.trim() !== '-' && (
+        <ModalBody p={0}>
+          <Grid templateColumns={{ base: "1fr", md: "350px 1fr" }} gap={0} minH="400px">
+            {/* Left side - Card Image */}
+            <GridItem display="flex" alignItems="center" justifyContent="center" p={4}>
+              <Box maxW="320px" maxH="450px">
+                <CardImage
+                  width="100%"
+                  height="auto"
+                  src={selectedCard.img_url}
+                  alt={selectedCard.name}
+                  fallbackSrc="/placeholder.png"
+                />
+              </Box>
+            </GridItem>
+
+            {/* Right side - Card Details */}
+            <GridItem p={4}>
+              <VStack align="stretch" spacing={4} h="100%">
+                {/* Stats Table */}
+                <Table variant="simple" size="sm">
+                  <Tbody>
+                    {(selectedCard.cost !== null && selectedCard.cost !== undefined && selectedCard.cost !== '-') && (
+                      <Tr>
+                        <Td fontWeight="bold" w="100px" p={2}>Cost</Td>
+                        <Td p={2} fontSize="lg">{selectedCard.cost}</Td>
+                        <Td fontWeight="bold" w="100px" p={2}>Attribute</Td>
+                        <Td p={2} fontSize="lg">
+                          {selectedCard.attributes || selectedCard.color || '-'}
+                        </Td>
+                      </Tr>
+                    )}
+                    {(selectedCard.power || selectedCard.counter) && (
+                      <Tr>
+                        {selectedCard.power && (
+                          <>
+                            <Td fontWeight="bold" p={2}>Power</Td>
+                            <Td p={2} fontSize="lg">{selectedCard.power.toLocaleString()}</Td>
+                          </>
+                        )}
+                        {selectedCard.counter && (
+                          <>
+                            <Td fontWeight="bold" p={2}>Counter</Td>
+                            <Td p={2} fontSize="lg">+{selectedCard.counter}</Td>
+                          </>
+                        )}
+                      </Tr>
+                    )}
+                    {(selectedCard.color || selectedCard.block) && (
+                      <Tr>
+                        {selectedCard.color && (
+                          <>
+                            <Td fontWeight="bold" p={2}>Color</Td>
+                            <Td p={2} fontSize="lg">
+                              <Tag {...getTagStyles(selectedCard.color)} size="md">
+                                {selectedCard.color}
+                              </Tag>
+                            </Td>
+                          </>
+                        )}
+                        {(selectedCard.block && selectedCard.block !== '-') && (
+                          <>
+                            <Td fontWeight="bold" p={2}>Block icon</Td>
+                            <Td p={2} fontSize="lg">{selectedCard.block}</Td>
+                          </>
+                        )}
+                      </Tr>
+                    )}
+                  </Tbody>
+                </Table>
+
+                {/* Types */}
+                {selectedCard.types && (
                   <Box>
-                    <Heading size="sm" mb={2}>Effect</Heading>
-                    <StyledTextRenderer text={selectedCard.effect} />
+                    <Text fontWeight="bold" fontSize="md" mb={1}>Types</Text>
+                    <Text fontSize="md">
+                      {Array.isArray(selectedCard.types) ?
+                        selectedCard.types.join(', ') :
+                        selectedCard.types.toString().replace(/[,\s]+/g, ', ')
+                      }
+                    </Text>
                   </Box>
                 )}
 
+                {/* Effect */}
+                {selectedCard.effect && selectedCard.effect.trim() !== '' && selectedCard.effect.trim() !== '-' && (
+                  <Box flex={1}>
+                    <Text fontWeight="bold" fontSize="md" mb={1}>Effect</Text>
+                    <Box
+                      bg="white"
+                      p={3}
+                      borderRadius="md"
+                      minH="60px"
+                    >
+                      <StyledTextRenderer text={selectedCard.effect} />
+                    </Box>
+                  </Box>
+                )}
+
+                {/* Trigger Effect */}
                 {selectedCard.trigger_effect && selectedCard.trigger_effect.trim() !== '' && selectedCard.trigger_effect.trim() !== '-' && (
                   <Box>
-                    <Heading size="sm" mb={2}>Trigger Effect</Heading>
-                    <StyledTextRenderer text={selectedCard.trigger_effect} />
+                    <Box
+                      bg="black"
+                      color="white"
+                      p={3}
+                      borderRadius="md"
+                      minH="50px"
+                    >
+                      <StyledTextRenderer text={selectedCard.trigger_effect} />
+                    </Box>
                   </Box>
                 )}
 
-                {selectedCard.attributes && selectedCard.attributes.length > 0 && (
-                  <Box>
-                    <Heading size="sm" mb={2}>Attributes</Heading>
-                    <Wrap>
-                      {selectedCard.attributes.map((attr, index) => (
-                        <WrapItem key={index}>
-                          <Tag colorScheme="teal">{attr}</Tag>
-                        </WrapItem>
-                      ))}
-                    </Wrap>
-                  </Box>
-                )}
-
-                {selectedCard.types && selectedCard.types.length > 0 && (
-                  <Box>
-                    <Heading size="sm" mb={2}>Types</Heading>
-                    <Wrap>
-                      {selectedCard.types.map((type, index) => (
-                        <WrapItem key={index}>
-                          <Tag colorScheme="purple">{type}</Tag>
-                        </WrapItem>
-                      ))}
-                    </Wrap>
-                  </Box>
-                )}
-
+                {/* Appears In */}
                 {selectedCard.packs && (
                   <Box>
-                    <Heading size="sm" mb={2}>Appears In</Heading>
+                    <Text fontWeight="bold" fontSize="md" mb={1}>Set/s</Text>
                     <Wrap>
                       {selectedCard.packs.split(', ').map(pack => (
                         <WrapItem key={pack}>
@@ -168,32 +190,17 @@ const CardDetailModal = ({
                     </Wrap>
                   </Box>
                 )}
-
-                <HStack spacing={4}>
-                  {selectedCard.owned_count !== undefined && (
-                    <Stat>
-                      <StatLabel>Owned</StatLabel>
-                      <StatNumber>{selectedCard.owned_count}</StatNumber>
-                    </Stat>
-                  )}
-                  {showProxies && selectedCard.proxy_count !== undefined && (
-                    <Stat>
-                      <StatLabel>Proxies</StatLabel>
-                      <StatNumber>{selectedCard.proxy_count}</StatNumber>
-                    </Stat>
-                  )}
-                </HStack>
               </VStack>
-            </VStack>
-          </Flex>
+            </GridItem>
+          </Grid>
         </ModalBody>
 
-        <ModalFooter>
+        <ModalFooter py={3}>
           <HStack spacing={4} width="100%" justify="space-between">
             {/* Count Controls */}
-            <HStack spacing={8}>
+            <HStack spacing={6}>
               <Box textAlign="center">
-                <Text fontSize="sm" fontWeight="bold" color="gray.600" mb={2}>
+                <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
                   Owned Cards
                 </Text>
                 <CountControl
@@ -206,7 +213,7 @@ const CardDetailModal = ({
 
               {showProxies && (
                 <Box textAlign="center">
-                  <Text fontSize="sm" fontWeight="bold" color="gray.600" mb={2}>
+                  <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
                     Proxy Cards
                   </Text>
                   <CountControl
