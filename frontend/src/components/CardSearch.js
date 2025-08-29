@@ -230,7 +230,7 @@ export default function CardSearch() {
                 textOverflow="ellipsis"
                 whiteSpace="nowrap"
               >
-                {card.id}
+                {card.card_code}
               </Tag>
               <Text fontSize="m" fontWeight="bold" color="blue.300" ml={2} minW="36px" textAlign="right">
                 {countDisplay}

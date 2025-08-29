@@ -44,19 +44,19 @@ const CardDetailModal = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="3xl" isCentered>
+    <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
       <ModalOverlay bg="blackAlpha.600" />
       <ModalContent bg="white" borderRadius="xl" overflow="hidden">
         {/* Header with card id, rarity, and type */}
         <ModalHeader bg="black" color="white" textAlign="center" py={3}>
           <VStack spacing={1}>
             <HStack spacing={4} justify="center" align="center">
-              <Text fontSize="md" fontWeight="bold" letterSpacing="wider">
-                {selectedCard.id} | {selectedCard.rarity} | {selectedCard.category}
+              <Text fontSize="sm" fontWeight="bold" letterSpacing="wider">
+                {selectedCard.card_code} | {selectedCard.rarity} | {selectedCard.category}
               </Text>
               <CardVariantIndicator cardId={selectedCard.id} />
             </HStack>
-            <Text fontSize="2xl" fontWeight="bold" letterSpacing="wide">
+            <Text fontSize="xl" fontWeight="bold" letterSpacing="wide">
               {selectedCard.name}
             </Text>
           </VStack>
@@ -87,10 +87,12 @@ const CardDetailModal = ({
                   <Tbody>
                     {(selectedCard.cost !== null && selectedCard.cost !== undefined && selectedCard.cost !== '-') && (
                       <Tr>
-                        <Td fontWeight="bold" w="100px" p={2}>Cost</Td>
-                        <Td p={2} fontSize="lg">{selectedCard.cost}</Td>
-                        <Td fontWeight="bold" w="100px" p={2}>Attribute</Td>
-                        <Td p={2} fontSize="lg">
+                        <Td fontWeight="bold" w="100px" p={2} fontSize="sm">
+                          {selectedCard.category === 'LEADER' ? 'Life' : 'Cost'}
+                        </Td>
+                        <Td p={2} fontSize="md">{selectedCard.cost}</Td>
+                        <Td fontWeight="bold" w="100px" p={2} fontSize="sm">Attribute</Td>
+                        <Td p={2} fontSize="md">
                           {selectedCard.attributes || selectedCard.color || '-'}
                         </Td>
                       </Tr>
@@ -99,14 +101,14 @@ const CardDetailModal = ({
                       <Tr>
                         {selectedCard.power && (
                           <>
-                            <Td fontWeight="bold" p={2}>Power</Td>
-                            <Td p={2} fontSize="lg">{selectedCard.power.toLocaleString()}</Td>
+                            <Td fontWeight="bold" p={2} fontSize="sm">Power</Td>
+                            <Td p={2} fontSize="md">{selectedCard.power.toLocaleString()}</Td>
                           </>
                         )}
                         {selectedCard.counter && (
                           <>
-                            <Td fontWeight="bold" p={2}>Counter</Td>
-                            <Td p={2} fontSize="lg">+{selectedCard.counter}</Td>
+                            <Td fontWeight="bold" p={2} fontSize="sm">Counter</Td>
+                            <Td p={2} fontSize="md">+{selectedCard.counter}</Td>
                           </>
                         )}
                       </Tr>
@@ -115,8 +117,8 @@ const CardDetailModal = ({
                       <Tr>
                         {selectedCard.color && (
                           <>
-                            <Td fontWeight="bold" p={2}>Color</Td>
-                            <Td p={2} fontSize="lg">
+                            <Td fontWeight="bold" p={2} fontSize="sm">Color</Td>
+                            <Td p={2} fontSize="md">
                               <Tag {...getTagStyles(selectedCard.color)} size="md">
                                 {selectedCard.color}
                               </Tag>
@@ -125,8 +127,8 @@ const CardDetailModal = ({
                         )}
                         {(selectedCard.block && selectedCard.block !== '-') && (
                           <>
-                            <Td fontWeight="bold" p={2}>Block icon</Td>
-                            <Td p={2} fontSize="lg">{selectedCard.block}</Td>
+                            <Td fontWeight="bold" p={2} fontSize="sm">Block icon</Td>
+                            <Td p={2} fontSize="md">{selectedCard.block}</Td>
                           </>
                         )}
                       </Tr>
@@ -137,8 +139,8 @@ const CardDetailModal = ({
                 {/* Types */}
                 {selectedCard.types && (
                   <Box>
-                    <Text fontWeight="bold" fontSize="md" mb={1}>Types</Text>
-                    <Text fontSize="md">
+                    <Text fontWeight="bold" fontSize="sm" mb={1}>Types</Text>
+                    <Text fontSize="sm">
                       {Array.isArray(selectedCard.types) ?
                         selectedCard.types.join(', ') :
                         selectedCard.types.toString().replace(/[,\s]+/g, ', ')
@@ -150,12 +152,13 @@ const CardDetailModal = ({
                 {/* Effect */}
                 {selectedCard.effect && selectedCard.effect.trim() !== '' && selectedCard.effect.trim() !== '-' && (
                   <Box flex={1}>
-                    <Text fontWeight="bold" fontSize="md" mb={1}>Effect</Text>
+                    <Text fontWeight="bold" fontSize="sm" mb={1}>Effect</Text>
                     <Box
                       bg="white"
                       p={3}
                       borderRadius="md"
                       minH="60px"
+                      fontSize="sm"
                     >
                       <StyledTextRenderer text={selectedCard.effect} />
                     </Box>
@@ -171,6 +174,7 @@ const CardDetailModal = ({
                       p={3}
                       borderRadius="md"
                       minH="50px"
+                      fontSize="sm"
                     >
                       <StyledTextRenderer text={selectedCard.trigger_effect} />
                     </Box>
@@ -180,7 +184,7 @@ const CardDetailModal = ({
                 {/* Appears In */}
                 {selectedCard.packs && (
                   <Box>
-                    <Text fontWeight="bold" fontSize="md" mb={1}>Set/s</Text>
+                    <Text fontWeight="bold" fontSize="sm" mb={1}>Set(s)</Text>
                     <Wrap>
                       {selectedCard.packs.split(', ').map(pack => (
                         <WrapItem key={pack}>
