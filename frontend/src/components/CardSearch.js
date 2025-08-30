@@ -115,11 +115,13 @@ export default function CardSearch() {
     try {
       const advancedKeywordRegex = /(?:\b(id|pack|color|exact):\S+)/gi;
       const hasAdvancedKeyword = advancedKeywordRegex.test(searchTerm || '');
-
-      if (!searchTerm || (searchTerm.length < 3 && !hasAdvancedKeyword)) {
-         setResults([]);
-         setError(null);
-         return;
+      const canShowAllCollection = showOnlyOwned || showProxies;
+      if (
+        (!canShowAllCollection && (!searchTerm || (searchTerm.length < 3 && !hasAdvancedKeyword)))
+      ) {
+        setResults([]);
+        setError(null);
+        return;
       }
 
       const delayDebounceFn = setTimeout(() => {
@@ -511,7 +513,10 @@ export default function CardSearch() {
         <Box {...subtleBoxStyle('green.50', 'green.100')}>
           <HStack justify="space-between" align="center">
             <Text {...subtleTextStyle('green.700')}>
-              Found {results.length} result{results.length !== 1 ? 's' : ''} for "{searchTerm}"
+              {searchTerm.trim().length > 0
+                ? <>Found {results.length} result{results.length !== 1 ? 's' : ''} for "{searchTerm}"</>
+                : <>Found {results.length} result{results.length !== 1 ? 's' : ''} in your collection.</>
+              }
             </Text>
             <Text fontSize="xs" color="gray.500">
               Viewing as: {viewMode === 'list' ? 'List' : 'Thumbnails'}

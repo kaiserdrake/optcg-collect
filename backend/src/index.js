@@ -342,13 +342,17 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
   const { keyword, ownedOnly, showProxies } = req.query;
   const userId = req.user.id;
 
-  if (!keyword || typeof keyword !== 'string') {
+  // Allow empty keyword ONLY if ownedOnly or showProxies is true
+  const allowEmptyKeyword = ownedOnly === 'true' || showProxies === 'true';
+
+  if (typeof keyword !== 'string') {
     return res.status(400).json({ error: 'Search keyword is required and must be a string' });
   }
 
   // Sanitize keyword to prevent potential issues
   const sanitizedKeyword = keyword.trim();
-  if (sanitizedKeyword.length === 0) {
+
+  if (sanitizedKeyword.length === 0 && !allowEmptyKeyword) {
     return res.status(400).json({ error: 'Search keyword cannot be empty' });
   }
 
@@ -369,10 +373,14 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
 
     fuzzyText = sanitizedKeyword.replace(regex, '').trim();
 
-    const hasValidCriteria = (fuzzyText && fuzzyText.length > 0) ||
-                             criteria.id || criteria.pack || criteria.color || criteria.exact;
+    const hasValidCriteria =
+      (fuzzyText && fuzzyText.length > 0) ||
+      criteria.id ||
+      criteria.pack ||
+      criteria.color ||
+      criteria.exact;
 
-    if (!hasValidCriteria) {
+    if (!hasValidCriteria && !allowEmptyKeyword) {
       return res.status(400).json({ error: 'Search keyword cannot be empty' });
     }
 
@@ -393,7 +401,6 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
         SELECT card_id,
                COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
                COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count,
-               -- Get the location of the first owned card
                (SELECT location_id FROM owned_cards WHERE card_id = oc.card_id AND user_id = $1 AND is_proxy = false LIMIT 1) AS location_id
         FROM owned_cards oc
         WHERE user_id = $1
@@ -407,20 +414,22 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
     const params = [userId];
     let paramIndex = 2;
 
-    // Only add fuzzy similarity clause if we have actual fuzzy text to search
-    if (fuzzyText && fuzzyText.length > 0) {
-      whereClauses.push(`GREATEST(
-          similarity(COALESCE(c.name, ''), $${paramIndex}),
-          similarity(COALESCE(c.id, ''), $${paramIndex}),
-          similarity(COALESCE(c.card_code, ''), $${paramIndex}),
-          similarity(COALESCE(c.effect, ''), $${paramIndex}),
-          similarity(COALESCE(c.category, ''), $${paramIndex}),
-          similarity(COALESCE(c.trigger_effect, ''), $${paramIndex}),
-          similarity(array_to_string(COALESCE(c.attributes, ARRAY[]::TEXT[]), ' '), $${paramIndex}),
-          similarity(array_to_string(COALESCE(c.types, ARRAY[]::TEXT[]), ' '), $${paramIndex})
-        ) > 0.15`);
-      params.push(fuzzyText);
-      paramIndex++;
+    // If this is a "show my collection" request (empty keyword + owned/proxy toggles), do NOT add fuzzyText
+    if (!allowEmptyKeyword) {
+      if (fuzzyText && fuzzyText.length > 0) {
+        whereClauses.push(`GREATEST(
+            similarity(COALESCE(c.name, ''), $${paramIndex}),
+            similarity(COALESCE(c.id, ''), $${paramIndex}),
+            similarity(COALESCE(c.card_code, ''), $${paramIndex}),
+            similarity(COALESCE(c.effect, ''), $${paramIndex}),
+            similarity(COALESCE(c.category, ''), $${paramIndex}),
+            similarity(COALESCE(c.trigger_effect, ''), $${paramIndex}),
+            similarity(array_to_string(COALESCE(c.attributes, ARRAY[]::TEXT[]), ' '), $${paramIndex}),
+            similarity(array_to_string(COALESCE(c.types, ARRAY[]::TEXT[]), ' '), $${paramIndex})
+          ) > 0.15`);
+        params.push(fuzzyText);
+        paramIndex++;
+      }
     }
 
     if (criteria.id) {
@@ -465,6 +474,9 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
         // When showProxies is false, only consider owned cards
         whereClauses.push(`oc.owned_count > 0`);
       }
+    } else if (showProxies === 'true') {
+      // Show all proxies, not just owned
+      whereClauses.push(`oc.proxy_count > 0`);
     }
 
     if (whereClauses.length > 0) {
@@ -501,7 +513,7 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
             orderByClauses.push(`CASE WHEN c.name ILIKE $${exactParamIndex + 1} THEN 0 ELSE 1 END`);
         }
     }
-    if (fuzzyText && fuzzyText.length > 0) {
+    if (!allowEmptyKeyword && fuzzyText && fuzzyText.length > 0) {
         // Find the fuzzyText parameter index for ordering
         const fuzzyParamIndex = params.indexOf(fuzzyText);
         if (fuzzyParamIndex !== -1) {
