@@ -23,17 +23,15 @@ import {
   ModalBody,
   ModalCloseButton,
   useDisclosure,
-  Link as ChakraLink,
   Badge,
 } from '@chakra-ui/react';
 import { HamburgerIcon } from '@chakra-ui/icons';
-import { FiSettings, FiUsers, FiDownload } from 'react-icons/fi';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { FiSettings, FiUsers, FiDownload, FiMapPin } from 'react-icons/fi';
 
 // Import the modal components
 import SettingsModal from './SettingsModal';
 import UserManagementModal from './UserManagementModal';
+import LocationManagementModal from './LocationManagementModal';
 
 // Modern Tab Component
 const ModernTab = ({ isActive, onClick, children, badge }) => {
@@ -86,17 +84,10 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
   const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   // Modal states
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const {
-    isOpen: isSettingsOpen,
-    onOpen: onSettingsOpen,
-    onClose: onSettingsClose
-  } = useDisclosure();
-  const {
-    isOpen: isUsersOpen,
-    onOpen: onUsersOpen,
-    onClose: onUsersClose
-  } = useDisclosure();
+  const { isOpen: isSyncOpen, onOpen: onSyncOpen, onClose: onSyncClose } = useDisclosure();
+  const { isOpen: isSettingsOpen, onOpen: onSettingsOpen, onClose: onSettingsClose } = useDisclosure();
+  const { isOpen: isUsersOpen, onOpen: onUsersOpen, onClose: onUsersClose } = useDisclosure();
+  const { isOpen: isLocationsOpen, onOpen: onLocationsOpen, onClose: onLocationsClose } = useDisclosure();
 
   const logContainerRef = useRef(null);
 
@@ -107,7 +98,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
   }, [syncLogs]);
 
   const handleSync = () => {
-    onOpen();
+    onSyncOpen();
     setIsSyncing(true);
     setSyncLogs([]);
 
@@ -134,6 +125,8 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       setIsSyncing(false);
     };
   };
+
+  if (!user) return null;
 
   return (
     <>
@@ -164,7 +157,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
               letterSpacing="tight"
               flexShrink={0}
             >
-              JuanPiece
+              OPTCG Manager
             </Text>
 
             {/* Navigation Tabs - Hidden on small screens */}
@@ -237,16 +230,26 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                     <MenuDivider />
                   </Box>
 
-                  {/* Settings and Admin - Now opens modals instead of navigation */}
+                  {/* Location Management */}
+                  <MenuItem
+                    onClick={onLocationsOpen}
+                    icon={<FiMapPin />}
+                  >
+                    Manage Locations
+                  </MenuItem>
+
+                  {/* Settings */}
                   <MenuItem
                     onClick={onSettingsOpen}
                     icon={<FiSettings />}
                   >
-                    Settings
+                    Account Settings
                   </MenuItem>
 
+                  {/* Admin Options */}
                   {user.role === 'Admin' && (
                     <>
+                      <MenuDivider />
                       <MenuItem
                         onClick={onUsersOpen}
                         icon={<FiUsers />}
@@ -268,20 +271,20 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
 
                   <MenuDivider />
                   <MenuItem onClick={logout} color="red.600">
-                    Logout
+                    Sign Out
                   </MenuItem>
                 </MenuList>
               </Menu>
-            ) : (
-              <Link href="/login" passHref>
-                <Button colorScheme="blue" size="sm">
-                  Login
-                </Button>
-              </Link>
-            )}
+            ) : null}
           </Flex>
         </Flex>
       </Box>
+
+      {/* Location Management Modal */}
+      <LocationManagementModal
+        isOpen={isLocationsOpen}
+        onClose={onLocationsClose}
+      />
 
       {/* Settings Modal */}
       <SettingsModal
@@ -298,7 +301,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       )}
 
       {/* Sync Log Modal */}
-      <Modal isOpen={isOpen} onClose={onClose} size="2xl" scrollBehavior="inside">
+      <Modal isOpen={isSyncOpen} onClose={onSyncClose} size="2xl" scrollBehavior="inside">
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>CardList Sync Progress</ModalHeader>

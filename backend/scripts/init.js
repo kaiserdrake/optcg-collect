@@ -65,7 +65,7 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
     // Use card_id for reprint detection since that's where the _rN pattern appears
     const baseCardId = isReprintId ? getBaseCardId(cardId) : getBaseCardId(cardCode);
 
-    console.log(`INIT: Detected reprint - original: ${cardId}, base: ${baseCardId}`);
+    console.log(`INIT: Detected reprint - cardId: ${cardId}, baseCardId: ${baseCardId}`);
 
     // Check if the base card already exists (by id)
     const existingCardQuery = `
@@ -75,56 +75,42 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
     const existingCardResult = await query(existingCardQuery, [baseCardId]);
 
     if (existingCardResult.rows.length > 0) {
-      // Base card exists, just add the pack appearance using baseCardId
-      console.log(`INIT: Found existing base card ${baseCardId}, adding pack appearance for ${packCode}`);
-      await query(
-        `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
-        [baseCardId, packCode]
-      );
-      return false; // No new card inserted
-    } else {
-      // Base card doesn't exist, create it with card_code = card_id (no _rN suffix)
-      console.log(`INIT: Creating new base card ${baseCardId} from reprint ${cardId}`);
+      console.log(`INIT: Base card ${baseCardId} already exists, skipping reprint ${cardId}`);
 
-      const cardValues = [
-        baseCardId,        // id (use base card ID)
-        baseCardId,        // card_code (same as ID, no _rN suffix)
-        cardData.name,
-        cardData.rarity,
-        cardData.category,
-        cardData.color,
-        safeParseInt(cardData.cost),
-        safeParseInt(cardData.power),
-        safeParseInt(cardData.counter),
-        cardData.effect,
-        cardData.trigger,
-        cardData.img_url,
-        attributesArray,
-        typesArray,
-        safeParseInt(cardData.block)
-      ];
-
-      const cardInsertQuery = `
-        INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-        ON CONFLICT (id) DO NOTHING;
-      `;
-
-      const cardResult = await query(cardInsertQuery, cardValues);
-
-      // Add pack appearance using the base card ID (not the original cardId with _rN)
+      // Just add pack appearance for the original card
       await query(
         `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
         [baseCardId, packCode]
       );
 
-      return cardResult.rowCount > 0;
+      return false;
     }
-  } else {
-    // Not a reprint (includes parallels _pN), handle normally
+
+    // If base card doesn't exist, create it with base ID but current data
+    console.log(`INIT: Creating base card ${baseCardId} from reprint data`);
+    const cardInsertQuery = `
+      INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      ON CONFLICT (id) DO UPDATE SET
+        card_code = EXCLUDED.card_code,
+        name = EXCLUDED.name,
+        rarity = EXCLUDED.rarity,
+        category = EXCLUDED.category,
+        color = EXCLUDED.color,
+        cost = EXCLUDED.cost,
+        power = EXCLUDED.power,
+        counter = EXCLUDED.counter,
+        effect = EXCLUDED.effect,
+        trigger_effect = EXCLUDED.trigger_effect,
+        img_url = EXCLUDED.img_url,
+        attributes = EXCLUDED.attributes,
+        types = EXCLUDED.types,
+        block = EXCLUDED.block;
+    `;
+
     const cardValues = [
-      cardId,
-      cardCode || cardId, // Use card_code if available, otherwise use card_id
+      baseCardId,
+      getBaseCardId(cardCode),  // Use base card code too
       cardData.name,
       cardData.rarity,
       cardData.category,
@@ -133,18 +119,61 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
       safeParseInt(cardData.power),
       safeParseInt(cardData.counter),
       cardData.effect,
-      cardData.trigger,
+      cardData.trigger_effect,
       cardData.img_url,
-      attributesArray,
-      typesArray,
+      attributesArray || null,
+      typesArray || null,
       safeParseInt(cardData.block)
     ];
 
+    const cardResult = await query(cardInsertQuery, cardValues);
+
+    // Add pack appearance for the base card
+    await query(
+      `INSERT INTO card_pack_appearances (card_id, pack_code) VALUES ($1, $2) ON CONFLICT (card_id, pack_code) DO NOTHING`,
+      [baseCardId, packCode]
+    );
+
+    return cardResult.rowCount > 0;
+  } else {
+    // Normal card (not a reprint)
     const cardInsertQuery = `
       INSERT INTO cards (id, card_code, name, rarity, category, color, cost, power, counter, effect, trigger_effect, img_url, attributes, types, block)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      ON CONFLICT (id) DO NOTHING;
+      ON CONFLICT (id) DO UPDATE SET
+        card_code = EXCLUDED.card_code,
+        name = EXCLUDED.name,
+        rarity = EXCLUDED.rarity,
+        category = EXCLUDED.category,
+        color = EXCLUDED.color,
+        cost = EXCLUDED.cost,
+        power = EXCLUDED.power,
+        counter = EXCLUDED.counter,
+        effect = EXCLUDED.effect,
+        trigger_effect = EXCLUDED.trigger_effect,
+        img_url = EXCLUDED.img_url,
+        attributes = EXCLUDED.attributes,
+        types = EXCLUDED.types,
+        block = EXCLUDED.block;
     `;
+
+    const cardValues = [
+      cardId,
+      cardCode,
+      cardData.name,
+      cardData.rarity,
+      cardData.category,
+      cardData.color,
+      safeParseInt(cardData.cost),
+      safeParseInt(cardData.power),
+      safeParseInt(cardData.counter),
+      cardData.effect,
+      cardData.trigger_effect,
+      cardData.img_url,
+      attributesArray || null,
+      typesArray || null,
+      safeParseInt(cardData.block)
+    ];
 
     const cardResult = await query(cardInsertQuery, cardValues);
 
@@ -161,8 +190,10 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
 const createTables = async () => {
   console.log('INIT: Dropping all existing tables...');
   await query('DROP TABLE IF EXISTS owned_cards;');
+  await query('DROP TABLE IF EXISTS locations CASCADE;');
   await query('DROP TABLE IF EXISTS users CASCADE;');
   await query('DROP TYPE IF EXISTS user_role;');
+  await query('DROP TYPE IF EXISTS location_type;');
   await query('DROP TABLE IF EXISTS card_pack_appearances;');
   await query('DROP TABLE IF EXISTS packs;');
   await query('DROP TABLE IF EXISTS cards;');
@@ -170,6 +201,8 @@ const createTables = async () => {
   console.log('INIT: Creating new relational tables...');
 
   await query(`CREATE TYPE user_role AS ENUM ('Admin', 'Normal User');`);
+  await query(`CREATE TYPE location_type AS ENUM ('case', 'box', 'binder');`);
+
   await query(`
     CREATE TABLE users (
       id SERIAL PRIMARY KEY,
@@ -179,6 +212,22 @@ const createTables = async () => {
       image_url TEXT,
       role user_role NOT NULL DEFAULT 'Normal User',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Create locations table
+  await query(`
+    CREATE TABLE locations (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      type location_type NOT NULL,
+      description TEXT,
+      marker VARCHAR(50) NOT NULL DEFAULT 'gray',
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, name)
     );
   `);
 
@@ -203,7 +252,7 @@ const createTables = async () => {
   `;
   const createPacksTable = `CREATE TABLE packs (code VARCHAR(255) PRIMARY KEY, series_id VARCHAR(255) UNIQUE NOT NULL, name TEXT NOT NULL);`;
   const createCardPackAppearancesTable = `CREATE TABLE card_pack_appearances (card_id VARCHAR(255) REFERENCES cards(id) ON DELETE CASCADE, pack_code VARCHAR(255) REFERENCES packs(code) ON DELETE CASCADE, PRIMARY KEY (card_id, pack_code));`;
-  const createOwnedCardsTable = `CREATE TABLE owned_cards (instance_id SERIAL PRIMARY KEY, card_id VARCHAR(255) NOT NULL REFERENCES cards(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, location TEXT, is_proxy BOOLEAN DEFAULT false);`;
+  const createOwnedCardsTable = `CREATE TABLE owned_cards (instance_id SERIAL PRIMARY KEY, card_id VARCHAR(255) NOT NULL REFERENCES cards(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL, is_proxy BOOLEAN DEFAULT false);`;
 
   await query(createCardsTable);
   await query(createPacksTable);
@@ -276,7 +325,6 @@ const populateMasterData = async () => {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-
         const responseText = await response.text();
         try {
             // The scraper API returns a JSON string that needs to be parsed twice
@@ -287,46 +335,35 @@ const populateMasterData = async () => {
             packs = JSON.parse(responseText);
         }
     } catch (err) {
-        console.error('INIT: Error fetching master pack list:', err.message);
-        throw err;
-    }
-
-    if (!Array.isArray(packs)) {
-        console.error('INIT: Invalid pack data format - expected array');
-        console.log('INIT: Received data type:', typeof packs);
-        console.log('INIT: First few items:', packs ? packs.slice(0, 3) : 'null');
-        throw new Error('Invalid pack data format received from scraper');
+        throw new Error(`Failed to fetch pack list: ${err.message}`);
     }
 
     console.log(`INIT: Found ${packs.length} packs to process.`);
 
-    // Insert packs first
-    console.log('INIT: Inserting pack definitions...');
-    let packsInserted = 0;
+    // Insert pack data first
     for (const pack of packs) {
         if (!pack || typeof pack !== 'object' || !pack.series || !pack.code || !pack.name) {
-            console.log(`INIT: Skipping invalid pack:`, pack);
+            console.warn(`INIT: Skipping invalid pack: ${JSON.stringify(pack)}`);
             continue;
         }
+
         try {
-            await query('INSERT INTO packs (code, series_id, name) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING', [pack.code, pack.series, pack.name]);
-            packsInserted++;
+            await query('INSERT INTO packs (code, series_id, name) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING',
+                [pack.code, pack.series, pack.name]);
         } catch (err) {
             console.warn(`INIT: Failed to insert pack ${pack.code}:`, err.message);
         }
     }
-    console.log(`INIT: Inserted ${packsInserted} pack definitions.`);
 
-    // Process cards for each pack
     let totalCardsInserted = 0;
-    for (let i = 0; i < packs.length; i++) {
-        const pack = packs[i];
+    // Process each pack for cards
+    for (const pack of packs) {
         if (!pack || typeof pack !== 'object' || !pack.series) {
-            console.log(`INIT: Skipping pack ${i + 1}/${packs.length} (invalid or no series): ${pack?.name || pack?.code || 'unknown'}`);
+            console.warn(`INIT: Skipping invalid pack: ${pack?.name || pack?.code || 'unknown'}`);
             continue;
         }
 
-        console.log(`INIT: Processing pack ${i + 1}/${packs.length}: ${pack.name} (${pack.series})`);
+        console.log(`INIT: Processing pack: ${pack.name} (${pack.series})`);
 
         let cardsFromPack;
         try {
@@ -437,7 +474,7 @@ const main = async () => {
 
             if (backupExists) {
                 console.log("INIT: Restoring collection data from backup...");
-                const insertResult = await query("INSERT INTO owned_cards (card_id, user_id, location, is_proxy) SELECT card_id, user_id, location, is_proxy FROM owned_cards_backup;");
+                const insertResult = await query("INSERT INTO owned_cards (card_id, user_id, is_proxy) SELECT card_id, user_id, is_proxy FROM owned_cards_backup;");
                 console.log(`INIT: Restored ${insertResult.rowCount} owned card entries.`);
 
                 console.log("INIT: Updating collection ID sequence...");

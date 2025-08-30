@@ -1,14 +1,18 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
   Box, Text, VStack, HStack, Tag, Grid, GridItem, Wrap, WrapItem,
-  Flex, Heading, Button, Table, Tbody, Tr, Td
+  Flex, Heading, Button, Table, Tbody, Tr, Td, Select, FormControl, FormLabel,
+  useToast
 } from '@chakra-ui/react';
+import { FiMapPin } from 'react-icons/fi';
 import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
 import StyledTextRenderer from './StyledTextRenderer';
 import CardImage from './CardImage';
 import { getTagStyles } from '@/utils/cardStyles';
+
+const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const CardDetailModal = ({
   isOpen,
@@ -17,6 +21,85 @@ const CardDetailModal = ({
   showProxies,
   onCountUpdate
 }) => {
+  const [locations, setLocations] = useState([]);
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchLocations();
+    }
+  }, [isOpen]);
+
+  const fetchLocations = async () => {
+    try {
+      const res = await fetch(`${api}/api/locations`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLocations(data);
+      }
+    } catch (error) {
+      // Silently fail - locations are optional
+      console.warn('Failed to fetch locations:', error);
+    }
+  };
+
+  const handleLocationChange = async (locationId) => {
+    if (!selectedCard) return;
+
+    setIsUpdatingLocation(true);
+    try {
+      const res = await fetch(`${api}/api/collection/location`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          cardId: selectedCard.id,
+          locationId: locationId || null
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast({
+          title: 'Location Updated',
+          description: `Card location ${locationId ? 'updated' : 'removed'} successfully.`,
+          status: 'success',
+          duration: 2000,
+          isClosable: true,
+        });
+
+        // Update the card in the parent component
+        if (onCountUpdate) {
+          onCountUpdate(selectedCard.id, 'location_updated');
+        }
+      } else {
+        toast({
+          title: 'Error',
+          description: data.message || 'Failed to update location',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Network Error',
+        description: "Could not connect to server.",
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setIsUpdatingLocation(false);
+    }
+  };
+
   if (!selectedCard) return null;
 
   const getCostLabel = (card) => {
@@ -158,6 +241,45 @@ const CardDetailModal = ({
                     >
                       <StyledTextRenderer text={selectedCard.trigger_effect} />
                     </Box>
+                  </Box>
+                )}
+
+                {/* Location Selection - Only show if user owns cards */}
+                {selectedCard.owned_count > 0 && (
+                  <Box>
+                    <FormControl>
+                      <HStack spacing={2} mb={2}>
+                        <FiMapPin />
+                        <FormLabel fontSize="sm" fontWeight="bold" mb={0}>Location</FormLabel>
+                      </HStack>
+                      <Select
+                        value={selectedCard.location?.id || ''}
+                        onChange={(e) => handleLocationChange(e.target.value)}
+                        isDisabled={isUpdatingLocation}
+                        placeholder="No location assigned"
+                        size="sm"
+                      >
+                        {locations.map(location => (
+                          <option key={location.id} value={location.id}>
+                            {location.name} ({location.type})
+                          </option>
+                        ))}
+                      </Select>
+                      {selectedCard.location && (
+                        <HStack mt={1} spacing={2}>
+                          <Tag
+                            colorScheme={selectedCard.location.marker}
+                            size="sm"
+                            textTransform="capitalize"
+                          >
+                            {selectedCard.location.marker}
+                          </Tag>
+                          <Text fontSize="xs" color="gray.600">
+                            {selectedCard.location.type}
+                          </Text>
+                        </HStack>
+                      )}
+                    </FormControl>
                   </Box>
                 )}
 

@@ -337,7 +337,7 @@ app.post('/api/collection/update', isAuthenticated, async (req, res) => {
     }
 });
 
-// Fixed search endpoint in backend/src/index.js
+// Fixed search endpoint with location information (based on original working version)
 app.get('/api/cards/search', isAuthenticated, async (req, res) => {
   const { keyword, ownedOnly, showProxies } = req.query;
   const userId = req.user.id;
@@ -376,22 +376,30 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       return res.status(400).json({ error: 'Search keyword cannot be empty' });
     }
 
+    // Base query with location information added
     let baseQuery = `
       SELECT
         c.id, c.name, c.card_code, c.category, c.color, c.power, c.counter, c.effect, c.trigger_effect, c.img_url,
         c.attributes, c.types, c.block, c.rarity, c.cost,
         COALESCE(oc.owned_count, 0) AS owned_count,
         COALESCE(oc.proxy_count, 0) AS proxy_count,
+        l.id AS location_id,
+        l.name AS location_name,
+        l.type AS location_type,
+        l.marker AS location_marker,
         STRING_AGG(DISTINCT cpa.pack_code, ', ') AS packs
       FROM cards c
       LEFT JOIN (
         SELECT card_id,
                COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
-               COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count
-        FROM owned_cards
+               COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count,
+               -- Get the location of the first owned card
+               (SELECT location_id FROM owned_cards WHERE card_id = oc.card_id AND user_id = $1 AND is_proxy = false LIMIT 1) AS location_id
+        FROM owned_cards oc
         WHERE user_id = $1
         GROUP BY card_id
       ) AS oc ON c.id = oc.card_id
+      LEFT JOIN locations l ON oc.location_id = l.id
       LEFT JOIN card_pack_appearances cpa ON c.id = cpa.card_id
     `;
 
@@ -466,7 +474,7 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
     baseQuery += ` GROUP BY
       c.id, c.name, c.card_code, c.category, c.color, c.power, c.counter, c.effect, c.trigger_effect, c.img_url,
       c.attributes, c.types, c.block, c.rarity, c.cost,
-      oc.owned_count, oc.proxy_count
+      oc.owned_count, oc.proxy_count, oc.location_id, l.id, l.name, l.type, l.marker
     `;
 
     const orderByClauses = [];
@@ -515,13 +523,215 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
     console.log('Parameters:', params);
 
     const results = await query(baseQuery, params);
-    res.json(results.rows);
+
+    // Process results to format location information
+    const processedResults = results.rows.map(card => ({
+      ...card,
+      location: card.location_id ? {
+        id: card.location_id,
+        name: card.location_name,
+        type: card.location_type,
+        marker: card.location_marker
+      } : null
+    }));
+
+    // Remove the separate location fields since we now have the location object
+    processedResults.forEach(card => {
+      delete card.location_id;
+      delete card.location_name;
+      delete card.location_type;
+      delete card.location_marker;
+    });
+
+    res.json(processedResults);
   } catch (err) {
-    console.error('Error executing search query:', err);
-    res.status(500).json({ error: 'Internal server error', message: err.message });
+    console.error('Search error:', err);
+    res.status(500).json({ error: 'Internal server error during search' });
   }
 });
 
+// --- LOCATION MANAGEMENT ROUTES ---
+
+// Get all locations for the authenticated user
+app.get('/api/locations', isAuthenticated, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const result = await query(
+            'SELECT id, name, type, description, marker, notes, created_at, updated_at FROM locations WHERE user_id = $1 ORDER BY name',
+            [userId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error fetching locations:', err);
+        res.status(500).json({ message: 'Server error while fetching locations.' });
+    }
+});
+
+// Create a new location
+app.post('/api/locations', isAuthenticated, async (req, res) => {
+    const { name, type, description, marker, notes } = req.body;
+    const userId = req.user.id;
+
+    if (!name || !type) {
+        return res.status(400).json({ message: 'Name and type are required.' });
+    }
+
+    if (!['case', 'box', 'binder'].includes(type)) {
+        return res.status(400).json({ message: 'Invalid location type.' });
+    }
+
+    const validMarkers = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'gray'];
+    if (marker && !validMarkers.includes(marker)) {
+        return res.status(400).json({ message: 'Invalid marker color.' });
+    }
+
+    try {
+        const result = await query(
+            'INSERT INTO locations (user_id, name, type, description, marker, notes, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id, name, type, description, marker, notes, created_at, updated_at',
+            [userId, name.trim(), type, description?.trim() || null, marker || 'blue', notes?.trim() || null]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') { // Unique constraint violation
+            res.status(409).json({ message: 'A location with this name already exists.' });
+        } else {
+            console.error('Error creating location:', err);
+            res.status(500).json({ message: 'Server error while creating location.' });
+        }
+    }
+});
+
+// Update a location
+app.put('/api/locations/:id', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    const { name, type, description, marker, notes } = req.body;
+    const userId = req.user.id;
+
+    if (!name || !type) {
+        return res.status(400).json({ message: 'Name and type are required.' });
+    }
+
+    if (!['case', 'box', 'binder'].includes(type)) {
+        return res.status(400).json({ message: 'Invalid location type.' });
+    }
+
+    const validMarkers = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'gray'];
+    if (marker && !validMarkers.includes(marker)) {
+        return res.status(400).json({ message: 'Invalid marker color.' });
+    }
+
+    try {
+        const result = await query(
+            'UPDATE locations SET name = $1, type = $2, description = $3, marker = $4, notes = $5, updated_at = NOW() WHERE id = $6 AND user_id = $7 RETURNING id, name, type, description, marker, notes, created_at, updated_at',
+            [name.trim(), type, description?.trim() || null, marker || 'blue', notes?.trim() || null, id, userId]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Location not found or you do not have permission to edit it.' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') { // Unique constraint violation
+            res.status(409).json({ message: 'A location with this name already exists.' });
+        } else {
+            console.error('Error updating location:', err);
+            res.status(500).json({ message: 'Server error while updating location.' });
+        }
+    }
+});
+
+// Delete a location
+app.delete('/api/locations/:id', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    try {
+        await query('BEGIN');
+
+        // First check if the location exists and belongs to the user
+        const locationCheck = await query(
+            'SELECT id, name FROM locations WHERE id = $1 AND user_id = $2',
+            [id, userId]
+        );
+
+        if (locationCheck.rowCount === 0) {
+            await query('ROLLBACK');
+            return res.status(404).json({ message: 'Location not found or you do not have permission to delete it.' });
+        }
+
+        // Remove location from any cards that reference it
+        await query(
+            'UPDATE owned_cards SET location_id = NULL WHERE location_id = $1',
+            [id]
+        );
+
+        // Delete the location
+        const result = await query(
+            'DELETE FROM locations WHERE id = $1 AND user_id = $2',
+            [id, userId]
+        );
+
+        await query('COMMIT');
+
+        res.json({
+            message: 'Location deleted successfully.',
+            deletedLocation: locationCheck.rows[0]
+        });
+    } catch (err) {
+        await query('ROLLBACK');
+        console.error('Error deleting location:', err);
+        res.status(500).json({ message: 'Server error while deleting location.' });
+    }
+});
+
+// Update card location
+app.put('/api/collection/location', isAuthenticated, async (req, res) => {
+    const { cardId, locationId } = req.body;
+    const userId = req.user.id;
+
+    if (!cardId) {
+        return res.status(400).json({ message: 'Card ID is required.' });
+    }
+
+    try {
+        await query('BEGIN');
+
+        // If locationId is provided, verify it exists and belongs to the user
+        if (locationId) {
+            const locationCheck = await query(
+                'SELECT id FROM locations WHERE id = $1 AND user_id = $2',
+                [locationId, userId]
+            );
+
+            if (locationCheck.rowCount === 0) {
+                await query('ROLLBACK');
+                return res.status(404).json({ message: 'Location not found or you do not have permission to use it.' });
+            }
+        }
+
+        // Update all owned cards for this card and user
+        const result = await query(
+            'UPDATE owned_cards SET location_id = $1 WHERE card_id = $2 AND user_id = $3 AND is_proxy = false',
+            [locationId || null, cardId, userId]
+        );
+
+        await query('COMMIT');
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'No owned cards found for this card.' });
+        }
+
+        res.json({
+            message: 'Card location updated successfully.',
+            updatedCards: result.rowCount
+        });
+    } catch (err) {
+        await query('ROLLBACK');
+        console.error('Error updating card location:', err);
+        res.status(500).json({ message: 'Server error while updating card location.' });
+    }
+});
 
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`);
