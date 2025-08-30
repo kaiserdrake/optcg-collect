@@ -100,17 +100,29 @@ export default function CardSearch() {
     }
   };
 
-  const handleCountUpdate = (cardId, newCounts) => {
+  const handleCountUpdate = (cardId, newData) => {
     try {
-      if (!cardId || !newCounts) return;
+      if (!cardId) return;
 
-      setResults(currentResults =>
-        currentResults.map(card =>
-          card && card.id === cardId ? { ...card, ...newCounts } : card
-        )
-      );
-      if (selectedCard && selectedCard.id === cardId) {
-        setSelectedCard(current => ({ ...current, ...newCounts }));
+      // Handle different types of updates
+      if (typeof newData === 'string' || newData === 'location_updated') {
+        // This is a location update, don't try to update counts
+        // Just refresh the card data from the server
+        refreshCardLocationInResults(cardId);
+        return;
+      }
+
+      // Handle normal count updates (from CountControl)
+      if (newData && typeof newData === 'object') {
+        setResults(currentResults =>
+          currentResults.map(card =>
+            card && card.id === cardId ? { ...card, ...newData } : card
+          )
+        );
+
+        if (selectedCard && selectedCard.id === cardId) {
+          setSelectedCard(current => ({ ...current, ...newData }));
+        }
       }
     } catch (err) {
       console.error('Error updating card count:', err);

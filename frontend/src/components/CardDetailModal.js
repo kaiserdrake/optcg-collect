@@ -74,9 +74,25 @@ const CardDetailModal = ({
           isClosable: true,
         });
 
-        // Update the card in the parent component
-        if (onCountUpdate) {
-          onCountUpdate(selectedCard.id, 'location_updated');
+        // FIXED: Instead of calling onCountUpdate with 'location_updated',
+        // fetch the updated card data to get the proper location info
+        try {
+          const cardRes = await fetch(`${api}/api/cards/search?keyword=id:${selectedCard.id}&ownedOnly=false&showProxies=true`, {
+            credentials: 'include'
+          });
+          if (cardRes.ok) {
+            const cardData = await cardRes.json();
+            if (cardData.length > 0 && onCountUpdate) {
+              // Pass the updated card data with location information
+              onCountUpdate(selectedCard.id, cardData[0]);
+            }
+          }
+        } catch (fetchError) {
+          console.warn('Failed to refresh card data:', fetchError);
+          // Fallback: just refresh the location part
+          if (onCountUpdate) {
+            onCountUpdate(selectedCard.id, { location_updated: true });
+          }
         }
       } else {
         toast({
@@ -290,8 +306,8 @@ const CardDetailModal = ({
                   />
                 </Box>
               )}
-              {/* Location Selection - Only show if user owns cards */}
-              {selectedCard.owned_count > 0 && (
+              {/* Location Selection */}
+              {((selectedCard.owned_count > 0) || (selectedCard.proxy_count > 0)) && (
                 <Box>
                   <FormControl>
                     <HStack spacing={2} mb={2}>

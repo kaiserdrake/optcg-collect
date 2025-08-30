@@ -722,16 +722,16 @@ app.put('/api/collection/location', isAuthenticated, async (req, res) => {
             }
         }
 
-        // Update all owned cards for this card and user
+        // This allows setting location for proxy cards when owned_count = 0 but proxy_count > 0
         const result = await query(
-            'UPDATE owned_cards SET location_id = $1 WHERE card_id = $2 AND user_id = $3 AND is_proxy = false',
+            'UPDATE owned_cards SET location_id = $1 WHERE card_id = $2 AND user_id = $3',
             [locationId || null, cardId, userId]
         );
 
         await query('COMMIT');
 
         if (result.rowCount === 0) {
-            return res.status(404).json({ message: 'No owned cards found for this card.' });
+            return res.status(404).json({ message: 'No cards found for this card. You must own or have proxy cards to set a location.' });
         }
 
         res.json({

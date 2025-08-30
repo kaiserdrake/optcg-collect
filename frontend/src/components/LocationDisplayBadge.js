@@ -26,19 +26,48 @@ const truncate = (str, maxLen = 80) => {
 };
 
 const LocationDisplayBadge = ({ card, onClick }) => {
+  // Early return if card is not provided or invalid
+  if (!card) return null;
+
   const owned = card.owned_count || 0;
   const proxy = card.proxy_count || 0;
+
   const hasCard = owned > 0 || proxy > 0;
   if (!hasCard) return null;
+
   const location = card.location;
   let text, marker;
-  if (owned > 0) {
+
+  if (owned > 0 || proxy > 0) {
     text = location?.name ? location.name : 'Set Location';
-    marker = location?.marker || (location?.name ? 'gray' : 'gray');
+    marker = location?.marker || 'gray';
   } else {
     return null;
   }
+
+  // Ensure we have a valid marker
+  if (!marker) marker = 'gray';
+
   const color = markerColorToColor(marker);
+
+  const handleBadgeClick = (e) => {
+    // Stop both propagation and default behavior
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Also stop immediate propagation to prevent any parent handlers
+    if (e.stopImmediatePropagation) {
+      e.stopImmediatePropagation();
+    }
+
+    // Call the location onClick handler if it exists and card is valid
+    if (onClick && card) {
+      onClick(card);
+    }
+  };
+
+  // Ensure we have required data before rendering
+  if (!text || !color) return null;
 
   // Tooltip content
   const tooltipContent = location?.name ? (
@@ -89,29 +118,46 @@ const LocationDisplayBadge = ({ card, onClick }) => {
         fontWeight: 'medium'
       };
 
+  // Additional safety check
+  if (!badgeStyles.color) {
+    badgeStyles.color = 'gray.500';
+  }
+
   return (
     <Tooltip label={tooltipContent} hasArrow placement="top" maxW="320px" p={2} bg="white" color="black" boxShadow="md">
-      <Tag
-        size="sm"
-        cursor="pointer"
-        borderRadius="md"
-        {...badgeStyles}
-        _hover={{
-          opacity: 0.85,
-          boxShadow: 'md',
-          bg: isDefault ? `${marker}.50` : color
-        }}
-        onClick={e => {
-          e.stopPropagation();
-          onClick && onClick(card);
-        }}
-        tabIndex={0}
+      <Box
+        as="span"
+        display="inline-block"
+        onClick={handleBadgeClick}
+        onMouseDown={(e) => e.stopPropagation()} // Prevent mousedown from bubbling
+        onMouseUp={(e) => e.stopPropagation()}   // Prevent mouseup from bubbling
       >
-        <HStack spacing={1}>
-          <FiMapPin />
-          <Text fontSize="xs" color={badgeStyles.color}>{text}</Text>
-        </HStack>
-      </Tag>
+        <Tag
+          size="sm"
+          cursor="pointer"
+          borderRadius="md"
+          {...badgeStyles}
+          _hover={{
+            opacity: 0.85,
+            boxShadow: 'md',
+            bg: isDefault ? `${color}15` : color
+          }}
+          // Remove onClick from Tag since it's now handled by the Box
+          tabIndex={0}
+          role="button"
+          onKeyDown={(e) => {
+            // Handle keyboard accessibility
+            if (e.key === 'Enter' || e.key === ' ') {
+              handleBadgeClick(e);
+            }
+          }}
+        >
+          <HStack spacing={1}>
+            <FiMapPin />
+            <Text fontSize="xs" color={badgeStyles.color}>{text}</Text>
+          </HStack>
+        </Tag>
+      </Box>
     </Tooltip>
   );
 };

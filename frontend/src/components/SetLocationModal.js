@@ -41,20 +41,43 @@ const SetLocationModal = ({ isOpen, onClose, card, onLocationSet, onManageLocati
     }
   }, [isOpen, card, api]);
 
-  const handleSave = () => {
+
+  const handleSave = async () => {
+    if (!card) return;
+
     setSaving(true);
-    fetch(`${api}/api/collection/location`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ cardId: card.id, locationId: selectedLocationId || null }),
-    })
-      .then(res => res.json())
-      .then(() => {
-        onLocationSet && onLocationSet();
+    try {
+      const res = await fetch(`${api}/api/collection/location`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          cardId: card.id,
+          locationId: selectedLocationId || null
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        // Close modal first
         onClose();
-      })
-      .finally(() => setSaving(false));
+
+        // Then trigger the location update callback
+        if (onLocationSet) {
+          onLocationSet();
+        }
+      } else {
+        // Show error toast if the request failed
+        console.error('Location update failed:', data.message);
+        // Let the calling component handle the error
+      }
+    } catch (error) {
+      console.error('Network error updating location:', error);
+      // Let the calling component handle the error
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
