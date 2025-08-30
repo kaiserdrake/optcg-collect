@@ -1,6 +1,6 @@
 'use client';
 
-import { Tag, HStack, Text, Tooltip } from '@chakra-ui/react';
+import { Tag, HStack, Text, Tooltip, Box } from '@chakra-ui/react';
 import { FiMapPin } from 'react-icons/fi';
 
 // Helper: Chakra color for marker
@@ -18,6 +18,13 @@ const markerColorToColor = (marker) => {
   }
 };
 
+// Truncate a string to maxLen, adding ellipsis if needed
+const truncate = (str, maxLen = 80) => {
+  if (!str) return '';
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen - 1) + '…';
+};
+
 const LocationDisplayBadge = ({ card, onClick }) => {
   const owned = card.owned_count || 0;
   const proxy = card.proxy_count || 0;
@@ -33,23 +40,66 @@ const LocationDisplayBadge = ({ card, onClick }) => {
   }
   const color = markerColorToColor(marker);
 
+  // Tooltip content
+  const tooltipContent = location?.name ? (
+    <Box>
+      <Text fontWeight="bold" fontSize="sm">
+        Location: {location.name}
+      </Text>
+      <Text fontSize="xs" color="gray.600">
+        Type: {location.type || '-'}
+      </Text>
+      {location.description && (
+        <Text fontSize="xs" color="gray.500" mt={1}>
+          {truncate(location.description, 80)}
+        </Text>
+      )}
+      <Text fontSize="xs" color="gray.400" mt={1}>
+        Click to change location
+      </Text>
+    </Box>
+  ) : (
+    <Box>
+      <Text fontWeight="bold" fontSize="sm">
+        Assign a location to this card
+      </Text>
+      <Text fontSize="xs" color="gray.400" mt={1}>
+        Click to set location
+      </Text>
+    </Box>
+  );
+
+  // Style for "Set Location" (default) and with value
+  const isDefault = !location?.name;
+  const badgeStyles = isDefault
+    ? {
+        border: 'none',
+        background: 'transparent',
+        color: color,
+        px: 2,
+        py: 1,
+        fontWeight: 'medium'
+      }
+    : {
+        border: 'none',
+        background: color,
+        color: 'white',
+        px: 2,
+        py: 1,
+        fontWeight: 'medium'
+      };
+
   return (
-    <Tooltip label={location?.name ? `Location: ${location.name}` : 'Assign a location to this card'}>
+    <Tooltip label={tooltipContent} hasArrow placement="top" maxW="320px" p={2} bg="white" color="black" boxShadow="md">
       <Tag
         size="sm"
         cursor="pointer"
         borderRadius="md"
-        variant="outline"
-        fontWeight="medium"
-        borderColor={color}
-        color={color}
-        bg="transparent"
-        px={2}
-        py={1}
+        {...badgeStyles}
         _hover={{
           opacity: 0.85,
           boxShadow: 'md',
-          bg: `${marker}.50`
+          bg: isDefault ? `${marker}.50` : color
         }}
         onClick={e => {
           e.stopPropagation();
@@ -59,7 +109,7 @@ const LocationDisplayBadge = ({ card, onClick }) => {
       >
         <HStack spacing={1}>
           <FiMapPin />
-          <Text fontSize="xs" color={color}>{text}</Text>
+          <Text fontSize="xs" color={badgeStyles.color}>{text}</Text>
         </HStack>
       </Tag>
     </Tooltip>
