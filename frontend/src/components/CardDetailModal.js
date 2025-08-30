@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
   Box, Text, VStack, HStack, Tag, Grid, GridItem, Wrap, WrapItem,
-  Flex, Heading, Button, Table, Tbody, Tr, Td, Select, FormControl, FormLabel,
-  useToast
+  Flex, Heading, Button, Table, Tbody, Tr, Td,
+  useToast, useDisclosure
 } from '@chakra-ui/react';
-import { FiMapPin } from 'react-icons/fi';
 import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
 import StyledTextRenderer from './StyledTextRenderer';
 import CardImage from './CardImage';
+import LocationDisplayBadge from './LocationDisplayBadge';
+import SetLocationModal from './SetLocationModal';
 import { getTagStyles } from '@/utils/cardStyles';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -21,339 +22,264 @@ const CardDetailModal = ({
   showProxies,
   onCountUpdate
 }) => {
-  const [locations, setLocations] = useState([]);
-  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  const [cardData, setCardData] = useState(selectedCard);
+  const [locationModalCard, setLocationModalCard] = useState(null);
+  const { isOpen: isLocationModalOpen, onOpen: onLocationModalOpen, onClose: onLocationModalClose } = useDisclosure();
   const toast = useToast();
 
+  // Update cardData when selectedCard changes
   useEffect(() => {
-    if (isOpen) {
-      fetchLocations();
-    }
-  }, [isOpen]);
+    setCardData(selectedCard);
+  }, [selectedCard]);
 
-  const fetchLocations = async () => {
-    try {
-      const res = await fetch(`${api}/api/locations`, {
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setLocations(data);
-      }
-    } catch (error) {
-      // Silently fail - locations are optional
-      console.warn('Failed to fetch locations:', error);
-    }
+  // Handle location modal opening
+  const handleLocationBadgeClick = (card) => {
+    setLocationModalCard(card);
+    onLocationModalOpen();
   };
 
-  const handleLocationChange = async (locationId) => {
-    if (!selectedCard) return;
+  // Handle location modal closing
+  const handleLocationModalClose = () => {
+    setLocationModalCard(null);
+    onLocationModalClose();
+  };
 
-    setIsUpdatingLocation(true);
+  // Handle location update callback
+  const handleLocationUpdate = async () => {
+    if (!cardData?.id) return;
+
     try {
-      const res = await fetch(`${api}/api/collection/location`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      // Use the search endpoint to fetch updated card data (same approach as CardSearch)
+      const res = await fetch(`${api}/api/cards/search?keyword=id:${cardData.id}&ownedOnly=true`, {
         credentials: 'include',
-        body: JSON.stringify({
-          cardId: selectedCard.id,
-          locationId: locationId || null
-        }),
       });
-
-      const data = await res.json();
-
       if (res.ok) {
-        toast({
-          title: 'Location Updated',
-          description: `Card location ${locationId ? 'updated' : 'removed'} successfully.`,
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
+        const searchResults = await res.json();
+        if (searchResults.length > 0) {
+          const updatedCard = searchResults[0];
+          setCardData(updatedCard);
 
-        // FIXED: Instead of calling onCountUpdate with 'location_updated',
-        // fetch the updated card data to get the proper location info
-        try {
-          const cardRes = await fetch(`${api}/api/cards/search?keyword=id:${selectedCard.id}&ownedOnly=false&showProxies=true`, {
-            credentials: 'include'
-          });
-          if (cardRes.ok) {
-            const cardData = await cardRes.json();
-            if (cardData.length > 0 && onCountUpdate) {
-              // Pass the updated card data with location information
-              onCountUpdate(selectedCard.id, cardData[0]);
-            }
-          }
-        } catch (fetchError) {
-          console.warn('Failed to refresh card data:', fetchError);
-          // Fallback: just refresh the location part
+          // Call the parent's onCountUpdate with the special 'location_updated' string
+          // This matches how CardSearch handles location updates
           if (onCountUpdate) {
-            onCountUpdate(selectedCard.id, { location_updated: true });
+            onCountUpdate(updatedCard.id, 'location_updated');
           }
         }
-      } else {
-        toast({
-          title: 'Error',
-          description: data.message || 'Failed to update location',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
       }
     } catch (error) {
-      toast({
-        title: 'Network Error',
-        description: "Could not connect to server.",
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-    } finally {
-      setIsUpdatingLocation(false);
+      console.warn('Failed to refresh card data:', error);
     }
   };
 
-  if (!selectedCard) return null;
+  if (!cardData) return null;
 
   const getCostLabel = (card) => {
     return card.category === 'LEADER' ? 'Life' : 'Cost';
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
-      <ModalOverlay bg="blackAlpha.600" />
-      <ModalContent bg="white" borderRadius="xl" overflow="hidden">
-        {/* Header with card id, rarity, and type */}
-        <ModalHeader bg="black" color="white" textAlign="center" py={3}>
-          <VStack spacing={1}>
-            <HStack spacing={4} justify="center" align="center">
-              <Text fontSize="sm" fontWeight="bold" letterSpacing="wider">
-                {selectedCard.card_code} | {selectedCard.rarity} | {selectedCard.category}
-              </Text>
-              <CardVariantIndicator cardId={selectedCard.id} />
-            </HStack>
-            <Text fontSize="xl" fontWeight="bold" letterSpacing="wide">
-              {selectedCard.name}
-            </Text>
-          </VStack>
-        </ModalHeader>
-
-        <ModalCloseButton color="white" size="lg" />
-
-        <ModalBody p={0}>
-          <Grid templateColumns={{ base: "1fr", md: "350px 1fr" }} gap={0} minH="400px">
-            {/* Left side - Card Image */}
-            <GridItem display="flex" alignItems="center" justifyContent="center" p={4}>
-              <Box maxW="320px" maxH="450px">
-                <CardImage
-                  width="100%"
-                  height="auto"
-                  src={selectedCard.img_url}
-                  alt={selectedCard.name}
-                  fallbackSrc="/placeholder.png"
-                />
-              </Box>
-            </GridItem>
-
-            {/* Right side - Card Details */}
-            <GridItem p={4}>
-              <VStack align="stretch" spacing={4} h="100%">
-                {/* Stats Table */}
-                <Table variant="simple" size="sm">
-                  <Tbody>
-                    {(selectedCard.cost !== null && selectedCard.cost !== undefined && selectedCard.cost !== '-') && (
-                      <Tr>
-                        <Td fontWeight="bold" w="100px" p={2} fontSize="sm">
-                          {selectedCard.category === 'LEADER' ? 'Life' : 'Cost'}
-                        </Td>
-                        <Td p={2} fontSize="md">{selectedCard.cost}</Td>
-                        <Td fontWeight="bold" w="100px" p={2} fontSize="sm">Attribute</Td>
-                        <Td p={2} fontSize="md">
-                          {selectedCard.attributes || selectedCard.color || '-'}
-                        </Td>
-                      </Tr>
-                    )}
-                    {(selectedCard.power || selectedCard.counter) && (
-                      <Tr>
-                        {selectedCard.power && (
-                          <>
-                            <Td fontWeight="bold" p={2} fontSize="sm">Power</Td>
-                            <Td p={2} fontSize="md">{selectedCard.power.toLocaleString()}</Td>
-                          </>
-                        )}
-                        {selectedCard.counter && (
-                          <>
-                            <Td fontWeight="bold" p={2} fontSize="sm">Counter</Td>
-                            <Td p={2} fontSize="md">+{selectedCard.counter}</Td>
-                          </>
-                        )}
-                      </Tr>
-                    )}
-                    {(selectedCard.color || selectedCard.block) && (
-                      <Tr>
-                        {selectedCard.color && (
-                          <>
-                            <Td fontWeight="bold" p={2} fontSize="sm">Color</Td>
-                            <Td p={2} fontSize="md">
-                              <Tag {...getTagStyles(selectedCard.color)} size="md">
-                                {selectedCard.color}
-                              </Tag>
-                            </Td>
-                          </>
-                        )}
-                        {(selectedCard.block && selectedCard.block !== '-') && (
-                          <>
-                            <Td fontWeight="bold" p={2} fontSize="sm">Block icon</Td>
-                            <Td p={2} fontSize="md">{selectedCard.block}</Td>
-                          </>
-                        )}
-                      </Tr>
-                    )}
-                  </Tbody>
-                </Table>
-
-                {/* Types */}
-                {selectedCard.types && (
-                  <Box>
-                    <Text fontWeight="bold" fontSize="sm" mb={1}>Types</Text>
-                    <Text fontSize="sm">
-                      {Array.isArray(selectedCard.types) ?
-                        selectedCard.types.join(', ') :
-                        selectedCard.types.toString().replace(/[,\s]+/g, ', ')
-                      }
-                    </Text>
-                  </Box>
-                )}
-
-                {/* Effect */}
-                {selectedCard.effect && selectedCard.effect.trim() !== '' && selectedCard.effect.trim() !== '-' && (
-                  <Box flex={1}>
-                    <Text fontWeight="bold" fontSize="sm" mb={1}>Effect</Text>
-                    <Box
-                      bg="white"
-                      p={3}
-                      borderRadius="md"
-                      minH="60px"
-                      fontSize="sm"
-                    >
-                      <StyledTextRenderer text={selectedCard.effect} />
-                    </Box>
-                  </Box>
-                )}
-
-                {/* Trigger Effect */}
-                {selectedCard.trigger_effect && selectedCard.trigger_effect.trim() !== '' && selectedCard.trigger_effect.trim() !== '-' && (
-                  <Box>
-                    <Box
-                      bg="black"
-                      color="white"
-                      p={3}
-                      borderRadius="md"
-                      minH="50px"
-                      fontSize="sm"
-                    >
-                      <StyledTextRenderer text={selectedCard.trigger_effect} />
-                    </Box>
-                  </Box>
-                )}
-                {/* Appears In */}
-                {selectedCard.packs && (
-                  <Box>
-                    <Text fontWeight="bold" fontSize="sm" mb={1}>Set(s)</Text>
-                    <Wrap>
-                      {selectedCard.packs.split(', ').map(pack => (
-                        <WrapItem key={pack}>
-                          <Tag size="sm">{pack}</Tag>
-                        </WrapItem>
-                      ))}
-                    </Wrap>
-                  </Box>
-                )}
-              </VStack>
-            </GridItem>
-          </Grid>
-        </ModalBody>
-
-        <ModalFooter py={3}>
-          <HStack spacing={4} width="100%" justify="space-between">
-            {/* Count Controls */}
-            <HStack spacing={6}>
-              <Box textAlign="center">
-                <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
-                  Owned Cards
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
+        <ModalOverlay bg="blackAlpha.600" />
+        <ModalContent bg="white" borderRadius="xl" overflow="hidden">
+          {/* Header with card id, rarity, and type */}
+          <ModalHeader bg="black" color="white" textAlign="center" py={3}>
+            <VStack spacing={1}>
+              <HStack spacing={4} justify="center" align="center">
+                <Text fontSize="sm" fontWeight="bold" letterSpacing="wider">
+                  {cardData.card_code} | {cardData.rarity} | {cardData.category}
                 </Text>
-                <CountControl
-                  cardId={selectedCard.id}
-                  type="owned"
-                  count={selectedCard.owned_count || 0}
-                  onUpdate={onCountUpdate}
-                />
-              </Box>
+                <CardVariantIndicator cardId={cardData.id} />
+              </HStack>
+              <Text fontSize="xl" fontWeight="bold" letterSpacing="wide">
+                {cardData.name}
+              </Text>
+            </VStack>
+          </ModalHeader>
 
-              {showProxies && (
+          <ModalCloseButton color="white" size="lg" />
+
+          <ModalBody p={0}>
+            <Grid templateColumns={{ base: "1fr", md: "350px 1fr" }} gap={0} minH="400px">
+              {/* Left side - Card Image */}
+              <GridItem display="flex" alignItems="center" justifyContent="center" p={4}>
+                <Box maxW="320px" maxH="450px">
+                  <CardImage
+                    width="100%"
+                    height="auto"
+                    src={cardData.img_url}
+                    alt={cardData.name}
+                    fallbackSrc="/placeholder.png"
+                  />
+                </Box>
+              </GridItem>
+
+              {/* Right side - Card Details */}
+              <GridItem p={4}>
+                <VStack align="stretch" spacing={4} h="100%">
+                  {/* Stats Table */}
+                  <Table variant="simple" size="sm">
+                    <Tbody>
+                      {(cardData.cost !== null && cardData.cost !== undefined && cardData.cost !== '-') && (
+                        <Tr>
+                          <Td fontWeight="bold" w="100px" p={2} fontSize="sm">
+                            {cardData.category === 'LEADER' ? 'Life' : 'Cost'}
+                          </Td>
+                          <Td p={2} fontSize="sm">{cardData.cost}</Td>
+                        </Tr>
+                      )}
+                      {cardData.power && (
+                        <Tr>
+                          <Td fontWeight="bold" p={2} fontSize="sm">Power</Td>
+                          <Td p={2} fontSize="sm">{cardData.power.toLocaleString()}</Td>
+                        </Tr>
+                      )}
+                      {cardData.counter && (
+                        <Tr>
+                          <Td fontWeight="bold" p={2} fontSize="sm">Counter</Td>
+                          <Td p={2} fontSize="sm">+{cardData.counter}</Td>
+                        </Tr>
+                      )}
+                      {cardData.color && (
+                        <Tr>
+                          <Td fontWeight="bold" p={2} fontSize="sm">Color</Td>
+                          <Td p={2} fontSize="sm">
+                            <Tag size="sm" {...getTagStyles(cardData.color)}>
+                              {cardData.color}
+                            </Tag>
+                          </Td>
+                        </Tr>
+                      )}
+                      {cardData.type && (
+                        <Tr>
+                          <Td fontWeight="bold" p={2} fontSize="sm">Type</Td>
+                          <Td p={2} fontSize="sm">{cardData.type}</Td>
+                        </Tr>
+                      )}
+                      {cardData.attribute && (
+                        <Tr>
+                          <Td fontWeight="bold" p={2} fontSize="sm">Attribute</Td>
+                          <Td p={2} fontSize="sm">{cardData.attribute}</Td>
+                        </Tr>
+                      )}
+                    </Tbody>
+                  </Table>
+
+                  {/* Effect Text */}
+                  {cardData.effect && (
+                    <Box>
+                      <Heading size="sm" mb={2} color="gray.700">Effect</Heading>
+                      <Box
+                        p={3}
+                        bg="gray.50"
+                        borderRadius="md"
+                        borderLeft="4px solid"
+                        borderLeftColor="blue.400"
+                      >
+                        <StyledTextRenderer text={cardData.effect} fontSize="sm" />
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Trigger Effect */}
+                  {cardData.trigger_effect && (
+                    <Box>
+                      <Heading size="sm" mb={2} color="gray.700">Trigger</Heading>
+                      <Box
+                        p={3}
+                        bg="red.50"
+                        borderRadius="md"
+                        borderLeft="4px solid"
+                        borderLeftColor="red.400"
+                      >
+                        <StyledTextRenderer text={cardData.trigger_effect} fontSize="sm" />
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Packs */}
+                  {cardData.packs && (
+                    <Box>
+                      <Heading size="sm" mb={2} color="gray.700">Available In</Heading>
+                      <Wrap spacing={2}>
+                        {cardData.packs.split(', ').map(pack => (
+                          <WrapItem key={pack}>
+                            <Tag size="sm">{pack}</Tag>
+                          </WrapItem>
+                        ))}
+                      </Wrap>
+                    </Box>
+                  )}
+                </VStack>
+              </GridItem>
+            </Grid>
+          </ModalBody>
+
+          <ModalFooter py={3}>
+            <HStack spacing={4} width="100%" justify="space-between">
+              {/* Count Controls */}
+              <HStack spacing={6}>
                 <Box textAlign="center">
                   <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
-                    Proxy Cards
+                    Owned Cards
                   </Text>
                   <CountControl
-                    cardId={selectedCard.id}
-                    type="proxy"
-                    count={selectedCard.proxy_count || 0}
+                    cardId={cardData.id}
+                    type="owned"
+                    count={cardData.owned_count || 0}
                     onUpdate={onCountUpdate}
                   />
                 </Box>
-              )}
-              {/* Location Selection */}
-              {((selectedCard.owned_count > 0) || (selectedCard.proxy_count > 0)) && (
-                <Box>
-                  <FormControl>
-                    <HStack spacing={2} mb={2}>
-                      <FiMapPin />
-                      <FormLabel fontSize="sm" fontWeight="bold" mb={0}>Location</FormLabel>
-                    </HStack>
-                    <Select
-                      value={selectedCard.location?.id || ''}
-                      onChange={(e) => handleLocationChange(e.target.value)}
-                      isDisabled={isUpdatingLocation}
-                      placeholder="No location assigned"
-                      size="sm"
-                    >
-                      {locations.map(location => (
-                        <option key={location.id} value={location.id}>
-                          {location.name} ({location.type})
-                        </option>
-                      ))}
-                    </Select>
-                    {selectedCard.location && (
-                      <HStack mt={1} spacing={2}>
-                        <Tag
-                          colorScheme={selectedCard.location.marker}
-                          size="sm"
-                          textTransform="capitalize"
-                        >
-                          {selectedCard.location.marker}
-                        </Tag>
-                        <Text fontSize="xs" color="gray.600">
-                          {selectedCard.location.type}
-                        </Text>
-                      </HStack>
-                    )}
-                  </FormControl>
-                </Box>
-              )}
 
+                {showProxies && (
+                  <Box textAlign="center">
+                    <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
+                      Proxy Cards
+                    </Text>
+                    <CountControl
+                      cardId={cardData.id}
+                      type="proxy"
+                      count={cardData.proxy_count || 0}
+                      onUpdate={onCountUpdate}
+                    />
+                  </Box>
+                )}
+
+                {/* Location Badge - using the same components as ListCard */}
+                {((cardData.owned_count > 0) || (cardData.proxy_count > 0)) && (
+                  <Box textAlign="center">
+                    <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
+                      Location
+                    </Text>
+                    <LocationDisplayBadge
+                      card={cardData}
+                      onClick={handleLocationBadgeClick}
+                    />
+                  </Box>
+                )}
+              </HStack>
+
+              <Button colorScheme="blue" onClick={onClose}>
+                Close
+              </Button>
             </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
-            <Button colorScheme="blue" onClick={onClose}>
-              Close
-            </Button>
-          </HStack>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+      {/* SetLocationModal - same as used in CardSearch */}
+      <SetLocationModal
+        isOpen={isLocationModalOpen}
+        onClose={handleLocationModalClose}
+        card={locationModalCard}
+        onLocationSet={handleLocationUpdate}
+        onManageLocations={() => {
+          handleLocationModalClose();
+          // You might want to add a callback here to open LocationManagementModal
+          // if the parent component supports it
+        }}
+      />
+    </>
   );
 };
 
