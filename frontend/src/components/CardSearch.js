@@ -439,7 +439,7 @@ export default function CardSearch() {
 
       {/* Filters and View Toggle */}
       <HStack mb={4} justify="space-between" wrap="wrap" spacing={4}>
-        <HStack spacing={2}>
+        <HStack spacing={2} align="center">
           <Text fontSize="sm" color="gray.600">View:</Text>
           <Tooltip label="List View">
             <IconButton
@@ -461,6 +461,29 @@ export default function CardSearch() {
               onClick={() => setViewMode('thumbnail')}
             />
           </Tooltip>
+          {/* Thumbnail Size Slider (only show in thumbnail mode) */}
+          {viewMode === 'thumbnail' && (
+            <HStack ml={3} spacing={2} align="center">
+              <Text fontSize="sm" color="gray.600">Thumbnail Size:</Text>
+              <Slider
+                value={thumbnailSize}
+                onChange={(value) => setThumbnailSize(value)}
+                min={120}
+                max={250}
+                step={10}
+                width="120px"
+                aria-label="Thumbnail Size"
+              >
+                <SliderTrack>
+                  <SliderFilledTrack />
+                </SliderTrack>
+                <SliderThumb />
+              </Slider>
+              <Text fontSize="xs" color="gray.500" minW="36px" textAlign="right">
+                {thumbnailSize}px
+              </Text>
+            </HStack>
+          )}
         </HStack>
 
         <HStack spacing={4}>
@@ -487,26 +510,6 @@ export default function CardSearch() {
           </FormControl>
         </HStack>
       </HStack>
-
-      {/* Thumbnail Size Slider (only show in thumbnail mode) */}
-      {viewMode === 'thumbnail' && (
-        <Box mb={4}>
-          <Text fontSize="sm" color="gray.600" mb={2}>Thumbnail Size:</Text>
-          <Slider
-            value={thumbnailSize}
-            onChange={(value) => setThumbnailSize(value)}
-            min={120}
-            max={250}
-            step={10}
-            width="200px"
-          >
-            <SliderTrack>
-              <SliderFilledTrack />
-            </SliderTrack>
-            <SliderThumb />
-          </Slider>
-        </Box>
-      )}
 
       {/* Loading state now uses subtle box */}
       {loading && (

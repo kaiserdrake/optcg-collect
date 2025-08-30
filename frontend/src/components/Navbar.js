@@ -230,20 +230,20 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                     <MenuDivider />
                   </Box>
 
-                  {/* Location Management */}
-                  <MenuItem
-                    onClick={onLocationsOpen}
-                    icon={<FiMapPin />}
-                  >
-                    Manage Locations
-                  </MenuItem>
-
                   {/* Settings */}
                   <MenuItem
                     onClick={onSettingsOpen}
                     icon={<FiSettings />}
                   >
                     Account Settings
+                  </MenuItem>
+
+                  {/* Location Management */}
+                  <MenuItem
+                    onClick={onLocationsOpen}
+                    icon={<FiMapPin />}
+                  >
+                    Manage Locations
                   </MenuItem>
 
                   {/* Admin Options */}
@@ -262,7 +262,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                         icon={<FiDownload />}
                       >
                         <HStack spacing={2} w="full" justify="space-between">
-                          <Text>Sync CardList</Text>
+                          <Text>Sync Card List</Text>
                           {isSyncing && <Spinner size="xs" />}
                         </HStack>
                       </MenuItem>

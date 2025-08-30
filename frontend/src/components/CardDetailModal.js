@@ -243,46 +243,6 @@ const CardDetailModal = ({
                     </Box>
                   </Box>
                 )}
-
-                {/* Location Selection - Only show if user owns cards */}
-                {selectedCard.owned_count > 0 && (
-                  <Box>
-                    <FormControl>
-                      <HStack spacing={2} mb={2}>
-                        <FiMapPin />
-                        <FormLabel fontSize="sm" fontWeight="bold" mb={0}>Location</FormLabel>
-                      </HStack>
-                      <Select
-                        value={selectedCard.location?.id || ''}
-                        onChange={(e) => handleLocationChange(e.target.value)}
-                        isDisabled={isUpdatingLocation}
-                        placeholder="No location assigned"
-                        size="sm"
-                      >
-                        {locations.map(location => (
-                          <option key={location.id} value={location.id}>
-                            {location.name} ({location.type})
-                          </option>
-                        ))}
-                      </Select>
-                      {selectedCard.location && (
-                        <HStack mt={1} spacing={2}>
-                          <Tag
-                            colorScheme={selectedCard.location.marker}
-                            size="sm"
-                            textTransform="capitalize"
-                          >
-                            {selectedCard.location.marker}
-                          </Tag>
-                          <Text fontSize="xs" color="gray.600">
-                            {selectedCard.location.type}
-                          </Text>
-                        </HStack>
-                      )}
-                    </FormControl>
-                  </Box>
-                )}
-
                 {/* Appears In */}
                 {selectedCard.packs && (
                   <Box>
@@ -330,6 +290,45 @@ const CardDetailModal = ({
                   />
                 </Box>
               )}
+              {/* Location Selection - Only show if user owns cards */}
+              {selectedCard.owned_count > 0 && (
+                <Box>
+                  <FormControl>
+                    <HStack spacing={2} mb={2}>
+                      <FiMapPin />
+                      <FormLabel fontSize="sm" fontWeight="bold" mb={0}>Location</FormLabel>
+                    </HStack>
+                    <Select
+                      value={selectedCard.location?.id || ''}
+                      onChange={(e) => handleLocationChange(e.target.value)}
+                      isDisabled={isUpdatingLocation}
+                      placeholder="No location assigned"
+                      size="sm"
+                    >
+                      {locations.map(location => (
+                        <option key={location.id} value={location.id}>
+                          {location.name} ({location.type})
+                        </option>
+                      ))}
+                    </Select>
+                    {selectedCard.location && (
+                      <HStack mt={1} spacing={2}>
+                        <Tag
+                          colorScheme={selectedCard.location.marker}
+                          size="sm"
+                          textTransform="capitalize"
+                        >
+                          {selectedCard.location.marker}
+                        </Tag>
+                        <Text fontSize="xs" color="gray.600">
+                          {selectedCard.location.type}
+                        </Text>
+                      </HStack>
+                    )}
+                  </FormControl>
+                </Box>
+              )}
+
             </HStack>
 
             <Button colorScheme="blue" onClick={onClose}>
