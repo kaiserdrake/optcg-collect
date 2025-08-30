@@ -11,13 +11,11 @@ import {
 } from '@chakra-ui/react';
 import { FiMapPin, FiEdit2, FiTrash2, FiPlus } from 'react-icons/fi';
 
-const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-// Color options for location markers
+// Color swatch picker for marker selection
 const colorOptions = [
   { value: 'red', label: 'Red', color: 'red.500' },
   { value: 'orange', label: 'Orange', color: 'orange.500' },
-  { value: 'yellow', label: 'Yellow', color: 'yellow.500' },
+  { value: 'yellow', label: 'Yellow', color: 'yellow.400' },
   { value: 'green', label: 'Green', color: 'green.500' },
   { value: 'blue', label: 'Blue', color: 'blue.500' },
   { value: 'purple', label: 'Purple', color: 'purple.500' },
@@ -25,7 +23,6 @@ const colorOptions = [
   { value: 'gray', label: 'Gray', color: 'gray.500' }
 ];
 
-// Location type options
 const typeOptions = [
   { value: 'case', label: 'Case' },
   { value: 'box', label: 'Box' },
@@ -92,6 +89,51 @@ const locationReducer = (state, action) => {
       return state;
   }
 };
+
+const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+// Swatch color picker component
+const ColorMarkerPicker = ({ value, onChange }) => (
+  <HStack spacing={3} flexWrap="wrap">
+    {colorOptions.map(option => (
+      <Button
+        key={option.value}
+        aria-label={option.label}
+        size="sm"
+        borderRadius="full"
+        borderWidth={value === option.value ? '2px' : '1px'}
+        borderColor={value === option.value ? 'blue.600' : 'gray.300'}
+        bg={option.color}
+        _hover={{ borderColor: 'blue.300', transform: 'scale(1.15)' }}
+        _focus={{ boxShadow: 'outline', borderColor: 'blue.500' }}
+        onClick={() => onChange(option.value)}
+        minW="32px"
+        minH="32px"
+        maxW="32px"
+        maxH="32px"
+        boxShadow={value === option.value ? 'md' : undefined}
+        position="relative"
+        role="radio"
+        aria-checked={value === option.value}
+      >
+        {value === option.value && (
+          <Box
+            position="absolute"
+            top="50%"
+            left="50%"
+            transform="translate(-50%,-50%)"
+            color="white"
+            fontSize="xl"
+            fontWeight="bold"
+            pointerEvents="none"
+          >
+            ✓
+          </Box>
+        )}
+      </Button>
+    ))}
+  </HStack>
+);
 
 const LocationManagementModal = ({ isOpen, onClose }) => {
   const [state, dispatch] = useReducer(locationReducer, initialState);
@@ -463,9 +505,9 @@ const LocationManagementModal = ({ isOpen, onClose }) => {
       </Modal>
 
       {/* Create Location Modal */}
-      <Modal isOpen={isCreateOpen} onClose={closeCreateModal} size="lg">
+      <Modal isOpen={isCreateOpen} onClose={closeCreateModal} size="lg" isCentered>
         <ModalOverlay />
-        <ModalContent>
+        <ModalContent maxH="80vh" display="flex" flexDirection="column">
           <ModalHeader>
             <HStack spacing={3}>
               <FiPlus />
@@ -473,7 +515,13 @@ const LocationManagementModal = ({ isOpen, onClose }) => {
             </HStack>
           </ModalHeader>
           <ModalCloseButton />
-          <ModalBody>
+          <ModalBody
+            flex="1"
+            overflowY="auto"
+            px={6}
+            py={4}
+            maxH="calc(80vh - 120px)"
+          >
             {state.isCreated ? (
               <Box textAlign="center" py={8}>
                 <Text fontSize="lg" fontWeight="bold" color="green.600" mb={4}>
@@ -532,16 +580,10 @@ const LocationManagementModal = ({ isOpen, onClose }) => {
 
                 <FormControl>
                   <FormLabel>Color Marker</FormLabel>
-                  <Select
+                  <ColorMarkerPicker
                     value={state.newLocation.marker}
-                    onChange={(e) => handleInputChange('marker', e.target.value)}
-                  >
-                    {colorOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
+                    onChange={value => handleInputChange('marker', value)}
+                  />
                 </FormControl>
 
                 <FormControl>
@@ -581,9 +623,9 @@ const LocationManagementModal = ({ isOpen, onClose }) => {
       </Modal>
 
       {/* Edit Location Modal */}
-      <Modal isOpen={isEditOpen} onClose={closeEditModal} size="lg">
+      <Modal isOpen={isEditOpen} onClose={closeEditModal} size="lg" isCentered>
         <ModalOverlay />
-        <ModalContent>
+        <ModalContent maxH="80vh" display="flex" flexDirection="column">
           <ModalHeader>
             <HStack spacing={3}>
               <FiEdit2 />
@@ -591,7 +633,13 @@ const LocationManagementModal = ({ isOpen, onClose }) => {
             </HStack>
           </ModalHeader>
           <ModalCloseButton />
-          <ModalBody>
+          <ModalBody
+            flex="1"
+            overflowY="auto"
+            px={6}
+            py={4}
+            maxH="calc(80vh - 120px)"
+          >
             {state.editingLocation && (
               <VStack spacing={4} align="stretch">
                 <FormControl isRequired isInvalid={!!state.errors.name}>
@@ -641,16 +689,10 @@ const LocationManagementModal = ({ isOpen, onClose }) => {
 
                 <FormControl>
                   <FormLabel>Color Marker</FormLabel>
-                  <Select
+                  <ColorMarkerPicker
                     value={state.editingLocation.marker}
-                    onChange={(e) => handleEditInputChange('marker', e.target.value)}
-                  >
-                    {colorOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
+                    onChange={value => handleEditInputChange('marker', value)}
+                  />
                 </FormControl>
 
                 <FormControl>

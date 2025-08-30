@@ -46,7 +46,7 @@ const LocationDisplayBadge = ({ card, onClick }) => {
   let text, marker;
   if (owned > 0) {
     text = location?.name ? location.name : 'Set Location';
-    marker = location?.marker || 'blue';
+    marker = location?.marker || (location?.name ? 'blue' : 'gray'); // Default to gray for "Set Location"
   } else {
     return null;
   }
@@ -524,18 +524,14 @@ export default function CardSearch() {
               {triggerDisplay === '' ? '\u00A0' : triggerDisplay}
             </Text>
 
-            {keywords.length > 0 && (
-              <Wrap align="center" pt={1}>
+            {/* Keywords and Location on the same line */}
+            <HStack pt={1} justify="space-between" w="100%" align="center">
+              <HStack>
                 <Text fontSize="xs" color="gray.500" mr={2}>Keywords:</Text>
                 {keywords.map((kw, index) => (
-                  <WrapItem key={index}>
-                    <Tag size="sm" {...kw.style}>{kw.text}</Tag>
-                  </WrapItem>
+                  <Tag size="sm" key={index} {...kw.style}>{kw.text}</Tag>
                 ))}
-              </Wrap>
-            )}
-            {/* Location badge always at the bottom */}
-            <Box pt={2}>
+              </HStack>
               <LocationDisplayBadge
                 card={card}
                 onClick={cardObj => {
@@ -543,7 +539,7 @@ export default function CardSearch() {
                   setLocationModalOpen(true);
                 }}
               />
-            </Box>
+            </HStack>
           </VStack>
 
           {/* Count Control Section - Both controls appear horizontally if both are present */}
