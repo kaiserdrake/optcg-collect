@@ -399,9 +399,12 @@ app.get('/api/cards/search', isAuthenticated, async (req, res) => {
       FROM cards c
       LEFT JOIN (
         SELECT card_id,
-               COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
-               COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count,
-               (SELECT location_id FROM owned_cards WHERE card_id = oc.card_id AND user_id = $1 AND is_proxy = false LIMIT 1) AS location_id
+          COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
+          COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count,
+          COALESCE(
+            (SELECT location_id FROM owned_cards WHERE card_id = oc.card_id AND user_id = $1 AND is_proxy = false LIMIT 1),
+            (SELECT location_id FROM owned_cards WHERE card_id = oc.card_id AND user_id = $1 AND is_proxy = true LIMIT 1)
+          ) AS location_id
         FROM owned_cards oc
         WHERE user_id = $1
         GROUP BY card_id
