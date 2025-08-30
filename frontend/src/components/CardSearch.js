@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Box, Text, VStack, HStack, Tag, Spinner, Wrap, WrapItem, Image,
+  Box, Text, VStack, HStack, Tag, Spinner, Wrap, WrapItem,
   Flex, useDisclosure, Button, IconButton, FormControl, FormLabel, Switch,
-  Grid, Tooltip, Slider, SliderTrack, SliderFilledTrack, SliderThumb
+  Grid, Tooltip, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, Select, Square
 } from '@chakra-ui/react';
 import { QuestionOutlineIcon, ViewIcon, HamburgerIcon } from '@chakra-ui/icons';
+import { FiMapPin } from 'react-icons/fi';
 import AdvancedSearchInput from './AdvancedSearchInput';
 import CountControl from './CountControl';
 import CardVariantIndicator from './CardVariantIndicator';
@@ -14,10 +15,185 @@ import CardDetailModal from './CardDetailModal';
 import SearchHelpModal from './SearchHelpModal';
 import StyledTextRenderer from './StyledTextRenderer';
 import CardImage from './CardImage';
+import LocationManagementModal from './LocationManagementModal';
 import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
 import { getSafeImageUrl } from '@/utils/imageUtils';
 import { colorMap, getTagStyles, toTitleCase, decodeHTMLEntities, stripHtml
 } from '@/utils/cardStyles';
+
+// Helper: Chakra color for marker
+const markerColorToColor = (marker) => {
+  switch (marker) {
+    case 'red': return 'red.500';
+    case 'orange': return 'orange.500';
+    case 'yellow': return 'yellow.400';
+    case 'green': return 'green.500';
+    case 'blue': return 'blue.500';
+    case 'purple': return 'purple.500';
+    case 'pink': return 'pink.400';
+    case 'gray': return 'gray.500';
+    default: return 'blue.500';
+  }
+};
+
+// --- LocationDisplayBadge ---
+const LocationDisplayBadge = ({ card, onClick }) => {
+  const owned = card.owned_count || 0;
+  const proxy = card.proxy_count || 0;
+  const hasCard = owned > 0 || proxy > 0;
+  if (!hasCard) return null;
+  const location = card.location;
+  let text, marker;
+  if (owned > 0) {
+    text = location?.name ? location.name : 'Set Location';
+    marker = location?.marker || 'blue';
+  } else {
+    return null;
+  }
+  const color = markerColorToColor(marker);
+
+  return (
+    <Tooltip label={location?.name ? `Location: ${location.name}` : 'Assign a location to this card'}>
+      <Tag
+        size="sm"
+        cursor="pointer"
+        borderRadius="md"
+        variant="outline"
+        fontWeight="medium"
+        borderColor={color}
+        color={color}
+        bg="transparent"
+        px={2}
+        py={1}
+        _hover={{
+          opacity: 0.85,
+          boxShadow: 'md',
+          bg: `${marker}.50`
+        }}
+        onClick={e => {
+          e.stopPropagation();
+          onClick && onClick(card);
+        }}
+        tabIndex={0}
+      >
+        <HStack spacing={1}>
+          <FiMapPin />
+          <Text fontSize="xs" color={color}>{text}</Text>
+        </HStack>
+      </Tag>
+    </Tooltip>
+  );
+};
+// --- End LocationDisplayBadge ---
+
+// Location set modal with color marker on dropdown entries
+const SetLocationModal = ({ isOpen, onClose, card, onLocationSet, onManageLocations }) => {
+  const [locations, setLocations] = useState([]);
+  const [selectedLocationId, setSelectedLocationId] = useState(card?.location?.id || '');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedLocationId(card?.location?.id || '');
+      setLoading(true);
+      fetch(`${api}/api/locations`, { credentials: 'include' })
+        .then(res => res.json())
+        .then(data => {
+          setLocations(data);
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [isOpen, card, api]);
+
+  const handleSave = () => {
+    setSaving(true);
+    fetch(`${api}/api/collection/location`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ cardId: card.id, locationId: selectedLocationId || null }),
+    })
+      .then(res => res.json())
+      .then(() => {
+        onLocationSet && onLocationSet();
+        onClose();
+      })
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} isCentered>
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader>
+          <HStack><FiMapPin /><Text>Set Card Location</Text></HStack>
+        </ModalHeader>
+        <ModalCloseButton />
+        <ModalBody>
+          <Text mb={2} fontWeight="medium">
+            Choose a location for <b>{card?.name || card?.card_code}</b>:
+          </Text>
+          <Box mb={2} position="relative">
+            {/* Custom select with color marker */}
+            <Box position="relative">
+              <Select
+                value={selectedLocationId}
+                onChange={e => setSelectedLocationId(e.target.value)}
+                isDisabled={loading}
+                placeholder="No location assigned"
+                mb={0}
+              >
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name} ({loc.type})
+                  </option>
+                ))}
+              </Select>
+              {/* Overlay options with color marker (simulate) */}
+              <Box position="absolute" top={0} left={2} right={2} pointerEvents="none" zIndex={1}>
+                {/* Show nothing, since it's only for dropdown, not for select box */}
+              </Box>
+            </Box>
+            {/* Show colored marker in the selected value, if any */}
+            {selectedLocationId && (() => {
+              const loc = locations.find(l => String(l.id) === String(selectedLocationId));
+              if (!loc) return null;
+              return (
+                <Box
+                  position="absolute"
+                  left={2}
+                  top="50%"
+                  transform="translateY(-50%)"
+                  pointerEvents="none"
+                  zIndex={2}
+                  display="flex"
+                  alignItems="center"
+                  height="32px"
+                >
+                  <Square size="16px" bg={markerColorToColor(loc.marker)} borderRadius="sm" mr={2} />
+                </Box>
+              );
+            })()}
+          </Box>
+          <Text fontSize="sm" color="gray.500" mt={2}>
+            You can create locations in the "Manage Locations" menu in the top right.
+          </Text>
+        </ModalBody>
+        <ModalFooter>
+          <Button onClick={onManageLocations} size="sm" variant="ghost" mr={4}>
+            Manage Locations
+          </Button>
+          <Button onClick={onClose} mr={3} variant="ghost">Cancel</Button>
+          <Button colorScheme="blue" onClick={handleSave} isLoading={saving}>
+            Save
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+};
 
 // Enhanced function to extract keywords with their styling
 const extractStyledKeywords = (effect, triggerEffect) => {
@@ -72,6 +248,11 @@ export default function CardSearch() {
   const [selectedCard, setSelectedCard] = useState(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+  // For popover modal
+  const [locationModalCard, setLocationModalCard] = useState(null);
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [isManageLocationsOpen, setIsManageLocationsOpen] = useState(false);
+
   // Fix hydration issues by ensuring client-side rendering
   useEffect(() => {
     try {
@@ -106,6 +287,22 @@ export default function CardSearch() {
     } catch (err) {
       console.error('Error updating card count:', err);
     }
+  };
+
+  // Refresh just a single card location in results after updating location
+  const refreshCardLocationInResults = (cardId) => {
+    fetch(`${apiUrl}/api/cards/search?keyword=id:${cardId}&ownedOnly=true`, { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        setResults(currentResults =>
+          currentResults.map(card =>
+            card && card.id === cardId ? { ...card, ...data[0] } : card
+          )
+        );
+        if (selectedCard && selectedCard.id === cardId && data.length > 0) {
+          setSelectedCard(current => ({ ...current, ...data[0] }));
+        }
+      });
   };
 
   // Search functionality
@@ -253,13 +450,6 @@ export default function CardSearch() {
       return card.category === 'LEADER' ? 'Life' : 'Cost';
     };
 
-    const renderCostValue = (card) => {
-      if (card.category === 'LEADER') {
-        return card.life || 5;
-      }
-      return card.cost || 0;
-    };
-
     const effectDisplay = stripHtml(card.effect || '');
     const triggerDisplay = stripHtml(card.trigger_effect || '');
 
@@ -344,9 +534,19 @@ export default function CardSearch() {
                 ))}
               </Wrap>
             )}
+            {/* Location badge always at the bottom */}
+            <Box pt={2}>
+              <LocationDisplayBadge
+                card={card}
+                onClick={cardObj => {
+                  setLocationModalCard(cardObj);
+                  setLocationModalOpen(true);
+                }}
+              />
+            </Box>
           </VStack>
 
-          {/* Count Control Section */}
+          {/* Count Control Section - Both controls appear horizontally if both are present */}
           <HStack spacing={2} ml={2} align="center">
             {showProxies && (
               <VStack spacing={0}>
@@ -562,6 +762,29 @@ export default function CardSearch() {
             selectedCard={selectedCard}
             showProxies={showProxies}
             onCountUpdate={handleCountUpdate}
+          />
+
+          {/* Popup for location set */}
+          <SetLocationModal
+            isOpen={locationModalOpen}
+            onClose={() => { setLocationModalOpen(false); setLocationModalCard(null); }}
+            card={locationModalCard}
+            onLocationSet={() => {
+              if (locationModalCard) {
+                refreshCardLocationInResults(locationModalCard.id);
+              }
+            }}
+            onManageLocations={() => {
+              setLocationModalOpen(false);
+              setTimeout(() => setIsManageLocationsOpen(true), 250);
+            }}
+          />
+
+          {/* Manage location modal from badge set */}
+          <LocationManagementModal
+            isOpen={isManageLocationsOpen}
+            onClose={() => setIsManageLocationsOpen(false)}
+            scrollBehavior="inside"
           />
 
           <SearchHelpModal
