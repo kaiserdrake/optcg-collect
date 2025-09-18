@@ -1,0 +1,97 @@
+'use client';
+
+import { createContext, useState, useContext, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { api, getErrorMessage } from '../utils/api';
+
+const AuthContext = createContext(null);
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const router = useRouter();
+
+  // Check if user is logged in on initial load
+  useEffect(() => {
+    const checkUserLoggedIn = async () => {
+      try {
+        const userData = await api.users.me();
+        setUser(userData);
+      } catch (error) {
+        console.log('[Auth] User is not logged in:', error.message);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkUserLoggedIn();
+  }, []);
+
+  const login = async (username, password) => {
+    try {
+      // Make the actual login API call
+      const data = await api.login({
+        usernameOrEmail: username,
+        password: password
+      });
+
+      // Set the user data from the response
+      setUser(data.user);
+      return { success: true };
+    } catch (error) {
+      console.error('[Auth] Login failed:', error);
+      const message = getErrorMessage(error);
+      return { success: false, message };
+    }
+  };
+
+  const logout = async () => {
+    try {
+      // Tell the backend to clear the HttpOnly cookie
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error("Failed to logout from server:", error);
+    } finally {
+      // Always clear frontend state
+      setUser(null);
+    }
+  };
+
+  // Function to update user data in context
+  const updateUser = (userData) => {
+    setUser(userData);
+  };
+
+  // Function to refresh user data from server
+  const refreshUser = async () => {
+    try {
+      const userData = await api.users.me();
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      console.error('[Auth] Failed to refresh user data:', error);
+      throw error;
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      login,
+      logout,
+      updateUser,
+      refreshUser
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// Custom hook to use the auth context
+export const useAuth = () => useContext(AuthContext);
