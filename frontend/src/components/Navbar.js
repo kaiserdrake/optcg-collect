@@ -35,7 +35,7 @@ import {
 } from '@chakra-ui/react';
 
 import { HamburgerIcon } from '@chakra-ui/icons';
-import { FiSettings, FiUsers, FiDownload, FiMapPin, FiDatabase } from 'react-icons/fi';
+import { FiSettings, FiUsers, FiDownload, FiMapPin, FiDatabase, FiLayers } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 import LoginModal from './LoginModal';
 
@@ -44,6 +44,7 @@ import SettingsModal from './SettingsModal';
 import UserManagementModal from './UserManagementModal';
 import LocationManagementModal from './LocationManagementModal';
 import CollectionManagementModal from './CollectionManagementModal';
+import DeckManagementModal from './DeckManagementModal';
 
 // Modern Tab Component
 const ModernTab = ({ isActive, onClick, children, badge }) => {
@@ -61,10 +62,10 @@ const ModernTab = ({ isActive, onClick, children, badge }) => {
         bg: isActive ? 'blue.100' : 'gray.100',
         transform: 'translateY(-1px)',
       }}
-
       _active={{
         transform: 'translateY(0px)',
       }}
+
       color={isActive ? 'blue.600' : 'gray.600'}
       fontWeight={isActive ? "semibold" : "medium"}
       onClick={onClick}
@@ -85,7 +86,6 @@ const ModernTab = ({ isActive, onClick, children, badge }) => {
           </Badge>
         )}
       </HStack>
-
     </Button>
   );
 };
@@ -116,6 +116,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
   const { isOpen: isUsersOpen, onOpen: onUsersOpen, onClose: onUsersClose } = useDisclosure();
   const { isOpen: isLocationsOpen, onOpen: onLocationsOpen, onClose: onLocationsClose } = useDisclosure();
   const { isOpen: isCollectionOpen, onOpen: onCollectionOpen, onClose: onCollectionClose } = useDisclosure();
+  const { isOpen: isDeckManagementOpen, onOpen: onDeckManagementOpen, onClose: onDeckManagementClose } = useDisclosure();
   const { isOpen: isSyncOpen, onOpen: onSyncOpen, onClose: onSyncClose } = useDisclosure();
 
   const logContainerRef = useRef(null);
@@ -141,14 +142,12 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     }
   }, [syncLogs]);
 
-
   const handleTabChange = (index) => {
     const tab = tabs[index];
 
     // If tab requires auth and user is not logged in, show login modal
     if (tab.requiresAuth && !user) {
       onLoginOpen();
-
       return;
     }
 
@@ -156,33 +155,34 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     onTabChange?.(index);
   };
 
-
   const handleLogout = async () => {
     try {
       await logout();
       toast({
-        title: "Logged out successfully",
-        status: "success",
+        title: 'Logged out',
+        description: 'You have been logged out successfully.',
+        status: 'success',
         duration: 2000,
         isClosable: true,
       });
     } catch (error) {
+      console.error('Logout error:', error);
       toast({
-        title: "Logout failed",
-        description: "Please try again",
-        status: "error",
+        title: 'Logout error',
+        description: 'Failed to log out properly.',
+        status: 'error',
+        duration: 3000,
         isClosable: true,
       });
     }
   };
 
-  // Sync confirmation dialog logic
+  // Sync functionality
   const handleSync = () => {
     setIsSyncConfirmOpen(true);
   };
 
-  // Called if user confirms sync
-  const handleSyncConfirmed = () => {
+  const handleSyncConfirm = () => {
     setIsSyncConfirmOpen(false);
     onSyncOpen();
     setIsSyncing(true);
@@ -195,13 +195,16 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       if (logLine.startsWith('SYNC_END')) {
         eventSource.close();
         setIsSyncing(false);
-
-        toast({ title: "Sync Complete", status: 'success', isClosable: true });
+        toast({
+          title: "Sync Complete",
+          status: 'success',
+          duration: 3000,
+          isClosable: true
+        });
       }
 
       setSyncLogs(prevLogs => [...prevLogs, logLine]);
     };
-
 
     eventSource.onerror = () => {
       toast({
@@ -213,7 +216,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       });
       eventSource.close();
       setIsSyncing(false);
-
     };
   };
 
@@ -229,7 +231,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     });
     window.dispatchEvent(event);
   };
-
 
   return (
     <>
@@ -343,6 +344,9 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                   </Box>
 
                   {/* Features available to ALL logged-in users (Normal User + Admin) */}
+                  <MenuItem icon={<FiLayers />} onClick={onDeckManagementOpen}>
+                    Deck Management
+                  </MenuItem>
                   <MenuItem icon={<FiMapPin />} onClick={onLocationsOpen}>
                     Location Management
                   </MenuItem>
@@ -356,7 +360,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                   {/* Admin-only features */}
                   {user.role === 'Admin' && (
                     <>
-
                       <MenuDivider />
                       <MenuItem icon={<FiUsers />} onClick={onUsersOpen}>
                         User Management
@@ -366,13 +369,13 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                         onClick={handleSync}
                         isDisabled={isSyncing}
                       >
-                        {isSyncing ? 'Syncing...' : 'Sync Card Database'}
+                        {isSyncing ? 'Syncing...' : 'Sync Cards'}
                       </MenuItem>
                     </>
                   )}
 
                   <MenuDivider />
-                  <MenuItem onClick={handleLogout}>
+                  <MenuItem onClick={handleLogout} color="red.600">
                     Sign Out
                   </MenuItem>
                 </MenuList>
@@ -381,45 +384,24 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
               <Button
                 colorScheme="blue"
                 size="sm"
-                variant="solid"
                 onClick={onLoginOpen}
-                px={6}
-                borderRadius="full"
-
-                fontWeight="semibold"
-                _hover={{
-                  transform: 'translateY(-1px)',
-                  shadow: 'md'
-                }}
-                transition="all 0.2s"
               >
                 Sign In
-
               </Button>
             )}
-
           </Flex>
         </Flex>
       </Box>
 
       {/* Login Modal */}
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={onLoginClose}
-      />
+      <LoginModal isOpen={isLoginOpen} onClose={onLoginClose} />
 
       {/* Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={onSettingsClose}
-      />
+      <SettingsModal isOpen={isSettingsOpen} onClose={onSettingsClose} />
 
-      {/* User Management Modal - Admin Only */}
+      {/* User Management Modal (Admin only) */}
       {user?.role === 'Admin' && (
-        <UserManagementModal
-          isOpen={isUsersOpen}
-          onClose={onUsersClose}
-        />
+        <UserManagementModal isOpen={isUsersOpen} onClose={onUsersClose} />
       )}
 
       {/* Location Management Modal */}
@@ -435,72 +417,97 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
         onClose={onCollectionClose}
       />
 
-      {/* Sync Confirmation Dialog */}
-      <AlertDialog
-        isOpen={isSyncConfirmOpen}
-        leastDestructiveRef={syncConfirmCancelRef}
-        onClose={handleSyncCancel}
-      >
-        <AlertDialogOverlay>
-          <AlertDialogContent>
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Sync Card Database
-            </AlertDialogHeader>
+      {/* Deck Management Modal */}
+      <DeckManagementModal
+        isOpen={isDeckManagementOpen}
+        onClose={onDeckManagementClose}
+      />
 
-            <AlertDialogBody>
-              This will update the card database with the latest information from the scraper API.
-              This process may take several minutes. Are you sure you want to continue?
-            </AlertDialogBody>
 
-            <AlertDialogFooter>
-              <Button ref={syncConfirmCancelRef} onClick={handleSyncCancel}>
-                Cancel
-              </Button>
-              <Button colorScheme="blue" onClick={handleSyncConfirmed} ml={3}>
-                Start Sync
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
+      {/* Sync Modal (Admin only) */}
+      {user?.role === 'Admin' && (
+        <Modal isOpen={isSyncOpen} onClose={onSyncClose} size="xl" closeOnOverlayClick={false}>
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>Card Database Sync</ModalHeader>
+            <ModalCloseButton isDisabled={isSyncing} />
+            <ModalBody>
+              <VStack spacing={4} align="stretch">
+                <Text fontSize="sm" color="gray.600">
+                  Synchronizing card database with latest data...
+                </Text>
+                <Box
+                  ref={logContainerRef}
+                  maxH="300px"
+                  overflowY="auto"
+                  bg="gray.50"
+                  p={3}
+                  borderRadius="md"
+                  border="1px"
+                  borderColor="gray.200"
+                >
+                  {syncLogs.length === 0 ? (
+                    <Text fontSize="sm" color="gray.500" textAlign="center">
+                      Starting sync...
+                    </Text>
+                  ) : (
+                    <VStack spacing={1} align="stretch">
+                      {syncLogs.map((log, index) => (
+                        <Text
+                          key={index}
+                          fontSize="xs"
+                          fontFamily="mono"
+                          color="gray.700"
+                        >
+                          {log}
+                        </Text>
+                      ))}
+                    </VStack>
+                  )}
+                </Box>
+                {isSyncing && (
+                  <HStack justify="center">
+                    <Spinner size="sm" color="blue.500" />
+                    <Text fontSize="sm" color="gray.600">
+                      Sync in progress...
+                    </Text>
+                  </HStack>
+                )}
+              </VStack>
+            </ModalBody>
+          </ModalContent>
+        </Modal>
+      )}
 
-      {/* Sync Progress Modal */}
-      <Modal isOpen={isSyncOpen} onClose={onSyncClose} size="xl" closeOnOverlayClick={false}>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>
-            <HStack>
-              <Text>Synchronizing Card Database</Text>
-              {isSyncing && <Spinner size="sm" />}
-            </HStack>
-          </ModalHeader>
-          <ModalCloseButton isDisabled={isSyncing} />
-          <ModalBody pb={6}>
-            <Box
-              ref={logContainerRef}
-
-              h="400px"
-              overflowY="auto"
-              bg="gray.900"
-              color="white"
-              p={4}
-              borderRadius="md"
-              fontFamily="mono"
-              fontSize="sm"
-            >
-              {syncLogs.length === 0 ? (
-                <Text color="gray.400">Starting synchronization...</Text>
-              ) : (
-                syncLogs.map((log, index) => (
-                  <Box key={index} mb={1}>
-                    <Text color="white">{log}</Text>
-                  </Box>
-                ))
-              )}
-            </Box>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
+      {/* Sync Confirmation Dialog (Admin only) */}
+      {user?.role === 'Admin' && (
+        <AlertDialog
+          isOpen={isSyncConfirmOpen}
+          leastDestructiveRef={syncConfirmCancelRef}
+          onClose={handleSyncCancel}
+          isCentered
+        >
+          <AlertDialogOverlay>
+            <AlertDialogContent>
+              <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                Sync Card Database
+              </AlertDialogHeader>
+              <AlertDialogBody>
+                This will update the card database with the latest information from the scraper API.
+                This process may take several minutes. Are you sure you want to continue?
+              </AlertDialogBody>
+              <AlertDialogFooter>
+                <Button ref={syncConfirmCancelRef} onClick={handleSyncCancel}>
+                  Cancel
+                </Button>
+                <Button colorScheme="blue" onClick={handleSyncConfirm} ml={3}>
+                  Start Sync
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialogOverlay>
+        </AlertDialog>
+      )}
     </>
   );
 }
