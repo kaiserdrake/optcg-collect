@@ -469,11 +469,11 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
               </VStack>
             ) : (
                 // Desktop layout: Original single line
-                <HStack justify="space-between" align="center" mb={4} spacing={4}>
+                <HStack justify="space-between" align="center" mb={6} spacing={6}>
                   {/* Left side - Size and Sort controls */}
-                  <HStack spacing={4} flex={1}>
+                  <HStack spacing={6} flex={1}>
                     {/* Thumbnail Size Slider - Compact */}
-                    <HStack spacing={2} minW="200px">
+                    <HStack spacing={2} minW="100px">
                       <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
                       <Slider
                         value={thumbnailSize}
@@ -492,7 +492,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                     </HStack>
 
                     {/* Hide Count Toggle - Desktop */}
-                    <HStack spacing={2} minW="200px">
+                    <HStack spacing={2} minW="100px">
                       <FormControl display="flex" alignItems="center">
                         <FormLabel htmlFor="hide-count-desktop" mb="0" fontSize="sm" color="gray.600" mr={2}>
                           Hide Count
