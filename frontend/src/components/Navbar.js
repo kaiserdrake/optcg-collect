@@ -12,7 +12,6 @@ import {
   Menu,
   MenuButton,
   MenuList,
-
   MenuItem,
   MenuDivider,
   Spinner,
@@ -35,7 +34,7 @@ import {
 } from '@chakra-ui/react';
 
 import { HamburgerIcon } from '@chakra-ui/icons';
-import { FiSettings, FiUsers, FiDownload, FiMapPin, FiDatabase, FiLayers } from 'react-icons/fi';
+import { FiSettings, FiUsers, FiDownload, FiMapPin, FiDatabase, FiLayers, FiHeart } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 import LoginModal from './LoginModal';
 
@@ -65,7 +64,6 @@ const ModernTab = ({ isActive, onClick, children, badge }) => {
       _active={{
         transform: 'translateY(0px)',
       }}
-
       color={isActive ? 'blue.600' : 'gray.600'}
       fontWeight={isActive ? "semibold" : "medium"}
       onClick={onClick}
@@ -159,8 +157,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     try {
       await logout();
       toast({
-        title: 'Logged out',
-        description: 'You have been logged out successfully.',
+        title: 'Signed out successfully',
         status: 'success',
         duration: 2000,
         isClosable: true,
@@ -168,8 +165,8 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     } catch (error) {
       console.error('Logout error:', error);
       toast({
-        title: 'Logout error',
-        description: 'Failed to log out properly.',
+        title: 'Sign out failed',
+        description: 'Please try again',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -177,49 +174,96 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     }
   };
 
-  // Sync functionality
-  const handleSync = () => {
+  // Buy Me Coffee handler
+  const handleDonationClick = () => {
+    // Replace 'YOUR_PAYPAL_EMAIL' with the actual PayPal email
+    const paypalUrl = `https://www.paypal.com/ncp/payment/WGP5P2UEDDSBE`;
+    window.open(paypalUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  // Sync functionality (keeping existing code)
+  const handleSync = async () => {
     setIsSyncConfirmOpen(true);
   };
 
-  const handleSyncConfirm = () => {
+  const handleSyncConfirm = async () => {
     setIsSyncConfirmOpen(false);
-    onSyncOpen();
     setIsSyncing(true);
     setSyncLogs([]);
+    onSyncOpen();
 
-    const eventSource = new EventSource(`${api}/api/sync/stream`, { withCredentials: true });
+    try {
+      const response = await fetch(`${api}/api/admin/sync-cards`, {
+        method: 'POST',
+        credentials: 'include',
+      });
 
-    eventSource.onmessage = (event) => {
-      const logLine = event.data;
-      if (logLine.startsWith('SYNC_END')) {
-        eventSource.close();
-        setIsSyncing(false);
-        toast({
-          title: "Sync Complete",
-          status: 'success',
-          duration: 3000,
-          isClosable: true
-        });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      setSyncLogs(prevLogs => [...prevLogs, logLine]);
-    };
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-    eventSource.onerror = () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'log') {
+                setSyncLogs(prev => [...prev, data.message]);
+              } else if (data.type === 'complete') {
+                setSyncLogs(prev => [...prev, 'Sync completed successfully!']);
+                toast({
+                  title: 'Sync Complete',
+                  description: `Updated ${data.stats.updated} cards, added ${data.stats.added} new cards.`,
+                  status: 'success',
+                  duration: 5000,
+                  isClosable: true,
+                });
+                setIsSyncing(false);
+                break;
+              } else if (data.type === 'error') {
+                setSyncLogs(prev => [...prev, `Error: ${data.message}`]);
+                toast({
+                  title: 'Sync Error',
+                  description: data.message,
+                  status: 'error',
+                  duration: 5000,
+                  isClosable: true,
+                });
+                setIsSyncing(false);
+                break;
+              }
+            } catch (e) {
+              console.warn('Failed to parse SSE data:', line);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Sync failed:', error);
+      setSyncLogs(prev => [...prev, `Connection error: ${error.message}`]);
       toast({
-        title: "Connection Error",
-        description: "Could not connect to the sync service.",
+        title: "Sync Failed",
+        description: error.message,
         status: "error",
         duration: 5000,
         isClosable: true,
       });
-      eventSource.close();
+    } finally {
       setIsSyncing(false);
-    };
+    }
   };
 
-  // Called if user cancels sync
   const handleSyncCancel = () => {
     setIsSyncConfirmOpen(false);
   };
@@ -287,8 +331,27 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
             </HStack>
           </HStack>
 
-          {/* Right side - User Menu or Sign In */}
-          <Flex alignItems="center">
+          {/* Right side - Buy Me Coffee + User Menu or Sign In */}
+          <Flex alignItems="center" spacing={3}>
+            {/* Buy Me Coffee Button - Always visible */}
+            <Button
+              leftIcon={<FiHeart />}
+              size="sm"
+              variant="outline"
+              colorScheme="pink"
+              onClick={handleDonationClick}
+              _hover={{
+                bg: 'pink.50',
+                borderColor: 'pink.300',
+                transform: 'translateY(-1px)'
+              }}
+              transition="all 0.2s"
+              display={{ base: 'none', sm: 'flex' }}
+              mr={3}
+            >
+              Buy me a coffee
+            </Button>
+
             {loading ? (
               <Spinner size="sm" color="gray.500" />
             ) : user ? (
@@ -315,6 +378,14 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                   </Box>
 
                   <MenuDivider m={0} />
+
+                  {/* Buy Me Coffee in Mobile Menu */}
+                  <Box display={{ base: 'block', sm: 'none' }}>
+                    <MenuItem icon={<FiHeart />} onClick={handleDonationClick} color="pink.600">
+                      Buy me a coffee
+                    </MenuItem>
+                    <MenuDivider />
+                  </Box>
 
                   {/* Mobile Navigation - Only show on small screens */}
                   <Box display={{ base: 'block', md: 'none' }}>
@@ -381,13 +452,31 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                 </MenuList>
               </Menu>
             ) : (
-              <Button
-                colorScheme="blue"
-                size="sm"
-                onClick={onLoginOpen}
-              >
-                Sign In
-              </Button>
+              <HStack spacing={2}>
+                {/* Buy Me Coffee for non-logged users on mobile - compact version */}
+                <IconButton
+                  icon={<FiHeart />}
+                  size="sm"
+                  variant="outline"
+                  colorScheme="pink"
+                  aria-label="Buy me a coffee"
+                  onClick={handleDonationClick}
+                  display={{ base: 'flex', sm: 'none' }}
+                  _hover={{
+                    bg: 'pink.50',
+                    borderColor: 'pink.300',
+                    transform: 'translateY(-1px)'
+                  }}
+                  transition="all 0.2s"
+                />
+                <Button
+                  colorScheme="blue"
+                  size="sm"
+                  onClick={onLoginOpen}
+                >
+                  Sign In
+                </Button>
+              </HStack>
             )}
           </Flex>
         </Flex>
@@ -423,7 +512,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
         onClose={onDeckManagementClose}
       />
 
-
       {/* Sync Modal (Admin only) */}
       {user?.role === 'Admin' && (
         <Modal isOpen={isSyncOpen} onClose={onSyncClose} size="xl" closeOnOverlayClick={false}>
@@ -447,32 +535,17 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                   borderColor="gray.200"
                 >
                   {syncLogs.length === 0 ? (
-                    <Text fontSize="sm" color="gray.500" textAlign="center">
-                      Starting sync...
+                    <Text fontSize="sm" color="gray.500">
+                      Waiting for sync to start...
                     </Text>
                   ) : (
-                    <VStack spacing={1} align="stretch">
-                      {syncLogs.map((log, index) => (
-                        <Text
-                          key={index}
-                          fontSize="xs"
-                          fontFamily="mono"
-                          color="gray.700"
-                        >
-                          {log}
-                        </Text>
-                      ))}
-                    </VStack>
+                    syncLogs.map((log, index) => (
+                      <Text key={index} fontSize="sm" fontFamily="mono">
+                        {log}
+                      </Text>
+                    ))
                   )}
                 </Box>
-                {isSyncing && (
-                  <HStack justify="center">
-                    <Spinner size="sm" color="blue.500" />
-                    <Text fontSize="sm" color="gray.600">
-                      Sync in progress...
-                    </Text>
-                  </HStack>
-                )}
               </VStack>
             </ModalBody>
           </ModalContent>
@@ -485,17 +558,19 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
           isOpen={isSyncConfirmOpen}
           leastDestructiveRef={syncConfirmCancelRef}
           onClose={handleSyncCancel}
-          isCentered
         >
           <AlertDialogOverlay>
             <AlertDialogContent>
               <AlertDialogHeader fontSize="lg" fontWeight="bold">
                 Sync Card Database
               </AlertDialogHeader>
+
               <AlertDialogBody>
-                This will update the card database with the latest information from the scraper API.
-                This process may take several minutes. Are you sure you want to continue?
+                This will download the latest card data from the official One Piece TCG database and update your local database. This process may take several minutes.
+                <br /><br />
+                Are you sure you want to continue?
               </AlertDialogBody>
+
               <AlertDialogFooter>
                 <Button ref={syncConfirmCancelRef} onClick={handleSyncCancel}>
                   Cancel
@@ -510,4 +585,4 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       )}
     </>
   );
-}
+};

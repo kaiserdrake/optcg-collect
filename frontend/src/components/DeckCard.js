@@ -30,7 +30,8 @@ const DeckCard = ({
   onCardClick,
   isLeader = false,
   isViewOnly = false,
-  thumbnailSize = 120
+  thumbnailSize = 120,
+  hideCount = false
 }) => {
   const card = item?.card || item;
   const count = item?.count || 1;
@@ -112,7 +113,7 @@ const DeckCard = ({
         )}
 
         {/* Count badge */}
-        {!isLeader && (
+        {!isLeader && !hideCount && (
           <Box position="absolute" top={1} right={1}>
             {count <= 4 ? (
               <Icon

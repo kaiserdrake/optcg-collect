@@ -112,7 +112,7 @@ const MatchUpComponent = () => {
   // Responsive grid settings
   const gridTemplate = useBreakpointValue({
     base: '1fr',
-    lg: '1fr 1fr'
+    lg: 'repeat(2, 1fr)'
   });
   const gridGap = useBreakpointValue({
     base: 4,
@@ -615,9 +615,10 @@ const MatchUpComponent = () => {
 
       {/* Deck Comparison Grid */}
       <Grid
-        templateColumns={gridTemplate}
+        templateColumns={{ base: "1fr", lg: "repeat(2, 1fr)" }}
         gap={gridGap}
         minH="500px"
+        w="100%"
       >
         {/* Player 1 Deck */}
         <GridItem>
