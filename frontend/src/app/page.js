@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { Box, Container, VStack, HStack, Text, Heading, Button, Spinner, useDisclosure } from '@chakra-ui/react';
+import { Box, Container, VStack, Text, Heading, Button, Spinner, useDisclosure } from '@chakra-ui/react';
 import { useAuth } from '@/context/AuthContext';
 import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -40,11 +40,10 @@ export default function Home() {
 
   // Automatically close Login Modal if logged in
   useEffect(() => {
-
     if (user && isLoginOpen) {
       onLoginClose();
     }
-  }, [user, isLoginOpen, onLoginClose])
+  }, [user, isLoginOpen, onLoginClose]);
 
   // Handle URL parameter for tab selection
   useEffect(() => {
@@ -115,7 +114,7 @@ export default function Home() {
         tabs={tabs}
       />
 
-      {/* Main Content */}
+      {/* Main Content - Back to original single column layout */}
       <Box as="main" pt={6} flex="1">
         <Container maxW="container.xl">
           <VStack spacing={6} align="stretch">
