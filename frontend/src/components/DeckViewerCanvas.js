@@ -37,7 +37,8 @@ import {
   Tr,
   Th,
   Td,
-  Circle
+  Circle,
+  useBreakpointValue
 } from '@chakra-ui/react';
 
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
@@ -103,6 +104,9 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
   const { isOpen: isCardDetailOpen, onOpen: onCardDetailOpen, onClose: onCardDetailClose } = useDisclosure();
   const [selectedCardForDetail, setSelectedCardForDetail] = useState(null);
 
+  // Check if we should use mobile layout for controls
+  const isMobile = useBreakpointValue({ base: true, md: false });
+
   const colorScheme = playerNumber === 1 ? 'blue' : 'red';
 
   // Calculate deck statistics
@@ -125,10 +129,10 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
 
     let totalCards = 0;
     let leader = null;
-    const costDist = {};
-    const colorDist = {};
-    const categoryDist = {};
-    const keywordCounts = {};
+    let costDist = {};
+    let colorDist = {};
+    let categoryDist = {};
+    let keywordCounts = {};
     let totalCounterValue = 0;
     let cardsWithCounters = 0;
     let counter1K = 0;
@@ -136,56 +140,47 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
 
     deck.cards.forEach(item => {
       const cardData = getCardData(item);
-      if (!cardData) return;
+      const count = item.count || 1;
+      totalCards += count;
 
-      totalCards += item.count;
-
-      // Count by category
-      const category = cardData.category || 'Unknown';
-      categoryDist[category] = (categoryDist[category] || 0) + item.count;
-
-      // Check for leader
-      if (category === 'LEADER') {
+      if (cardData?.category === 'LEADER') {
         leader = cardData;
       }
 
-      // Count by cost (only for non-leaders)
-      if (category !== 'LEADER') {
-        const cost = cardData.cost || 0;
-        costDist[cost] = (costDist[cost] || 0) + item.count;
+      // Cost distribution
+      const cost = cardData?.cost || 0;
+      costDist[cost] = (costDist[cost] || 0) + count;
+
+      // Color distribution
+      if (cardData?.color) {
+        colorDist[cardData.color] = (colorDist[cardData.color] || 0) + count;
       }
 
-      // Count by color
-      if (cardData.color) {
-        const colors = cardData.color.split('/');
-        colors.forEach(color => {
-          const cleanColor = color.trim();
-          colorDist[cleanColor] = (colorDist[cleanColor] || 0) + item.count;
+      // Category distribution
+      if (cardData?.category) {
+        categoryDist[cardData.category] = (categoryDist[cardData.category] || 0) + count;
+      }
+
+      // Counter values
+      if (cardData?.counter) {
+        totalCounterValue += cardData.counter * count;
+        cardsWithCounters += count;
+
+        if (cardData.counter === 1000) counter1K += count;
+        if (cardData.counter === 2000) counter2K += count;
+      }
+
+      // Extract keywords from effect text
+      if (cardData?.effect || cardData?.trigger_effect) {
+        const cardKeywords = extractStyledKeywords(cardData.effect, cardData.trigger_effect);
+        Object.entries(cardKeywords).forEach(([keyword, keywordCount]) => {
+          keywordCounts[keyword] = (keywordCounts[keyword] || 0) + (keywordCount * count);
         });
       }
-
-      // Calculate counter values (excluding leaders)
-      if (category !== 'LEADER' && cardData.counter) {
-        totalCounterValue += cardData.counter * item.count;
-        cardsWithCounters += item.count;
-
-        // Count specific counter values
-        if (cardData.counter === 1000) {
-          counter1K += item.count;
-        }
-        if (cardData.counter === 2000) {
-          counter2K += item.count;
-        }
-      }
-
-      // Extract keywords from each card
-      const cardKeywords = extractStyledKeywords(cardData.effect, cardData.trigger_effect);
-      Object.entries(cardKeywords).forEach(([keyword, count]) => {
-        keywordCounts[keyword] = (keywordCounts[keyword] || 0) + (count * item.count);
-      });
     });
 
-    const averageCounterValue = cardsWithCounters > 0 ? (totalCounterValue / cardsWithCounters).toFixed(1) : 0;
+    const averageCounterValue = cardsWithCounters > 0 ?
+      (totalCounterValue / cardsWithCounters).toFixed(1) : 0;
 
     return {
       totalCards,
@@ -338,63 +333,50 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
             Empty deck
           </Text>
           <Text color="gray.400" fontSize="sm">
-            This deck contains no cards
+            This deck has no cards
           </Text>
         </VStack>
       </Box>
     );
   }
 
-  // Prepare data for charts
-  const costChartData = Object.entries(stats.costDistribution)
-    .sort(([a], [b]) => parseInt(a) - parseInt(b))
-    .map(([cost, count]) => ({
-      cost: parseInt(cost),
-      count,
-      name: `${cost}`
-    }));
-
-  // Add missing cost values with 0 count for better visualization
-  const maxCost = Math.max(...costChartData.map(d => d.cost), 10);
-  const fullCostData = [];
-  for (let i = 0; i <= maxCost; i++) {
-    const existing = costChartData.find(d => d.cost === i);
-    fullCostData.push(existing || { cost: i, count: 0, name: i.toString() });
-  }
-  // Add 10+ category if there are cards with cost > 10
-  const highCostCount = Object.entries(stats.costDistribution)
-    .filter(([cost]) => parseInt(cost) > 10)
-    .reduce((sum, [, count]) => sum + count, 0);
-  if (highCostCount > 0) {
-    fullCostData.push({ cost: 11, count: highCostCount, name: '10+' });
-  }
-
-  const colorChartData = Object.entries(stats.colorDistribution).map(([color, count]) => {
-    const hexColor = getColorHex(color);
-    return {
-      name: getColorName(color),
-      value: count,
-      fill: hexColor
-    };
-  });
-
   return (
     <VStack spacing={4} align="stretch" h="100%">
-      <Tabs defaultIndex={0}>
+      <HStack justify="space-between" align="center">
+        <VStack align="start" spacing={1}>
+          <Text fontSize="lg" fontWeight="bold" color={`${colorScheme}.600`}>
+            {deck.name || `Player ${playerNumber} Deck`}
+          </Text>
+          <Text fontSize="sm" color="gray.600">
+            {stats.totalCards} cards • {stats.hasLeader ? 'Has leader' : 'No leader'}
+          </Text>
+        </VStack>
+        <Badge
+          colorScheme={colorScheme}
+          variant="subtle"
+          fontSize="sm"
+          px={3}
+          py={1}
+          borderRadius="full"
+        >
+          Player {playerNumber}
+        </Badge>
+      </HStack>
+      <Tabs variant="enclosed" colorScheme={colorScheme} flex="1">
         <TabList>
-          <Tab>Deck</Tab>
-          <Tab>Statistics</Tab>
+          <Tab>Cards</Tab>
+          <Tab>Stats</Tab>
           <Tab>Keywords</Tab>
         </TabList>
 
         <TabPanels>
           <TabPanel>
-            {/* Compact Controls - All in one line */}
-            <HStack justify="space-between" align="center" mb={4} spacing={4}>
-              {/* Left side - Size and Sort controls */}
-              <HStack spacing={4} flex={1}>
-                {/* Thumbnail Size Slider - Compact */}
-                <HStack spacing={2} minW="200px">
+            {/* Compact Controls - Responsive Layout */}
+            {isMobile ? (
+              // Mobile layout: Two rows
+              <VStack spacing={3} align="stretch" mb={4}>
+                {/* First row: Thumbnail Size Slider */}
+                <HStack spacing={2}>
                   <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
                   <Slider
                     value={thumbnailSize}
@@ -402,7 +384,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                     min={80}
                     max={200}
                     step={10}
-                    width="120px"
+                    flex="1"
                   >
                     <SliderTrack>
                       <SliderFilledTrack />
@@ -412,14 +394,14 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                   <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
                 </HStack>
 
-                {/* Sort Controls - Compact */}
+                {/* Second row: Sort Controls */}
                 <HStack spacing={2}>
-                  <Text fontSize="sm" color="gray.600">Sort:</Text>
+                  <Text fontSize="sm" color="gray.600" minW="60px">Sort:</Text>
                   <Select
                     size="sm"
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value)}
-                    width="100px"
+                    flex="1"
                   >
                     <option value="cost">Cost</option>
                     <option value="name">Name</option>
@@ -434,14 +416,66 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                       size="sm"
                       variant="outline"
                       onClick={() => setSortReverse(!sortReverse)}
+                      flexShrink={0}
                     />
                   </Tooltip>
                 </HStack>
-              </HStack>
+              </VStack>
+            ) : (
+              // Desktop layout: Original single row
+              <HStack justify="space-between" align="center" mb={4} spacing={4}>
+                {/* Left side - Size and Sort controls */}
+                <HStack spacing={4} flex={1}>
+                  {/* Thumbnail Size Slider - Compact */}
+                  <HStack spacing={2} minW="200px">
+                    <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
+                    <Slider
+                      value={thumbnailSize}
+                      onChange={setThumbnailSize}
+                      min={80}
+                      max={200}
+                      step={10}
+                      width="120px"
+                    >
+                      <SliderTrack>
+                        <SliderFilledTrack />
+                      </SliderTrack>
+                      <SliderThumb boxSize={4} />
+                    </Slider>
+                    <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
+                  </HStack>
 
-              {/* Right side - Empty for cleaner layout */}
-              <Box></Box>
-            </HStack>
+                  {/* Sort Controls - Compact */}
+                  <HStack spacing={2}>
+                    <Text fontSize="sm" color="gray.600">Sort:</Text>
+                    <Select
+                      size="sm"
+                      value={sortMode}
+
+                      onChange={(e) => setSortMode(e.target.value)}
+                      width="100px"
+                    >
+                      <option value="cost">Cost</option>
+                      <option value="name">Name</option>
+                      <option value="category">Category</option>
+                      <option value="color">Color</option>
+                      <option value="count">Count</option>
+                    </Select>
+                    <Tooltip label={sortReverse ? 'Sort ascending' : 'Sort descending'}>
+                      <IconButton
+                        icon={sortReverse ? <BsSortUp /> : <BsSortDown />}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSortReverse(!sortReverse)}
+                      />
+                    </Tooltip>
+                  </HStack>
+                </HStack>
+
+                {/* Right side - Empty for cleaner layout */}
+                <Box></Box>
+              </HStack>
+            )}
 
             {/* Cards Grid */}
             <Box
@@ -502,155 +536,62 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                       Statistics
                     </Text>
                     <Badge colorScheme={stats.hasLeader ? 'green' : 'red'} variant="subtle">
-                      {stats.hasLeader ? 'Has Leader' : 'No Leader'}
+                      {stats.hasLeader ? 'Valid' : 'No Leader'}
                     </Badge>
                   </HStack>
-
+                  {/* Basic Stats */}
                   <StatGroup>
                     <Stat>
-                      <StatLabel fontSize="xs">Total Cards</StatLabel>
-                      <StatNumber fontSize="md">{stats.totalCards}</StatNumber>
+                      <StatLabel>Total Cards</StatLabel>
+                      <StatNumber>{stats.totalCards}</StatNumber>
                     </Stat>
                     <Stat>
-                      <StatLabel fontSize="xs">Unique Cards</StatLabel>
-                      <StatNumber fontSize="md">{stats.uniqueCards}</StatNumber>
+                      <StatLabel>Unique Cards</StatLabel>
+                      <StatNumber>{stats.uniqueCards}</StatNumber>
+                    </Stat>
+                    <Stat>
+                      <StatLabel>Avg Counter</StatLabel>
+                      <StatNumber>{stats.averageCounterValue}</StatNumber>
                     </Stat>
                   </StatGroup>
 
-                  {/* Counter Statistics - Badge Style */}
-                  <Box>
-                    <Text fontSize="xs" fontWeight="medium" color="gray.600" mb={2}>
-                      Counter Stats
-                    </Text>
-                    <HStack spacing={2} flexWrap="wrap">
-                      <Badge
-                        colorScheme="blackAlpha"
-                        bg="black"
-                        color="white"
-                        variant="solid"
-                        px={3}
-                        py={1}
-                        borderRadius="full"
-                        fontSize="sm"
-                      >
-                        ⚡ Avg: {stats.averageCounterValue}k / card
-                      </Badge>
-                      {stats.counter2K > 0 && (
-                        <Badge
-                          colorScheme="gray"
-                          variant="solid"
-                          px={3}
-                          py={1}
-                          borderRadius="full"
-                          fontSize="sm"
-                        >
-                          2k: {stats.counter2K}
-                        </Badge>
-                      )}
-                      {stats.counter1K > 0 && (
-                        <Badge
-                          colorScheme="gray"
-                          variant="solid"
-                          px={3}
-                          py={1}
-                          borderRadius="full"
-                          fontSize="sm"
-                        >
-                          1k: {stats.counter1K}
-                        </Badge>
-                      )}
-                    </HStack>
-                  </Box>
-
-                  {/* Cost Distribution Bar Chart */}
-                  {fullCostData.length > 0 && fullCostData.some(d => d.count > 0) && (
+                  {/* Cost Distribution Chart */}
+                  {Object.keys(stats.costDistribution).length > 0 && (
                     <Box>
-                      <Text fontSize="sm" fontWeight="semibold" color="gray.700" mb={3}>
-                        Cost Curve
+                      <Text fontSize="xs" fontWeight="medium" color="gray.600" mb={2}>
+                        Cost Distribution
                       </Text>
-                      <Box h="300px" bg="white" borderRadius="lg" p={4} border="1px solid" borderColor="gray.200">
+                      <Box h="120px">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={fullCostData}
-                            margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
-                            barCategoryGap="10%"
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                            <XAxis
-                              dataKey="name"
-                              fontSize={8}
-                              stroke="#2D3748"
-                              tick={{ fill: '#2D3748' }}
-                              axisLine={{ stroke: '#A0AEC0' }}
-                              tickLine={{ stroke: '#A0AEC0' }}
-                            />
-                            <YAxis
-                              fontSize={8}
-                              stroke="#2D3748"
-                              tick={{ fill: '#2D3748' }}
-                              axisLine={{ stroke: '#A0AEC0' }}
-                              tickLine={{ stroke: '#A0AEC0' }}
-                              label={{ value: 'Count', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#2D3748' } }}
-                            />
-                            <Bar
-                              dataKey="count"
-                              fill="#1A202C"
-                              radius={[4, 4, 0, 0]}
-                              label={{
-                                position: 'top',
-                                fontSize: 8,
-                                fill: '#2D3748',
-                                formatter: (value) => value > 0 ? value : ''
-                              }}
-                            />
+                          <BarChart data={Object.entries(stats.costDistribution).map(([cost, count]) => ({
+                            cost: cost === '0' ? '0' : cost,
+                            count
+                          }))}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="cost" />
+                            <YAxis />
+                            <Bar dataKey="count" fill={colorScheme === 'blue' ? '#3182ce' : '#e53e3e'} />
                           </BarChart>
                         </ResponsiveContainer>
                       </Box>
                     </Box>
                   )}
 
-                  {/* Color Distribution Pie Chart */}
-                  {colorChartData.length > 0 && (
-                    <Box>
-                      <Text fontSize="xs" fontWeight="medium" color="gray.600" mb={2}>
-                        Color Distribution
-                      </Text>
-                      <Box h="200px">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={colorChartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={30}
-                              outerRadius={80}
-                              paddingAngle={2}
-                              dataKey="value"
-                              label={({ name, value }) => `${name}: ${value}`}
-                              labelStyle={{ fontSize: 7, fill: '#2D3748' }}
-                            >
-                              {colorChartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </Box>
-                    </Box>
-                  )}
-
-                  {/* Category Distribution */}
-                  {Object.keys(stats.categoryDistribution).length > 0 && (
+                  {/* Color Distribution */}
+                  {Object.keys(stats.colorDistribution).length > 0 && (
                     <Box>
                       <Text fontSize="xs" fontWeight="medium" color="gray.600" mb={1}>
-                        Category Distribution
+                        Colors
                       </Text>
                       <Wrap spacing={1}>
-                        {Object.entries(stats.categoryDistribution).map(([category, count]) => (
-                          <WrapItem key={category}>
-                            <Tag size="sm" variant="outline" borderColor="black" color="black">
-                              <TagLabel>{category}: {count}</TagLabel>
-                            </Tag>
+                        {Object.entries(stats.colorDistribution).map(([color, count]) => (
+                          <WrapItem key={color}>
+                            <HStack spacing={2}>
+                              <Circle size="12px" bg={getColorHex(color)} />
+                              <Tag size="sm" variant="outline">
+                                <TagLabel>{getColorName(color)}: {count}</TagLabel>
+                              </Tag>
+                            </HStack>
                           </WrapItem>
                         ))}
                       </Wrap>
@@ -684,94 +625,86 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
           <TabPanel>
             {/* Keywords - List Layout */}
             {Object.keys(stats.keywordCounts).length > 0 && sortedCards.length > 0 ? (
-              <VStack spacing={6} align="stretch">
+              <VStack spacing={4} align="stretch">
                 {Object.entries(stats.keywordCounts)
                   .filter(([keyword, count]) => count > 0)
                   .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([keyword, totalCount]) => {
-                    // Find all cards that have this keyword
+                  .map(([keyword, count]) => {
+                    // Find cards with this keyword
                     const cardsWithKeyword = sortedCards.filter(item => {
                       const cardData = getCardData(item);
-                      if (!cardData) return false;
-                      const cardKeywords = extractStyledKeywords(cardData.effect, cardData.trigger_effect);
-                      return cardKeywords[keyword] && cardKeywords[keyword] > 0;
+                      const cardKeywords = extractStyledKeywords(cardData?.effect, cardData?.trigger_effect);
+                      return cardKeywords[keyword] > 0;
                     });
 
-                    if (cardsWithKeyword.length === 0) return null;
-
                     return (
-                      <Box key={keyword}>
-                        <HStack mb={3} align="center">
-                          <Text fontSize="lg" fontWeight="bold" color="gray.700">
-                            • Cards with
-                          </Text>
+                      <Box key={keyword} bg="white" p={3} borderRadius="md" border="1px" borderColor="gray.200">
+                        <VStack align="stretch" spacing={2}>
+                          <HStack justify="space-between">
+                            <Tag size="md" variant="outline" borderColor="black" color="black">
+                              <TagLabel fontWeight="semibold">{keyword}</TagLabel>
+                            </Tag>
+                            <Badge colorScheme="gray">{count} total</Badge>
+                          </HStack>
 
-                          <StyledTextRenderer text={`[${keyword}]`} />
-                          <Text fontSize="lg" fontWeight="bold" color="gray.700">
-                            ({totalCount} total)
-                          </Text>
-                        </HStack>
-                        <Wrap spacing={3}>
-                          {cardsWithKeyword.map((item, index) => {
-
-                            const cardData = getCardData(item);
-                            if (!cardData) return null;
-
-                            return (
-                              <WrapItem key={`${cardData.id}-${index}`}>
-                                <Box
-                                  position="relative"
-                                  cursor="pointer"
-                                  onClick={() => handleCardClick(item)}
-                                  _hover={{ transform: 'scale(1.05)' }}
-                                  transition="transform 0.2s"
-                                >
-                                  <Image
-                                    src={cardData.img_url || '/placeholder.png'}
-                                    alt={cardData.name || 'Card'}
-                                    width="60px"
-                                    height="84px"
-                                    objectFit="cover"
-                                    borderRadius="sm"
-                                    border={cardData.category === 'LEADER' ?
-                                      '2px solid gold' : '1px solid gray'}
-                                  />
-                                  {/* Card count badge */}
-                                  <Badge
-                                    position="absolute"
-                                    top="-8px"
-                                    right="-8px"
-                                    colorScheme="blue"
-                                    variant="solid"
-                                    borderRadius="full"
-                                    fontSize="xs"
-                                    minW="20px"
-                                    textAlign="center"
+                          <Wrap spacing={2}>
+                            {cardsWithKeyword.map((item, index) => {
+                              const cardData = getCardData(item);
+                              return (
+                                <WrapItem key={`${cardData?.id}-${index}`}>
+                                  <Box
+                                    position="relative"
+                                    cursor="pointer"
+                                    onClick={() => handleCardClick(item)}
+                                    _hover={{ transform: 'scale(1.05)' }}
+                                    transition="transform 0.2s"
                                   >
-                                    {item.count}
-                                  </Badge>
-                                  {/* Card name tooltip */}
-                                  <Tooltip label={cardData.name} placement="top">
-                                    <Box
+                                    <Image
+                                      src={cardData?.image_url}
+                                      alt={cardData?.name}
+                                      width="60px"
+                                      height="84px"
+                                      objectFit="cover"
+                                      borderRadius="sm"
+                                      border={cardData?.category === 'LEADER' ? '2px solid gold' : '1px solid gray'}
+                                    />
+                                    {/* Card count badge */}
+                                    <Badge
                                       position="absolute"
-                                      bottom="0"
-                                      left="0"
-                                      right="0"
-                                      bg="blackAlpha.700"
-                                      color="white"
+                                      top="-8px"
+                                      right="-8px"
+                                      colorScheme="blue"
+                                      variant="solid"
+                                      borderRadius="full"
                                       fontSize="xs"
-                                      p={1}
+                                      minW="20px"
                                       textAlign="center"
-                                      borderBottomRadius="sm"
                                     >
-                                      <Text noOfLines={1}>{cardData.name}</Text>
-                                    </Box>
-                                  </Tooltip>
-                                </Box>
-                              </WrapItem>
-                            );
-                          })}
-                        </Wrap>
+                                      {item.count}
+                                    </Badge>
+                                    {/* Card name tooltip */}
+                                    <Tooltip label={cardData.name} placement="top">
+                                      <Box
+                                        position="absolute"
+                                        bottom="0"
+                                        left="0"
+                                        right="0"
+                                        bg="blackAlpha.700"
+                                        color="white"
+                                        fontSize="xs"
+                                        p={1}
+                                        textAlign="center"
+                                        borderBottomRadius="sm"
+                                      >
+                                        <Text noOfLines={1}>{cardData.name}</Text>
+                                      </Box>
+                                    </Tooltip>
+                                  </Box>
+                                </WrapItem>
+                              );
+                            })}
+                          </Wrap>
+                        </VStack>
                       </Box>
                     );
                   })}

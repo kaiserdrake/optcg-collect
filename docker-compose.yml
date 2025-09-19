@@ -36,11 +36,12 @@ services:
 
   opcc-frontend:
     container_name: opcc-frontend
+    env_file:
+      - .env
     build:
       context: ./frontend
       args:
-        # Use localhost for browser requests (client-side)
-        NEXT_PUBLIC_API_URL: http://localhost:3001
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     restart: always
     ports:
       - '8086:3000'

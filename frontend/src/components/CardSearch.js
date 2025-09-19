@@ -5,7 +5,7 @@ import {
   Box, Text, VStack, HStack, Spinner,
   useDisclosure, IconButton, FormControl, FormLabel, Switch,
   Tooltip, Slider, SliderTrack, SliderFilledTrack, SliderThumb,
-  Menu, MenuButton, MenuList, MenuItem
+  Menu, MenuButton, MenuList, MenuItem, useBreakpointValue
 } from '@chakra-ui/react';
 import { QuestionOutlineIcon } from '@chakra-ui/icons';
 import { FiMapPin, FiSearch, FiHash, FiType, FiTag } from 'react-icons/fi';
@@ -171,6 +171,9 @@ function CardSearch({
   const lastSearchParamsRef = useRef('');
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  // Check if we should use mobile layout for controls
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   useEffect(() => {
     setIsClient(true);
@@ -476,100 +479,206 @@ function CardSearch({
 
         {/* Controls */}
         {shouldShowFilters && (
-          <HStack justify="space-between" align="center">
-            <HStack spacing={4}>
-              <Tooltip label={`Switch to ${viewMode === 'list' ? 'thumbnail' : 'list'} view`}>
-                <IconButton
-                  icon={viewMode === 'list' ? <FaGripHorizontal /> : <FaGripLines />}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setViewMode(viewMode === 'list' ? 'thumbnails' : 'list')}
-                  aria-label={`Switch to ${viewMode === 'list' ? 'thumbnail' : 'list'} view`}
-                />
-              </Tooltip>
+          <VStack spacing={3} align="stretch">
+            {isMobile ? (
+              // Mobile layout: Multiple rows
+              <>
+                {/* First row: View Toggle | Sort Type | Sort Mode */}
+                <HStack spacing={4}>
 
-              <Menu>
-                <MenuButton as={IconButton} icon={<SortIcon />} size="sm" variant="outline" />
-                <MenuList>
-                  <MenuItem onClick={() => setSortMode('name')}>
-                    <HStack><FiSearch /><Text>Name</Text></HStack>
-                  </MenuItem>
-                  <MenuItem onClick={() => setSortMode('rarity')}>
-                    <HStack><FiHash /><Text>Rarity</Text></HStack>
-                  </MenuItem>
-                  <MenuItem onClick={() => setSortMode('card_code')}>
-                    <HStack><FiType /><Text>Card Code</Text></HStack>
-                  </MenuItem>
-                  <MenuItem onClick={() => setSortMode('tags')}>
-                    <HStack><FiTag /><Text>Tags</Text></HStack>
-                  </MenuItem>
-                </MenuList>
-              </Menu>
-
-              <Tooltip label={`Sort ${sortReverse ? 'ascending' : 'descending'}`}>
-                <IconButton
-                  icon={sortReverse ? <BsSortUp /> : <BsSortDown />}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSortReverse(!sortReverse)}
-                  aria-label={`Sort ${sortReverse ? 'ascending' : 'descending'}`}
-                />
-              </Tooltip>
-            </HStack>
-
-            {viewMode === 'thumbnails' && (
-              <HStack spacing={2}>
-                <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
-                <Box width="120px">
-                  <Tooltip label={`Thumbnail size: ${thumbnailSize}px`}>
-                    <Slider
-                      value={thumbnailSize}
-                      onChange={setThumbnailSize}
-                      min={80}
-                      max={200}
-                      step={10}
+                  <Tooltip label={`Switch to ${viewMode === 'list' ? 'thumbnail' : 'list'} view`}>
+                    <IconButton
+                      icon={viewMode === 'list' ? <FaGripHorizontal /> : <FaGripLines />}
                       size="sm"
-                    >
-                      <SliderTrack>
-                        <SliderFilledTrack />
-                      </SliderTrack>
-                      <SliderThumb boxSize={3} />
-                    </Slider>
+                      variant="outline"
+                      onClick={() => setViewMode(viewMode === 'list' ? 'thumbnails' : 'list')}
+                      aria-label={`Switch to ${viewMode === 'list' ? 'thumbnail' : 'list'} view`}
+                    />
                   </Tooltip>
-                </Box>
-                <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
+
+                  <Menu>
+                    <MenuButton as={IconButton} icon={<SortIcon />} size="sm" variant="outline" />
+                    <MenuList>
+                      <MenuItem onClick={() => setSortMode('name')}>
+                        <HStack><FiSearch /><Text>Name</Text></HStack>
+                      </MenuItem>
+                      <MenuItem onClick={() => setSortMode('rarity')}>
+                        <HStack><FiHash /><Text>Rarity</Text></HStack>
+                      </MenuItem>
+                      <MenuItem onClick={() => setSortMode('card_code')}>
+                        <HStack><FiType /><Text>Card Code</Text></HStack>
+                      </MenuItem>
+                      <MenuItem onClick={() => setSortMode('tags')}>
+                        <HStack><FiTag /><Text>Tags</Text></HStack>
+                      </MenuItem>
+                    </MenuList>
+                  </Menu>
+
+                  <Tooltip label={`Sort ${sortReverse ? 'ascending' : 'descending'}`}>
+                    <IconButton
+                      icon={sortReverse ? <BsSortUp /> : <BsSortDown />}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSortReverse(!sortReverse)}
+                      aria-label={`Sort ${sortReverse ? 'ascending' : 'descending'}`}
+                    />
+                  </Tooltip>
+                </HStack>
+
+                {/* Second row: Collection switches */}
+                {shouldShowCollectionFilters && (
+                  <HStack spacing={4}>
+                    <FormControl display="flex" alignItems="center">
+                      <FormLabel htmlFor="in-collection" mb="0" fontSize="sm">
+                        In Collection
+                      </FormLabel>
+                      <Switch
+                        id="in-collection"
+                        isChecked={inCollection}
+                        onChange={(e) => setInCollection(e.target.checked)}
+                        size="sm"
+                      />
+                    </FormControl>
+
+                    <FormControl display="flex" alignItems="center">
+                      <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
+                        Show Proxies
+                      </FormLabel>
+                      <Switch
+                        id="show-proxies"
+                        isChecked={showProxies}
+                        onChange={(e) => setShowProxies(e.target.checked)}
+                        size="sm"
+
+                      />
+                    </FormControl>
+                  </HStack>
+                )}
+
+                {/* Third row: Thumbnail slider */}
+                {viewMode === 'thumbnails' && (
+                  <HStack spacing={2}>
+                    <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
+                    <Box width="120px">
+                      <Tooltip label={`Thumbnail size: ${thumbnailSize}px`}>
+                        <Slider
+                          value={thumbnailSize}
+                          onChange={setThumbnailSize}
+                          min={80}
+                          max={200}
+                          step={10}
+                          size="sm"
+                        >
+                          <SliderTrack>
+                            <SliderFilledTrack />
+                          </SliderTrack>
+                          <SliderThumb boxSize={3} />
+                        </Slider>
+                      </Tooltip>
+                    </Box>
+                    <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
+                  </HStack>
+                )}
+              </>
+            ) : (
+              // Desktop layout: Single row (original)
+              <HStack justify="space-between" align="center">
+                <HStack spacing={4}>
+                  <Tooltip label={`Switch to ${viewMode === 'list' ? 'thumbnail' : 'list'} view`}>
+                    <IconButton
+                      icon={viewMode === 'list' ? <FaGripHorizontal /> : <FaGripLines />}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setViewMode(viewMode === 'list' ? 'thumbnails' : 'list')}
+                      aria-label={`Switch to ${viewMode === 'list' ? 'thumbnail' : 'list'} view`}
+                    />
+                  </Tooltip>
+
+                  <Menu>
+                    <MenuButton as={IconButton} icon={<SortIcon />} size="sm" variant="outline" />
+                    <MenuList>
+                      <MenuItem onClick={() => setSortMode('name')}>
+                        <HStack><FiSearch /><Text>Name</Text></HStack>
+                      </MenuItem>
+                      <MenuItem onClick={() => setSortMode('rarity')}>
+                        <HStack><FiHash /><Text>Rarity</Text></HStack>
+                      </MenuItem>
+                      <MenuItem onClick={() => setSortMode('card_code')}>
+                        <HStack><FiType /><Text>Card Code</Text></HStack>
+                      </MenuItem>
+                      <MenuItem onClick={() => setSortMode('tags')}>
+                        <HStack><FiTag /><Text>Tags</Text></HStack>
+                      </MenuItem>
+                    </MenuList>
+                  </Menu>
+
+                  <Tooltip label={`Sort ${sortReverse ? 'ascending' : 'descending'}`}>
+                    <IconButton
+                      icon={sortReverse ? <BsSortUp /> : <BsSortDown />}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSortReverse(!sortReverse)}
+                      aria-label={`Sort ${sortReverse ? 'ascending' : 'descending'}`}
+                    />
+                  </Tooltip>
+                </HStack>
+
+                {viewMode === 'thumbnails' && (
+                  <HStack spacing={2}>
+                    <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
+                    <Box width="120px">
+                      <Tooltip label={`Thumbnail size: ${thumbnailSize}px`}>
+                        <Slider
+                          value={thumbnailSize}
+                          onChange={setThumbnailSize}
+                          min={80}
+                          max={200}
+                          step={10}
+                          size="sm"
+                        >
+                          <SliderTrack>
+                            <SliderFilledTrack />
+                          </SliderTrack>
+                          <SliderThumb boxSize={3} />
+                        </Slider>
+                      </Tooltip>
+                    </Box>
+                    <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
+                  </HStack>
+                )}
+
+
+                {/* Collection-specific filters */}
+                {shouldShowCollectionFilters && (
+                  <HStack spacing={4}>
+                    <FormControl display="flex" alignItems="center">
+                      <FormLabel htmlFor="in-collection" mb="0" fontSize="sm">
+                        In Collection
+                      </FormLabel>
+                      <Switch
+                        id="in-collection"
+                        isChecked={inCollection}
+                        onChange={(e) => setInCollection(e.target.checked)}
+                        size="sm"
+                      />
+                    </FormControl>
+
+                    <FormControl display="flex" alignItems="center">
+                      <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
+                        Show Proxies
+                      </FormLabel>
+                      <Switch
+                        id="show-proxies"
+                        isChecked={showProxies}
+                        onChange={(e) => setShowProxies(e.target.checked)}
+                        size="sm"
+                      />
+                    </FormControl>
+                  </HStack>
+                )}
               </HStack>
             )}
-
-            {/* Collection-specific filters */}
-            {shouldShowCollectionFilters && (
-              <HStack spacing={4}>
-                <FormControl display="flex" alignItems="center">
-                  <FormLabel htmlFor="in-collection" mb="0" fontSize="sm">
-                    In Collection
-                  </FormLabel>
-                  <Switch
-                    id="in-collection"
-                    isChecked={inCollection}
-                    onChange={(e) => setInCollection(e.target.checked)}
-                    size="sm"
-                  />
-                </FormControl>
-
-                <FormControl display="flex" alignItems="center">
-                  <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
-                    Show Proxies
-                  </FormLabel>
-                  <Switch
-                    id="show-proxies"
-                    isChecked={showProxies}
-                    onChange={(e) => setShowProxies(e.target.checked)}
-                    size="sm"
-                  />
-                </FormControl>
-              </HStack>
-            )}
-          </HStack>
+          </VStack>
         )}
       </VStack>
 
