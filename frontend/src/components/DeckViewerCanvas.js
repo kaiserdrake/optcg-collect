@@ -37,7 +37,10 @@ import {
   Tr,
   Th,
   Td,
-  Circle
+  Circle,
+  Switch,
+  FormControl,
+  FormLabel
 } from '@chakra-ui/react';
 
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
@@ -106,6 +109,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
 
   const colorScheme = playerNumber === 1 ? 'blue' : 'red';
   const isMobile = useBreakpointValue({ base: true, md: false });
+  const [hideCount, setHideCount] = useState(false);
 
   // Calculate deck statistics
   const stats = useMemo(() => {
@@ -422,6 +426,21 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                   <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
                 </HStack>
 
+                {/* Hide Count Toggle - Mobile */}
+                <HStack spacing={2}>
+                  <FormControl display="flex" alignItems="center">
+                    <FormLabel htmlFor="hide-count-mobile" mb="0" fontSize="sm" color="gray.600">
+                      Hide Count
+                    </FormLabel>
+                    <Switch
+                      id="hide-count-mobile"
+                      isChecked={hideCount}
+                      onChange={(e) => setHideCount(e.target.checked)}
+                      size="sm"
+                    />
+                  </FormControl>
+                </HStack>
+
                 {/* Sort Controls - Mobile */}
                 <HStack spacing={2}>
                   <Text fontSize="sm" color="gray.600" minW="60px">Sort:</Text>
@@ -470,6 +489,21 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                         <SliderThumb boxSize={4} />
                       </Slider>
                       <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
+                    </HStack>
+
+                    {/* Hide Count Toggle - Desktop */}
+                    <HStack spacing={2} minW="200px">
+                      <FormControl display="flex" alignItems="center">
+                        <FormLabel htmlFor="hide-count-desktop" mb="0" fontSize="sm" color="gray.600" mr={2}>
+                          Hide Count
+                        </FormLabel>
+                        <Switch
+                          id="hide-count-desktop"
+                          isChecked={hideCount}
+                          onChange={(e) => setHideCount(e.target.checked)}
+                          size="sm"
+                        />
+                      </FormControl>
                     </HStack>
 
                     {/* Sort Controls - Compact */}
@@ -541,6 +575,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                       isLeader={cardData?.category === 'LEADER'}
                       isViewOnly={true}
                       thumbnailSize={thumbnailSize}
+                      hideCount={hideCount}
                     />
                   );
                 })}
@@ -805,19 +840,21 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                                       '2px solid gold' : '1px solid gray'}
                                   />
                                   {/* Card count badge */}
-                                  <Badge
-                                    position="absolute"
-                                    top="-8px"
-                                    right="-8px"
-                                    colorScheme="blue"
-                                    variant="solid"
-                                    borderRadius="full"
-                                    fontSize="xs"
-                                    minW="20px"
-                                    textAlign="center"
-                                  >
-                                    {item.count}
-                                  </Badge>
+                                  {!hideCount && (
+                                    <Badge
+                                      position="absolute"
+                                      top="-8px"
+                                      right="-8px"
+                                      colorScheme="blue"
+                                      variant="solid"
+                                      borderRadius="full"
+                                      fontSize="xs"
+                                      minW="20px"
+                                      textAlign="center"
+                                    >
+                                      {item.count}
+                                    </Badge>
+                                  )}
                                   {/* Card name tooltip */}
                                   <Tooltip label={cardData.name} placement="top">
                                     <Box
