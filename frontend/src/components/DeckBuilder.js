@@ -335,14 +335,7 @@ export default function DeckBuilder() {
       <LocateModal
         isOpen={isLocateOpen}
         onClose={onLocateClose}
-        deckId={deck.id}
-        currentLocation={deck.location}
-        onLocationUpdate={(locationData) => {
-          setDeck(prevDeck => ({
-            ...prevDeck,
-            location: locationData.id
-          }));
-        }}
+        deck={deck}
       />
 
       <ImportDeckModal
