@@ -156,7 +156,7 @@ export default function DeckBuilder() {
   };
 
 
-  // Publish deck function - now shows confirmation modal first
+  // Publish deck function
   const handlePublishDeck = () => {
     // Check if deck has a leader instead of checking if it's saved
     if (!stats.hasLeader) {
@@ -182,16 +182,21 @@ export default function DeckBuilder() {
       return;
     }
 
-
     // Open confirmation modal instead of publishing directly
     onPublishConfirmOpen();
   };
 
   // Handle the actual publishing after confirmation
-  const handleConfirmPublish = async () => {
+  const handleConfirmPublish = async (editedDeckName) => {
     setIsPublishing(true);
 
     try {
+      // Create deck data with the potentially modified name
+      const deckDataToPublish = {
+        ...deck,
+        name: editedDeckName || deck.name // Use edited name if provided, otherwise fallback to original
+      };
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/decks/publish-current`, {
         method: 'POST',
         headers: {
@@ -199,13 +204,13 @@ export default function DeckBuilder() {
 
         },
         credentials: 'include',
-        body: JSON.stringify({ deckData: deck }),
+        body: JSON.stringify({ deckData: deckDataToPublish }),
       });
 
       if (response.ok) {
         toast({
           title: 'Deck published',
-          description: `"${deck.name}" has been published to the public gallery`,
+          description: `"${editedDeckName || deck.name}" has been published to the public gallery`,
           status: 'success',
           duration: 3000,
           isClosable: true,
@@ -330,14 +335,7 @@ export default function DeckBuilder() {
       <LocateModal
         isOpen={isLocateOpen}
         onClose={onLocateClose}
-        deckId={deck.id}
-        currentLocation={deck.location}
-        onLocationUpdate={(locationData) => {
-          setDeck(prevDeck => ({
-            ...prevDeck,
-            location: locationData.id
-          }));
-        }}
+        deck={deck}
       />
 
       <ImportDeckModal

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   ModalOverlay,
@@ -17,7 +17,8 @@ import {
   Divider,
   Badge,
   Icon,
-  Flex
+  Flex,
+  Input
 } from '@chakra-ui/react';
 import { FiGlobe, FiUser, FiCalendar, FiBook } from 'react-icons/fi';
 
@@ -29,6 +30,13 @@ const PublishConfirmationModal = ({
   userAlias,
   isLoading = false
 }) => {
+  const [editableDeckName, setEditableDeckName] = useState('');
+
+  // Initialize editable deck name when modal opens or deckName changes
+  useEffect(() => {
+    setEditableDeckName(deckName || '');
+  }, [deckName, isOpen]);
+
   const currentDate = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -37,8 +45,19 @@ const PublishConfirmationModal = ({
     minute: '2-digit'
   });
 
+  const handleConfirm = () => {
+    // Pass the edited deck name to the confirmation handler
+    onConfirm(editableDeckName.trim());
+  };
+
+  const handleClose = () => {
+    // Reset the deck name when closing without confirming
+    setEditableDeckName(deckName || '');
+    onClose();
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="md" isCentered>
+    <Modal isOpen={isOpen} onClose={handleClose} size="md" isCentered>
       <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
       <ModalContent>
         <ModalHeader>
@@ -59,17 +78,21 @@ const PublishConfirmationModal = ({
 
             <VStack spacing={3} align="stretch">
               {/* Deck Name */}
-              <Flex justify="space-between" align="center">
-                <HStack spacing={2}>
+              <Box>
+                <HStack spacing={2} mb={2}>
                   <Icon as={FiBook} color="blue.500" fontSize="sm" />
                   <Text fontSize="sm" fontWeight="medium" color="gray.700">
                     Deck Name:
                   </Text>
                 </HStack>
-                <Text fontSize="sm" fontWeight="semibold" color="gray.900">
-                  {deckName}
-                </Text>
-              </Flex>
+                <Input
+                  value={editableDeckName}
+                  onChange={(e) => setEditableDeckName(e.target.value)}
+                  placeholder="Enter deck name"
+                  size="sm"
+                  isDisabled={isLoading}
+                />
+              </Box>
 
               {/* Publisher */}
               <Flex justify="space-between" align="center">
@@ -113,17 +136,18 @@ const PublishConfirmationModal = ({
           <HStack spacing={3}>
             <Button
               variant="ghost"
-              onClick={onClose}
+              onClick={handleClose}
               isDisabled={isLoading}
             >
               Cancel
             </Button>
             <Button
               colorScheme="green"
-              onClick={onConfirm}
+              onClick={handleConfirm}
               isLoading={isLoading}
               loadingText="Publishing..."
               leftIcon={<Icon as={FiGlobe} />}
+              isDisabled={!editableDeckName.trim()}
             >
               Publish Deck
             </Button>

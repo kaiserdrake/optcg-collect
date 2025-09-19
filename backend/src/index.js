@@ -496,6 +496,68 @@ app.post('/api/decks/publish-current', isAuthenticated, async (req, res) => {
   }
 });
 
+// Delete a published deck (admin or publisher only)
+app.delete('/api/public/decks/:id', isAuthenticated, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await query('BEGIN');
+
+    // Get user info
+    const userResult = await query('SELECT alias, role FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      await query('ROLLBACK');
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const user = userResult.rows[0];
+    const userAlias = user.alias;
+    const userRole = user.role;
+
+    // Check if deck exists and get publisher info
+    const deckCheck = await query(
+      'SELECT id, deck_title, publisher FROM public_shared_decks WHERE id = $1',
+      [id]
+    );
+
+    if (deckCheck.rows.length === 0) {
+      await query('ROLLBACK');
+      return res.status(404).json({ message: 'Published deck not found.' });
+    }
+
+    const deck = deckCheck.rows[0];
+
+    // Check if user has permission to delete (is publisher or admin)
+    if (deck.publisher !== userAlias && userRole !== 'Admin') {
+      await query('ROLLBACK');
+      return res.status(403).json({
+        message: 'Access denied. You can only delete your own published decks.'
+      });
+    }
+
+
+    // Delete the published deck
+    await query('DELETE FROM public_shared_decks WHERE id = $1', [id]);
+
+    await query('COMMIT');
+
+    res.json({
+      message: 'Published deck deleted successfully.',
+      deletedDeck: {
+        id: parseInt(id),
+        deck_title: deck.deck_title,
+        publisher: deck.publisher
+
+      }
+    });
+  } catch (err) {
+    await query('ROLLBACK');
+    console.error('Error deleting published deck:', err);
+    res.status(500).json({ message: 'Server error while deleting published deck.' });
+  }
+});
+
 app.get('/api/users/me', isAuthenticated, async (req, res) => {
   try {
     // Fetch fresh user data from database including alias

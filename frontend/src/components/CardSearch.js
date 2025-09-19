@@ -452,7 +452,8 @@ function CardSearch({
   }
 
   const shouldShowFilters = showFilters && (mode === 'collection' || mode === 'deckbuilder');
-  const shouldShowCollectionFilters = showFilters && mode === 'collection';
+  const shouldShowCollectionFilters = showFilters && (mode === 'collection' || mode === 'deckbuilder');
+  const shouldShowProxyFilters = showFilters && mode === 'collection';
   const SortIcon = getSortIcon(sortMode);
 
   return (
@@ -540,18 +541,21 @@ function CardSearch({
                       />
                     </FormControl>
 
-                    <FormControl display="flex" alignItems="center">
-                      <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
-                        Show Proxies
-                      </FormLabel>
-                      <Switch
-                        id="show-proxies"
-                        isChecked={showProxies}
-                        onChange={(e) => setShowProxies(e.target.checked)}
-                        size="sm"
+                    {shouldShowProxyFilters && (
+                      <FormControl display="flex" alignItems="center">
+                        <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
+                          Show Proxies
+                        </FormLabel>
+                        <Switch
+                          id="show-proxies"
+                          isChecked={showProxies}
+                          onChange={(e) => setShowProxies(e.target.checked)}
+                          size="sm"
 
-                      />
-                    </FormControl>
+                        />
+                      </FormControl>
+
+                    )}
                   </HStack>
                 )}
 
@@ -663,19 +667,21 @@ function CardSearch({
                       />
                     </FormControl>
 
-                    <FormControl display="flex" alignItems="center">
-                      <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
-                        Show Proxies
-                      </FormLabel>
-                      <Switch
-                        id="show-proxies"
-                        isChecked={showProxies}
-                        onChange={(e) => setShowProxies(e.target.checked)}
-                        size="sm"
-                      />
-                    </FormControl>
-                  </HStack>
-                )}
+                      {shouldShowProxyFilters && (
+                        <FormControl display="flex" alignItems="center">
+                          <FormLabel htmlFor="show-proxies" mb="0" fontSize="sm">
+                            Show Proxies
+                          </FormLabel>
+                          <Switch
+                            id="show-proxies"
+                            isChecked={showProxies}
+                            onChange={(e) => setShowProxies(e.target.checked)}
+                            size="sm"
+                          />
+                        </FormControl>
+                      )}
+                    </HStack>
+                  )}
               </HStack>
             )}
           </VStack>
