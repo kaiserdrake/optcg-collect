@@ -7,7 +7,7 @@ const nextConfig = {
   images: {
     domains: [
       // Add any external image domains you use
-      'tcg.laeradsphere.com',
+      '1pc.laeradsphere.com',
       'en.onepiece-cardgame.com',
       'asia-en.onepiece-cardgame.com'
     ],
@@ -28,7 +28,7 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'tcg.laeradsphere.com',
+        hostname: '1pc.laeradsphere.com',
         port: '',
         pathname: '/**',
       }
