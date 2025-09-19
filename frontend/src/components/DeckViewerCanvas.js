@@ -100,7 +100,7 @@ const extractStyledKeywords = (effect, triggerEffect) => {
 const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
   const [sortMode, setSortMode] = useState('cost');
   const [sortReverse, setSortReverse] = useState(false);
-  const [thumbnailSize, setThumbnailSize] = useState(100); // Change default to 100
+  const [thumbnailSize, setThumbnailSize] = useState(80);
   const { isOpen: isCardDetailOpen, onOpen: onCardDetailOpen, onClose: onCardDetailClose } = useDisclosure();
   const [selectedCardForDetail, setSelectedCardForDetail] = useState(null);
 
@@ -409,8 +409,8 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                   <Slider
                     value={thumbnailSize}
                     onChange={setThumbnailSize}
-                    min={80}
-                    max={200}
+                    min={40}
+                    max={140}
                     step={10}
                     flex="1"
                   >
@@ -459,8 +459,8 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                       <Slider
                         value={thumbnailSize}
                         onChange={setThumbnailSize}
-                        min={80}
-                        max={200}
+                        min={60}
+                        max={180}
                         step={10}
                         width="120px"
                       >
@@ -511,8 +511,8 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
               flex="1"
               bg="gray.50"
               borderRadius="md"
-              p={2}
-              border="2px solid"
+              p={1}
+              border="1px solid"
               borderColor="gray.200"
               overflowY="auto"
               maxH="500px"
