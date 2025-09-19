@@ -46,6 +46,7 @@ import DeckCard from './DeckCard';
 import CardDetailModal from './CardDetailModal';
 import StyledTextRenderer from './StyledTextRenderer';
 import { colorMap } from '@/utils/cardStyles';
+import { useBreakpointValue } from '@chakra-ui/react';
 
 // Helper function to get card data (consistent with existing codebase)
 const getCardData = (item) => {
@@ -104,6 +105,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
   const [selectedCardForDetail, setSelectedCardForDetail] = useState(null);
 
   const colorScheme = playerNumber === 1 ? 'blue' : 'red';
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   // Calculate deck statistics
   const stats = useMemo(() => {
@@ -352,12 +354,12 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
 
   // Prepare data for charts
   const costChartData = Object.entries(stats.costDistribution)
-    .sort(([a], [b]) => parseInt(a) - parseInt(b))
-    .map(([cost, count]) => ({
-      cost: parseInt(cost),
-      count,
-      name: `${cost}`
-    }));
+  .sort(([a], [b]) => parseInt(a) - parseInt(b))
+  .map(([cost, count]) => ({
+    cost: parseInt(cost),
+    count,
+    name: `${cost}`
+  }));
 
   // Add missing cost values with 0 count for better visualization
   const maxCost = Math.max(...costChartData.map(d => d.cost), 10);
@@ -368,8 +370,8 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
   }
   // Add 10+ category if there are cards with cost > 10
   const highCostCount = Object.entries(stats.costDistribution)
-    .filter(([cost]) => parseInt(cost) > 10)
-    .reduce((sum, [, count]) => sum + count, 0);
+  .filter(([cost]) => parseInt(cost) > 10)
+  .reduce((sum, [, count]) => sum + count, 0);
   if (highCostCount > 0) {
     fullCostData.push({ cost: 11, count: highCostCount, name: '10+' });
   }
@@ -394,12 +396,15 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
 
         <TabPanels>
           <TabPanel>
-            {/* Compact Controls - All in one line */}
-            <HStack justify="space-between" align="center" mb={4} spacing={4}>
-              {/* Left side - Size and Sort controls */}
-              <HStack spacing={4} flex={1}>
-                {/* Thumbnail Size Slider - Compact */}
-                <HStack spacing={2} minW="200px">
+
+            {/* Compact Controls - Responsive */}
+
+            {isMobile ? (
+              // Mobile layout: Separate lines
+              <VStack spacing={3} align="stretch" mb={4}>
+
+                {/* Thumbnail Size Slider - Mobile */}
+                <HStack spacing={2}>
                   <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
                   <Slider
                     value={thumbnailSize}
@@ -407,7 +412,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                     min={80}
                     max={200}
                     step={10}
-                    width="120px"
+                    flex="1"
                   >
                     <SliderTrack>
                       <SliderFilledTrack />
@@ -417,14 +422,14 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                   <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
                 </HStack>
 
-                {/* Sort Controls - Compact */}
+                {/* Sort Controls - Mobile */}
                 <HStack spacing={2}>
-                  <Text fontSize="sm" color="gray.600">Sort:</Text>
+                  <Text fontSize="sm" color="gray.600" minW="60px">Sort:</Text>
                   <Select
                     size="sm"
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value)}
-                    width="100px"
+                    flex="1"
                   >
                     <option value="cost">Cost</option>
                     <option value="name">Name</option>
@@ -442,11 +447,64 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                     />
                   </Tooltip>
                 </HStack>
-              </HStack>
+              </VStack>
+            ) : (
+                // Desktop layout: Original single line
+                <HStack justify="space-between" align="center" mb={4} spacing={4}>
+                  {/* Left side - Size and Sort controls */}
+                  <HStack spacing={4} flex={1}>
+                    {/* Thumbnail Size Slider - Compact */}
+                    <HStack spacing={2} minW="200px">
+                      <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
+                      <Slider
+                        value={thumbnailSize}
+                        onChange={setThumbnailSize}
+                        min={80}
+                        max={200}
+                        step={10}
+                        width="120px"
+                      >
+                        <SliderTrack>
+                          <SliderFilledTrack />
+                        </SliderTrack>
+                        <SliderThumb boxSize={4} />
+                      </Slider>
+                      <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
+                    </HStack>
 
-              {/* Right side - Empty for cleaner layout */}
-              <Box></Box>
-            </HStack>
+                    {/* Sort Controls - Compact */}
+                    <HStack spacing={2}>
+                      <Text fontSize="sm" color="gray.600">Sort:</Text>
+                      <Select
+                        size="sm"
+                        value={sortMode}
+                        onChange={(e) => setSortMode(e.target.value)}
+                        width="100px"
+                      >
+
+                        <option value="cost">Cost</option>
+                        <option value="name">Name</option>
+                        <option value="category">Category</option>
+                        <option value="color">Color</option>
+                        <option value="count">Count</option>
+                      </Select>
+
+                      <Tooltip label={sortReverse ? 'Sort ascending' : 'Sort descending'}>
+                        <IconButton
+                          icon={sortReverse ? <BsSortUp /> : <BsSortDown />}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSortReverse(!sortReverse)}
+                        />
+
+                      </Tooltip>
+                    </HStack>
+                  </HStack>
+
+                  {/* Right side - Empty for cleaner layout */}
+                  <Box></Box>
+                </HStack>
+              )}
 
             {/* Cards Grid */}
             <Box
