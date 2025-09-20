@@ -291,6 +291,7 @@ export default function DeckBuilder() {
             onCardClick={handleCardClickWrapper}
             onRemoveCard={removeCardFromDeck}
             onAddCard={addCardToDeck}
+            onLocate={() => onLocateOpen()}
           />
         </GridItem>
 

@@ -6,15 +6,21 @@ import {
   VStack,
   HStack,
   Text,
-  Select,
   Grid,
   IconButton,
-  Tooltip
+  Tooltip,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Button
 } from '@chakra-ui/react';
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
+import { TriangleDownIcon } from '@chakra-ui/icons';
+import { FiSearch, FiHash, FiType, FiMapPin } from 'react-icons/fi';
 import DeckCard from './DeckCard';
 
-const DeckCanvas = ({ deck, stats, sortedCards, sortMode, sortReverse, setSortMode, setSortReverse, onCardClick, onRemoveCard, onAddCard }) => {
+const DeckCanvas = ({ deck, stats, sortedCards, sortMode, sortReverse, setSortMode, setSortReverse, onCardClick, onRemoveCard, onAddCard, onLocate }) => {
 
   // NORMALIZE CARD ITEM - Ensures consistent { card: {...}, count } structure
   const normalizeCardItem = React.useCallback((item) => {
@@ -65,18 +71,40 @@ const DeckCanvas = ({ deck, stats, sortedCards, sortMode, sortReverse, setSortMo
         </VStack>
         <HStack spacing={2}>
           <HStack spacing={2}>
-            <Text fontSize="sm" color="gray.600">Sort:</Text>
-            <Select
+            <Button
+              leftIcon={<FiMapPin />}
               size="sm"
-              value={sortMode}
-              onChange={(e) => setSortMode(e.target.value)}
-              width="auto"
-              minW="120px"
+              variant="outline"
+              onClick={onLocate}
+              isDisabled={!deck?.cards || deck.cards.length === 0}
             >
-              <option value="cost">Cost</option>
-              <option value="name">Name</option>
-              <option value="type">Type</option>
-            </Select>
+              Locate
+            </Button>
+
+            <Menu>
+              <MenuButton
+                as={IconButton}
+                icon={
+                  sortMode === 'cost' ? <FiHash /> :
+                  sortMode === 'name' ? <FiSearch /> :
+                  sortMode === 'type' ? <FiType /> :
+                  <FiHash />
+                }
+                size="sm"
+                variant="outline"
+              />
+              <MenuList>
+                <MenuItem onClick={() => setSortMode('cost')}>
+                  <HStack><FiHash /><Text>Cost</Text></HStack>
+                </MenuItem>
+                <MenuItem onClick={() => setSortMode('name')}>
+                  <HStack><FiSearch /><Text>Name</Text></HStack>
+                </MenuItem>
+                <MenuItem onClick={() => setSortMode('type')}>
+                  <HStack><FiType /><Text>Type</Text></HStack>
+                </MenuItem>
+              </MenuList>
+            </Menu>
 
             <Tooltip label={sortReverse ? 'Sort ascending' : 'Sort descending'}>
               <IconButton
