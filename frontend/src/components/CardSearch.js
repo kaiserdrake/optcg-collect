@@ -22,6 +22,8 @@ import ThumbViewCollect from './ThumbViewCollect';
 import ListViewBuilder from './ListViewBuilder';
 import ThumbViewBuilder from './ThumbViewBuilder';
 
+import TabletopCanvas from './TabletopCanvas';
+
 // ISOLATED RESULTS COMPONENT - This prevents re-renders during typing
 const IsolatedResultsComponent = React.memo(({
   results,
@@ -484,6 +486,58 @@ function CardSearch({
 
   return (
     <VStack spacing={4} align="stretch">
+
+      {/* Tabletop Canvas - Only show in collection mode */}
+      {mode === 'collection' && (
+        <TabletopCanvas
+          cards={results}
+          onCardClick={handleCardClick}
+          onCountUpdate={handleCountUpdate}
+          onLocationUpdate={async (cardId, location) => {
+            // Implement location update logic similar to handleCountUpdate
+            try {
+              const response = await fetch(`${apiUrl}/api/cards/${cardId}/location`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({ location })
+              });
+
+              if (response.ok) {
+                // Refresh card data
+                await handleCountUpdate(cardId, 'location_updated');
+              }
+            } catch (error) {
+              console.error('Failed to update location:', error);
+              throw error;
+            }
+          }}
+          onTagUpdate={async (cardId, tag) => {
+            // Implement tag update logic
+            try {
+              const response = await fetch(`${apiUrl}/api/cards/${cardId}/tags`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({ tagType: tag, action: 'add' })
+              });
+
+              if (response.ok) {
+                // Refresh card data
+                await handleCountUpdate(cardId, 'tag_updated');
+              }
+            } catch (error) {
+              console.error('Failed to update tag:', error);
+              throw error;
+            }
+          }}
+        />
+      )}
+
       {/* Search Input */}
       <VStack spacing={3} align="stretch">
         <HStack>
@@ -751,7 +805,6 @@ function CardSearch({
         thumbnailSize={thumbnailSize}
         loading={loading}
       />
-
       {/* Modals */}
       <CardDetailModal
         isOpen={isDetailOpen}
