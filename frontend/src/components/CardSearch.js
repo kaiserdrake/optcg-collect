@@ -590,21 +590,19 @@ function CardSearch({
                   <HStack spacing={2}>
                     <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
                     <Box width="120px">
-                      <Tooltip label={`Thumbnail size: ${thumbnailSize}px`}>
-                        <Slider
-                          value={thumbnailSize}
-                          onChange={setThumbnailSize}
-                          min={80}
-                          max={200}
-                          step={10}
-                          size="sm"
-                        >
-                          <SliderTrack>
-                            <SliderFilledTrack />
-                          </SliderTrack>
-                          <SliderThumb boxSize={3} />
-                        </Slider>
-                      </Tooltip>
+                      <Slider
+                        value={thumbnailSize}
+                        onChange={setThumbnailSize}
+                        min={80}
+                        max={200}
+                        step={10}
+                        size="sm"
+                      >
+                        <SliderTrack>
+                          <SliderFilledTrack />
+                        </SliderTrack>
+                        <SliderThumb boxSize={3} />
+                      </Slider>
                     </Box>
                     <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
                   </HStack>
@@ -657,21 +655,19 @@ function CardSearch({
                   <HStack spacing={2}>
                     <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
                     <Box width="120px">
-                      <Tooltip label={`Thumbnail size: ${thumbnailSize}px`}>
-                        <Slider
-                          value={thumbnailSize}
-                          onChange={setThumbnailSize}
-                          min={80}
-                          max={200}
-                          step={10}
-                          size="sm"
-                        >
-                          <SliderTrack>
-                            <SliderFilledTrack />
-                          </SliderTrack>
-                          <SliderThumb boxSize={3} />
-                        </Slider>
-                      </Tooltip>
+                      <Slider
+                        value={thumbnailSize}
+                        onChange={setThumbnailSize}
+                        min={80}
+                        max={200}
+                        step={10}
+                        size="sm"
+                      >
+                        <SliderTrack>
+                          <SliderFilledTrack />
+                        </SliderTrack>
+                        <SliderThumb boxSize={3} />
+                      </Slider>
                     </Box>
                     <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
                   </HStack>
