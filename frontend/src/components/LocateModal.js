@@ -41,6 +41,7 @@ import { FiMapPin } from 'react-icons/fi';
 import CardImage from './CardImage';
 import SetLocationModal from './SetLocationModal';
 import { CARD_EVENTS } from '@/utils/cardEvents';
+import { getTagStyles } from '@/utils/cardStyles';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -115,16 +116,28 @@ const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) =
 
         {/* Card Details */}
         <VStack align="start" spacing={2} flex={1} minW={0}>
-          {/* Card Name */}
+          {/* Card Name and Code */}
           <VStack align="start" spacing={1}>
             <Text fontSize="sm" fontWeight="medium" noOfLines={2}>
               {row.card.name}
             </Text>
-            {row.isAlternative && (
-              <Text fontSize="xs" color="orange.600" fontStyle="italic">
-                Alternative card ({row.card.id})
-              </Text>
-            )}
+            <HStack spacing={2}>
+              <Tag
+                size="sm"
+                {...getTagStyles(row.card.color)}
+                fontWeight="bold"
+                fontSize="sm"
+                px={3}
+                py={1}
+              >
+                {row.card.card_code}
+              </Tag>
+              {row.isAlternative && (
+                <Text fontSize="xs" color="orange.600" fontStyle="italic">
+                  Alternative ({row.card.id})
+                </Text>
+              )}
+            </HStack>
           </VStack>
 
           {/* Counts Row */}
@@ -864,11 +877,23 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                                   <Text fontSize="sm" fontWeight="medium" noOfLines={2}>
                                     {row.card.name}
                                   </Text>
-                                  {row.isAlternative && (
-                                    <Text fontSize="xs" color="orange.600" fontStyle="italic">
-                                      Alt: {row.displayCardId}
-                                    </Text>
-                                  )}
+                                  <HStack spacing={2}>
+                                    <Tag
+                                      size="sm"
+                                      {...getTagStyles(row.card.color)}
+                                      fontWeight="bold"
+                                      fontSize="sm"
+                                      px={3}
+                                      py={1}
+                                    >
+                                      {row.card.card_code}
+                                    </Tag>
+                                    {row.isAlternative && (
+                                      <Text fontSize="xs" color="orange.600" fontStyle="italic">
+                                        Alt: {row.displayCardId}
+                                      </Text>
+                                    )}
+                                  </HStack>
                                 </VStack>
                               </Td>
                               <Td p={2} textAlign="center">

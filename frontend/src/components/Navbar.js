@@ -331,27 +331,8 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
             </HStack>
           </HStack>
 
-          {/* Right side - Buy Me Coffee + User Menu or Sign In */}
+          {/* Right side User Menu or Sign In */}
           <Flex alignItems="center" spacing={3}>
-            {/* Buy Me Coffee Button - Always visible */}
-            <Button
-              leftIcon={<FiHeart />}
-              size="sm"
-              variant="outline"
-              colorScheme="pink"
-              onClick={handleDonationClick}
-              _hover={{
-                bg: 'pink.50',
-                borderColor: 'pink.300',
-                transform: 'translateY(-1px)'
-              }}
-              transition="all 0.2s"
-              display={{ base: 'none', sm: 'flex' }}
-              mr={3}
-            >
-              Buy me a coffee
-            </Button>
-
             {loading ? (
               <Spinner size="sm" color="gray.500" />
             ) : user ? (
@@ -378,14 +359,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                   </Box>
 
                   <MenuDivider m={0} />
-
-                  {/* Buy Me Coffee in Mobile Menu */}
-                  <Box display={{ base: 'block', sm: 'none' }}>
-                    <MenuItem icon={<FiHeart />} onClick={handleDonationClick} color="pink.600">
-                      Buy me a coffee
-                    </MenuItem>
-                    <MenuDivider />
-                  </Box>
 
                   {/* Mobile Navigation - Only show on small screens */}
                   <Box display={{ base: 'block', md: 'none' }}>
@@ -445,6 +418,11 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                     </>
                   )}
 
+                  <MenuDivider />
+                  {/* Buy Me Coffee in Mobile Menu */}
+                  <MenuItem icon={<FiHeart />} onClick={handleDonationClick} color="pink.600">
+                    Buy me a coffee
+                  </MenuItem>
                   <MenuDivider />
                   <MenuItem onClick={handleLogout} color="red.600">
                     Sign Out

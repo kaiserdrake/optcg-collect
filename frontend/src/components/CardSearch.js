@@ -240,17 +240,43 @@ function CardSearch({
     };
   }, []); // Empty dependency array - no re-renders!
 
+  // Helper function to detect and transform card ID patterns
+  const transformCardIdPattern = useCallback((searchTerm) => {
+    if (!searchTerm || typeof searchTerm !== 'string') {
+      return searchTerm;
+    }
+
+    const trimmedTerm = searchTerm.trim();
+
+    // Check if the search term matches the pattern C-NNN where:
+    // C = one or more letters/numbers (card code)
+    // NNN = exactly three digits
+    const cardIdPattern = /^([A-Za-z0-9]+)-(\d{3})$/;
+    const match = trimmedTerm.match(cardIdPattern);
+
+    if (match) {
+      // Transform "P-123" to "id:P-123"
+      return `id:${trimmedTerm}`;
+    }
+
+    // Return original term if no pattern match
+    return searchTerm;
+  }, []);
+
   // Search term change handler - NO side effects on results
   const handleSearchTermChange = useCallback((newTerm) => {
     const termValue = typeof newTerm === 'string' ? newTerm : newTerm.target?.value || '';
 
+    // Auto-detect card ID patterns and transform them
+    const transformedTerm = transformCardIdPattern(termValue);
+
     // ONLY update search term state - nothing else
-    setSearchTerm(termValue);
+    setSearchTerm(transformedTerm);
 
     if (mode === 'deckbuilder' && onSearchKeywordChange) {
-      onSearchKeywordChange(termValue);
+      onSearchKeywordChange(transformedTerm);
     }
-  }, [mode, onSearchKeywordChange]);
+  }, [mode, onSearchKeywordChange, transformCardIdPattern]);
 
   // Manual search trigger
   const handleManualSearch = useCallback(() => {
