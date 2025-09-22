@@ -10,8 +10,6 @@ import CardVariantIndicator from './CardVariantIndicator';
 import StyledTextRenderer from './StyledTextRenderer';
 import CardImage from './CardImage';
 import LocationDisplayBadge from './LocationDisplayBadge';
-
-
 import SetLocationModal from './SetLocationModal';
 import LocationManagementModal from './LocationManagementModal';
 import CardTags from './CardTags';
@@ -341,12 +339,12 @@ const CardDetailModal = ({
                                   </WrapItem>
                                 ))}
                               </Wrap>
-                            ) : '-'}
-                          </Td>
-                        </Tr>
-                      </Tbody>
-                    </Table>
-                  )}
+                              ) : '-'}
+                            </Td>
+                          </Tr>
+                        </Tbody>
+                      </Table>
+                    )}
 
                   {/* Pack Appearance */}
                   {cardData.packs && (
@@ -369,7 +367,66 @@ const CardDetailModal = ({
           {/* Conditionally render footer based on interactive prop */}
           {interactive && (
             <ModalFooter py={3}>
-              <HStack spacing={4} width="100%" justify="space-between">
+              {/* Mobile layout: Vertical stack */}
+              <VStack spacing={4} width="100%" align="stretch" display={{ base: "flex", md: "none" }}>
+                {/* Row 1: Count Controls */}
+                <HStack spacing={6} justify="center">
+                  <Box textAlign="center">
+                    <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
+                      Owned Cards
+                    </Text>
+                    <CountControl
+                      cardId={cardData.id}
+                      type="owned"
+                      count={cardData.owned_count || 0}
+                      onUpdate={handleCountControlUpdate}
+                    />
+                  </Box>
+
+                  {showProxies && (
+                    <Box textAlign="center">
+                      <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
+                        Proxy Cards
+                      </Text>
+                      <CountControl
+                        cardId={cardData.id}
+                        type="proxy"
+                        count={cardData.proxy_count || 0}
+                        onUpdate={handleCountControlUpdate}
+                      />
+                    </Box>
+                  )}
+                </HStack>
+
+                {/* Row 2: Tags */}
+                <Box textAlign="left">
+                  <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
+                    Tags
+                  </Text>
+                  <CardTags cardId={cardData.id} card={cardData} interactive={true} onTagUpdate={handleTagUpdate} />
+                </Box>
+
+                {/* Row 3: Location */}
+                {((cardData.owned_count > 0) || (cardData.proxy_count > 0)) && (
+                  <Box textAlign="left">
+                    <Text fontSize="xs" fontWeight="bold" color="gray.600" mb={1}>
+                      Location
+                    </Text>
+                    <LocationDisplayBadge
+                      card={cardData}
+                      onClick={handleLocationBadgeClick}
+                    />
+                  </Box>
+                )}
+
+                {/* Close Button */}
+                <Button colorScheme="blue" onClick={onClose} mt={2}>
+                  Close
+                </Button>
+              </VStack>
+
+              {/* Desktop layout: Horizontal layout */}
+              <HStack spacing={4} width="100%" justify="space-between" display={{ base: "none", md: "flex" }}>
                 {/* Count Controls */}
                 <HStack spacing={6}>
                   <Box textAlign="center">
