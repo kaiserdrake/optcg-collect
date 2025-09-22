@@ -38,7 +38,17 @@ import {
   NumberInputField,
   NumberInputStepper,
   NumberIncrementStepper,
-  NumberDecrementStepper
+  NumberDecrementStepper,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription
 } from '@chakra-ui/react';
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
 import { ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
@@ -61,6 +71,7 @@ const TabletopCanvas = ({
   const { isOpen: isBulkCountOpen, onOpen: onBulkCountOpen, onClose: onBulkCountClose } = useDisclosure();
   const { isOpen: isBulkProxyOpen, onOpen: onBulkProxyOpen, onClose: onBulkProxyClose } = useDisclosure();
   const { isOpen: isBulkTagOpen, onOpen: onBulkTagOpen, onClose: onBulkTagClose } = useDisclosure();
+  const { isOpen: isFailedMoveOpen, onOpen: onFailedMoveOpen, onClose: onFailedMoveClose } = useDisclosure();
 
   const [sortMode, setSortMode] = useState('name');
   const [sortReverse, setSortReverse] = useState(false);
@@ -78,6 +89,13 @@ const TabletopCanvas = ({
   const [bulkCount, setBulkCount] = useState(1);
   const [bulkProxyCount, setBulkProxyCount] = useState(0);
   const [bulkTag, setBulkTag] = useState('');
+
+  // Failed move tracking
+  const [failedMoveData, setFailedMoveData] = useState({
+    failedCards: [],
+    successCount: 0,
+    operationType: ''
+  });
 
   const toast = useToast();
 
@@ -560,30 +578,28 @@ const TabletopCanvas = ({
         });
       }
 
-      // Show failed moves summary (not as error, but as info)
+      // Show failed moves in dialog instead of toast
       if (failedMoves.length > 0) {
-        const notInCollectionCards = failedMoves.filter(f => f.reason === 'Not in collection');
-        const otherFailures = failedMoves.filter(f => f.reason !== 'Not in collection');
+        const locationName = selectedMoveAllLocation === 'remove'
+          ? 'remove location'
+          : locations.find(l => l.id.toString() === selectedMoveAllLocation)?.name || 'selected location';
 
-        if (notInCollectionCards.length > 0) {
-          toast({
-            title: 'Cards Not in Collection',
-            description: `${notInCollectionCards.length} selected card${notInCollectionCards.length > 1 ? 's are' : ' is'} not in your collection and ${notInCollectionCards.length > 1 ? 'were' : 'was'} skipped`,
-            status: 'info',
-            duration: 6000,
-            isClosable: true,
-          });
-        }
+        // Add card names to failed moves by looking them up in our card data
+        const enrichedFailedMoves = failedMoves.map(failed => {
+          const cardData = selectedCardData[failed.cardId] || cards.find(c => c.id === failed.cardId);
+          return {
+            ...failed,
+            cardName: cardData?.name || failed.cardId,
+            cardCode: cardData?.card_code || failed.baseCardId
+          };
+        });
 
-        if (otherFailures.length > 0) {
-          toast({
-            title: 'Some Updates Failed',
-            description: `${otherFailures.length} card${otherFailures.length > 1 ? 's' : ''} could not be updated due to errors`,
-            status: 'warning',
-            duration: 6000,
-            isClosable: true,
-          });
-        }
+        setFailedMoveData({
+          failedCards: enrichedFailedMoves,
+          successCount: successfulMoves.length,
+          operationType: `move to ${locationName}`
+        });
+        onFailedMoveOpen();
       }
 
       // Refresh card data if onLocationUpdate is provided
@@ -1165,6 +1181,84 @@ const TabletopCanvas = ({
             </Button>
             <Button colorScheme="blue" onClick={handleBulkSetTag}>
               Update {selectedCards.size} cards
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Failed Move Results Dialog */}
+      <Modal isOpen={isFailedMoveOpen} onClose={onFailedMoveClose} size="xl">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>
+            <HStack spacing={3}>
+              <FiMapPin />
+              <Text>Move Operation Results</Text>
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              {failedMoveData.successCount > 0 && (
+                <Alert status="success">
+                  <AlertIcon />
+                  <AlertTitle>Successfully moved {failedMoveData.successCount} cards!</AlertTitle>
+                </Alert>
+              )}
+
+              {failedMoveData.failedCards.length > 0 && (
+                <>
+                  <Alert status="warning">
+                    <AlertIcon />
+                    <VStack align="start" spacing={1}>
+                      <AlertTitle>
+                        {failedMoveData.failedCards.length} card{failedMoveData.failedCards.length > 1 ? 's' : ''} could not be moved
+                      </AlertTitle>
+                      <AlertDescription>
+                        The following cards could not be updated to {failedMoveData.operationType}:
+                      </AlertDescription>
+                    </VStack>
+                  </Alert>
+
+                  <Box maxH="300px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="md">
+                    <Table size="sm">
+                      <Thead bg="gray.50">
+                        <Tr>
+                          <Th>Card Name</Th>
+                          <Th>Card Code</Th>
+                          <Th>Reason</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {failedMoveData.failedCards.map((failed, index) => (
+                          <Tr key={index}>
+                            <Td fontWeight="medium">{failed.cardName}</Td>
+                            <Td color="gray.600">{failed.cardCode}</Td>
+                            <Td>
+                              <Badge
+                                colorScheme={failed.reason === 'Not in collection' ? 'blue' : 'red'}
+                                variant="subtle"
+                              >
+                                {failed.reason}
+                              </Badge>
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </Box>
+
+                  <Text fontSize="sm" color="gray.600">
+                    Cards marked as "Not in collection" are not owned by you and were skipped.
+                    Other errors may require checking your collection or trying again.
+                  </Text>
+                </>
+              )}
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={onFailedMoveClose}>
+              Close
             </Button>
           </ModalFooter>
         </ModalContent>
