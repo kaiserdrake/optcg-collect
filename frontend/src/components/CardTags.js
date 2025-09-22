@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dispatchCardUpdate, CARD_EVENTS } from '@/utils/cardEvents';
 import { HStack, IconButton, Tooltip, useToast, Icon } from '@chakra-ui/react';
-import { FiBookmark, FiHeart, FiSlash, FiAlertTriangle } from 'react-icons/fi';
+import { TAG_DEFINITIONS } from '@/utils/tagDefinitions';
 import { useAuth } from '@/context/AuthContext';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -213,9 +213,9 @@ const CardTags = ({
       {/* User Tags */}
       {(interactive || hasFavorite) && (
         <TagIcon
-          icon={FiBookmark}
-          colorScheme="blue"
-          label="Favorite"
+          icon={TAG_DEFINITIONS.favorite.icon}
+          colorScheme={TAG_DEFINITIONS.favorite.colorScheme}
+          label={TAG_DEFINITIONS.favorite.label}
           onClick={() => toggleUserTag('favorite')}
           isActive={hasFavorite}
           isLoading={loading.favorite}
@@ -224,9 +224,9 @@ const CardTags = ({
 
       {(interactive || hasWant) && (
         <TagIcon
-          icon={FiHeart}
-          colorScheme="red"
-          label="Want"
+          icon={TAG_DEFINITIONS.want.icon}
+          colorScheme={TAG_DEFINITIONS.want.colorScheme}
+          label={TAG_DEFINITIONS.want.label}
           onClick={() => toggleUserTag('want')}
           isActive={hasWant}
           isLoading={loading.want}
@@ -236,9 +236,9 @@ const CardTags = ({
       {/* Admin Tags */}
       {user?.role === 'Admin' && (interactive || isBanned) && (
         <TagIcon
-          icon={FiSlash}
-          colorScheme="red"
-          label="Banned"
+          icon={TAG_DEFINITIONS.banned.icon}
+          colorScheme={TAG_DEFINITIONS.banned.colorScheme}
+          label={TAG_DEFINITIONS.banned.label}
           onClick={() => toggleAdminTag('banned')}
           isActive={isBanned}
           isLoading={loading.banned}
@@ -247,9 +247,9 @@ const CardTags = ({
 
       {user?.role === 'Admin' && (interactive || isRestricted) && (
         <TagIcon
-          icon={FiAlertTriangle}
-          colorScheme="yellow"
-          label="Restricted"
+          icon={TAG_DEFINITIONS.restricted.icon}
+          colorScheme={TAG_DEFINITIONS.restricted.colorScheme}
+          label={TAG_DEFINITIONS.restricted.label}
           onClick={() => toggleAdminTag('restricted')}
           isActive={isRestricted}
           isLoading={loading.restricted}
@@ -259,9 +259,9 @@ const CardTags = ({
       {/* Global tags visible to non-admin users (display only) */}
       {user?.role !== 'Admin' && isBanned && (
         <TagIcon
-          icon={FiSlash}
-          colorScheme="red"
-          label="Banned"
+          icon={TAG_DEFINITIONS.banned.icon}
+          colorScheme={TAG_DEFINITIONS.banned.colorScheme}
+          label={TAG_DEFINITIONS.banned.label}
           isActive={true}
           disabled={true}
         />
@@ -269,9 +269,9 @@ const CardTags = ({
 
       {user?.role !== 'Admin' && isRestricted && (
         <TagIcon
-          icon={FiAlertTriangle}
-          colorScheme="yellow"
-          label="Restricted"
+          icon={TAG_DEFINITIONS.restricted.icon}
+          colorScheme={TAG_DEFINITIONS.restricted.colorScheme}
+          label={TAG_DEFINITIONS.restricted.label}
           isActive={true}
           disabled={true}
         />
