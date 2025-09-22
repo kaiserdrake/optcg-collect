@@ -56,7 +56,7 @@ const CardTags = ({
     setLoading(prev => ({ ...prev, [tagType]: true }));
 
     try {
-      const res = await fetch(`${api}/api/cards/${encodeURIComponent(cardId)}/tags`, {
+      const res = await fetch(`${api}/api/cards/${encodeURIComponent(cardId)}/user-tags`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,7 +172,7 @@ const CardTags = ({
   const iconSize = size === "sm" ? 3 : 4;
   const buttonSize = size === "sm" ? "xs" : "sm";
 
-  // Improved TagIcon with solid/ghost variant
+  // Improved TagIcon with solid/ghost variant and better tooltip positioning
   const TagIcon = ({
     icon,
     colorScheme = "gray",
@@ -202,7 +202,14 @@ const CardTags = ({
     );
 
     return showTooltips ? (
-      <Tooltip label={label} hasArrow>
+      <Tooltip
+        label={label}
+        hasArrow
+        placement="auto-start"
+        openDelay={200}
+        closeDelay={100}
+        portalProps={{ appendToParentPortal: false }}
+      >
         {iconElement}
       </Tooltip>
     ) : iconElement;

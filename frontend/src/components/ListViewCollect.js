@@ -141,7 +141,7 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => 
                     </Text>
                   </HStack>
                   {hasTags && (
-                    <CardTags card={card} interactive={false} size="sm" showTooltips={true} />
+                    <CardTags card={card} interactive={false} size="xl" showTooltips={true} />
                   )}
                 </HStack>
 
@@ -231,7 +231,7 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => 
                 <LocationDisplay card={card} />
               )}
               {hasTags && (
-                <CardTags card={card} interactive={false} size="xl" showTooltips={true} />
+                <CardTags card={card} interactive={false} size="sm" showTooltips={true} />
               )}
             </HStack>
           )}
@@ -287,21 +287,36 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => 
                 )}
               </HStack>
 
-              {/* Effect and Trigger Effect - Desktop shows full text */}
-              <Text fontSize="xs" color="gray.600" noOfLines={1}>
-                {effectDisplay === '' ? '\u00A0' : effectDisplay}
-              </Text>
-              <Text fontSize="xs" color="gray.600" noOfLines={1}>
-                {triggerDisplay === '' ? '\u00A0' : triggerDisplay}
-              </Text>
+              {/* Effect and Trigger Effect - Desktop shows full wrapped text with stylized keywords */}
+              {effectDisplay && effectDisplay !== '' && (
+                <Box
+                  pt={1}
+                  w="100%"
+                  pl={3}
+                  borderLeft="4px solid"
+                  borderLeftColor="black.400"
+                  borderRadius="md"
+                  p={2}
+                  fontSize="xs"
+                >
+                  <StyledTextRenderer text={card.effect || ''} keywordSize="xs" />
+                </Box>
+              )}
+              {triggerDisplay && triggerDisplay !== '' && (
+                <Box
+                  pt={1}
+                  w="100%"
+                  pl={3}
+                  borderLeft="4px solid"
+                  borderLeftColor="orange.400"
+                  borderRadius="md"
+                  p={2}
+                  fontSize="xs"
+                >
+                  <StyledTextRenderer text={card.trigger_effect || ''} keywordSize="xs" />
+                </Box>
+              )}
 
-              {/* Keywords display */}
-              <HStack pt={1} justify="flex-start" w="100%" align="center">
-                <Text fontSize="xs" color="gray.500" mr={2}>Keywords:</Text>
-                {keywords.map((kw, index) => (
-                  <Tag size="xs" key={index} {...kw.style}>{kw.text}</Tag>
-                ))}
-              </HStack>
             </VStack>
 
             {/* Count Control Section - Horizontal layout on desktop */}
