@@ -33,7 +33,6 @@ import {
   ModalCloseButton,
   FormControl,
   FormLabel,
-  Input,
   NumberInput,
   NumberInputField,
   NumberInputStepper,
@@ -52,8 +51,7 @@ import {
 } from '@chakra-ui/react';
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
 import { ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
-import { FiSearch, FiHash, FiType, FiTag, FiMapPin, FiSettings } from 'react-icons/fi';
-import { RepeatIcon } from '@chakra-ui/icons';
+import { FiHash, FiTag, FiMapPin, FiSettings } from 'react-icons/fi';
 import DeckCard from './DeckCard';
 import CardDetailModal from './CardDetailModal';
 import { CARD_EVENTS } from '@/utils/cardEvents';
@@ -78,7 +76,7 @@ const TabletopCanvas = ({
   const [thumbnailSize, setThumbnailSize] = useState(60);
   const [selectedCard, setSelectedCard] = useState(null);
 
-  // State for location selection (similar to LocateModal)
+  // State for location selection
   const [locations, setLocations] = useState([]);
   const [selectedMoveAllLocation, setSelectedMoveAllLocation] = useState('');
   const [isMovingAll, setIsMovingAll] = useState(false);
@@ -99,9 +97,8 @@ const TabletopCanvas = ({
 
   const toast = useToast();
 
-  // Store selected card data to persist across searches
+  // Store selected card data to persist across searches (ORIGINAL APPROACH)
   const [selectedCardData, setSelectedCardData] = useState(() => {
-    // Try to restore from sessionStorage on mount
     if (typeof window !== 'undefined') {
       const savedData = sessionStorage.getItem('tabletopSelectedCardData');
       if (savedData) {
@@ -115,9 +112,8 @@ const TabletopCanvas = ({
     return {};
   });
 
-  // Use persistent selected cards that survive search changes
+  // Use persistent selected cards that survive search changes (ORIGINAL APPROACH)
   const [selectedCards, setSelectedCards] = useState(() => {
-    // Try to restore from sessionStorage on mount
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('tabletopSelectedCards');
       if (saved) {
@@ -142,7 +138,7 @@ const TabletopCanvas = ({
     }
   }, [isBulkMoveOpen, apiUrl]);
 
-  // Listen for card updates from CardDetailModal
+  // Listen for card updates from CardDetailModal (ORIGINAL APPROACH)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -156,8 +152,6 @@ const TabletopCanvas = ({
             ...prevData,
             [cardId]: { ...prevData[cardId], ...card }
           };
-
-          // Persist to sessionStorage
           sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(updatedData));
           return updatedData;
         }
@@ -173,26 +167,23 @@ const TabletopCanvas = ({
       });
     };
 
-    // Add event listeners for all card update types
     window.addEventListener(CARD_EVENTS.TAG_UPDATED, handleCardUpdate);
     window.addEventListener(CARD_EVENTS.LOCATION_UPDATED, handleCardUpdate);
     window.addEventListener(CARD_EVENTS.COUNT_UPDATED, handleCardUpdate);
 
-    // Cleanup function
     return () => {
       window.removeEventListener(CARD_EVENTS.TAG_UPDATED, handleCardUpdate);
       window.removeEventListener(CARD_EVENTS.LOCATION_UPDATED, handleCardUpdate);
       window.removeEventListener(CARD_EVENTS.COUNT_UPDATED, handleCardUpdate);
     };
-  }, []); // Empty dependency array prevents re-renders
+  }, []);
 
-  // Update selected card data when cards change - prevent stale state
+  // Update selected card data when cards change (ORIGINAL APPROACH)
   const updateSelectedCardDataFromCards = useCallback(() => {
     setSelectedCardData(prevData => {
       const newCardData = { ...prevData };
       let dataChanged = false;
 
-      // Add new cards to selectedCardData if they're selected
       cards.forEach(card => {
         if (selectedCards.has(card.id)) {
           if (!newCardData[card.id] || JSON.stringify(newCardData[card.id]) !== JSON.stringify(card)) {
@@ -203,7 +194,6 @@ const TabletopCanvas = ({
       });
 
       if (dataChanged) {
-        // Persist to sessionStorage
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newCardData));
         }
@@ -213,12 +203,177 @@ const TabletopCanvas = ({
     });
   }, [cards, selectedCards]);
 
-  // Update selected card data when cards or selection changes
   useEffect(() => {
     updateSelectedCardDataFromCards();
   }, [updateSelectedCardDataFromCards]);
 
-  // Combine current search results with selected cards from previous searches
+  // Count update handler (ORIGINAL APPROACH)
+  const handleCardDetailUpdate = useCallback(async (cardId, updateData) => {
+    try {
+      if (typeof updateData === 'string') {
+        const searchParams = new URLSearchParams({
+          keyword: `id:${cardId}`,
+          ownedOnly: 'false',
+          showProxies: 'true'
+        });
+
+        const response = await fetch(`${apiUrl}/api/cards/search?${searchParams}`, {
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const searchResults = await response.json();
+          if (searchResults.length > 0) {
+            const updatedCard = searchResults[0];
+
+            setSelectedCardData(prevData => {
+              if (prevData[cardId]) {
+                const newData = {
+                  ...prevData,
+                  [cardId]: updatedCard
+                };
+                if (typeof window !== 'undefined') {
+                  sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newData));
+                }
+                return newData;
+              }
+              return prevData;
+            });
+
+            setSelectedCard(prevSelected => {
+              if (prevSelected && prevSelected.id === cardId) {
+                return updatedCard;
+              }
+              return prevSelected;
+            });
+          }
+        }
+      } else if (typeof updateData === 'object' && updateData !== null) {
+        setSelectedCardData(prevData => {
+          if (prevData[cardId]) {
+            const newData = {
+              ...prevData,
+              [cardId]: { ...prevData[cardId], ...updateData }
+            };
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newData));
+            }
+            return newData;
+          }
+          return prevData;
+        });
+
+        setSelectedCard(prevSelected => {
+          if (prevSelected && prevSelected.id === cardId) {
+            return { ...prevSelected, ...updateData };
+          }
+          return prevSelected;
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to refresh card data:', error);
+    }
+  }, [apiUrl]);
+
+  // Handle card selection for bulk operations (ORIGINAL APPROACH)
+  const handleCardSelection = useCallback((cardId, isSelected) => {
+    setSelectedCards(prevSelected => {
+      const newSelected = new Set(prevSelected);
+
+      if (isSelected) {
+        newSelected.add(cardId);
+      } else {
+        newSelected.delete(cardId);
+      }
+
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('tabletopSelectedCards', JSON.stringify([...newSelected]));
+      }
+
+      return newSelected;
+    });
+
+    setSelectedCardData(prevData => {
+      const newCardData = { ...prevData };
+
+      if (isSelected) {
+        const card = cards.find(c => c.id === cardId) || prevData[cardId];
+        if (card) {
+          newCardData[cardId] = card;
+        }
+      } else {
+        delete newCardData[cardId];
+      }
+
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newCardData));
+      }
+
+      return newCardData;
+    });
+  }, [cards]);
+
+  // Handle card click for viewing details (ORIGINAL APPROACH)
+  const handleCardClick = useCallback((card) => {
+    if (!card) return;
+
+    if (onCardClick) {
+      onCardClick(card);
+    } else {
+      setSelectedCard(card);
+      onCardDetailOpen();
+    }
+  }, [onCardClick, onCardDetailOpen]);
+
+  // Handle select all/none (ORIGINAL APPROACH)
+  const handleSelectAll = useCallback(() => {
+    const currentSearchCardIds = cards.map(card => card.id);
+    const currentlySelectedFromSearch = currentSearchCardIds.filter(id => selectedCards.has(id));
+
+    let newSelected = new Set(selectedCards);
+    let newCardData = { ...selectedCardData };
+
+    if (currentlySelectedFromSearch.length === currentSearchCardIds.length) {
+      currentSearchCardIds.forEach(id => {
+        newSelected.delete(id);
+        delete newCardData[id];
+      });
+    } else {
+      cards.forEach(card => {
+        newSelected.add(card.id);
+        newCardData[card.id] = card;
+      });
+    }
+
+    setSelectedCards(newSelected);
+    setSelectedCardData(newCardData);
+
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('tabletopSelectedCards', JSON.stringify([...newSelected]));
+      sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newCardData));
+    }
+  }, [cards, selectedCards, selectedCardData]);
+
+  // Clear all selected cards (ORIGINAL APPROACH)
+  const handleClearAll = useCallback(() => {
+    setSelectedCards(new Set());
+    setSelectedCardData({});
+
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('tabletopSelectedCards', JSON.stringify([]));
+      sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify({}));
+    }
+
+    toast({
+      title: 'Selection cleared',
+      description: 'All selected cards have been removed from tabletop',
+      status: 'info',
+      duration: 2000,
+      isClosable: true,
+    });
+  }, [toast]);
+
+  // Combine current search results with selected cards from previous searches (ORIGINAL APPROACH)
   const allDisplayCards = useMemo(() => {
     const cardMap = new Map();
 
@@ -237,7 +392,7 @@ const TabletopCanvas = ({
     return Array.from(cardMap.values());
   }, [cards, selectedCardData, selectedCards]);
 
-  // Sort cards (now using allDisplayCards instead of cards)
+  // Sort cards (ORIGINAL APPROACH)
   const sortedCards = useMemo(() => {
     if (!Array.isArray(allDisplayCards) || allDisplayCards.length === 0) {
       return [];
@@ -282,208 +437,6 @@ const TabletopCanvas = ({
     return sorted;
   }, [allDisplayCards, sortMode, sortReverse]);
 
-  // Handle card click to open detail modal (prevent double modal)
-  const handleCardClick = useCallback((card) => {
-    setSelectedCard(card);
-    onCardDetailOpen();
-    // Don't call onCardClick prop to prevent double modal
-  }, [onCardDetailOpen]);
-
-  // Handle card updates from CardDetailModal
-  const handleCardDetailUpdate = useCallback(async (cardId, updateData) => {
-    // Handle different types of updates
-    if (typeof updateData === 'string') {
-      // For special string updates like 'location_updated', 'tag_updated', refresh card data
-      try {
-        const searchParams = new URLSearchParams({
-          keyword: `id:${cardId}`,
-          ownedOnly: 'false',
-          showProxies: 'true'
-        });
-
-        const response = await fetch(`${apiUrl}/api/cards/search?${searchParams}`, {
-          credentials: 'include'
-        });
-
-        if (response.ok) {
-          const searchResults = await response.json();
-          if (searchResults.length > 0) {
-            const updatedCard = searchResults[0];
-
-            // Update selectedCardData if this card is selected
-            setSelectedCardData(prevData => {
-              if (prevData[cardId]) {
-                const newData = {
-                  ...prevData,
-                  [cardId]: updatedCard
-                };
-
-                // Persist to sessionStorage
-                if (typeof window !== 'undefined') {
-                  sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newData));
-                }
-                return newData;
-              }
-              return prevData;
-            });
-
-            // Update selectedCard if it's currently being viewed
-            setSelectedCard(prevSelected => {
-              if (prevSelected && prevSelected.id === cardId) {
-                return updatedCard;
-              }
-              return prevSelected;
-            });
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to refresh card data:', error);
-      }
-    } else if (typeof updateData === 'object' && updateData !== null) {
-      // For object updates (count changes), directly update the card data
-      setSelectedCardData(prevData => {
-        if (prevData[cardId]) {
-          const newData = {
-            ...prevData,
-            [cardId]: { ...prevData[cardId], ...updateData }
-          };
-
-          // Persist to sessionStorage
-          if (typeof window !== 'undefined') {
-            sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newData));
-          }
-          return newData;
-        }
-        return prevData;
-      });
-
-      // Update selectedCard if it's currently being viewed
-      setSelectedCard(prevSelected => {
-        if (prevSelected && prevSelected.id === cardId) {
-          return { ...prevSelected, ...updateData };
-        }
-        return prevSelected;
-      });
-    }
-  }, [apiUrl]);
-
-  // Handle card selection for bulk operations and persist to sessionStorage
-  const handleCardSelection = useCallback((cardId, isSelected) => {
-    setSelectedCards(prevSelected => {
-      const newSelected = new Set(prevSelected);
-
-      if (isSelected) {
-        newSelected.add(cardId);
-      } else {
-        newSelected.delete(cardId);
-      }
-
-      // Persist to sessionStorage
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('tabletopSelectedCards', JSON.stringify([...newSelected]));
-      }
-
-      return newSelected;
-    });
-
-    setSelectedCardData(prevData => {
-      const newCardData = { ...prevData };
-
-      if (isSelected) {
-        // Find the card in current results or existing data
-        const card = cards.find(c => c.id === cardId) || prevData[cardId];
-        if (card) {
-          newCardData[cardId] = card;
-        }
-      } else {
-        // Remove from card data when deselected
-        delete newCardData[cardId];
-      }
-
-      // Persist to sessionStorage
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newCardData));
-      }
-
-      return newCardData;
-    });
-  }, [cards]);
-
-  // Handle select all/none and persist changes (only for current search results)
-  const handleSelectAll = useCallback(() => {
-    const currentSearchCardIds = cards.map(card => card.id);
-
-    setSelectedCards(prevSelected => {
-      const currentlySelectedFromSearch = currentSearchCardIds.filter(id => prevSelected.has(id));
-      let newSelected = new Set(prevSelected);
-
-      if (currentlySelectedFromSearch.length === currentSearchCardIds.length) {
-        // Deselect all current search results
-        currentSearchCardIds.forEach(id => {
-          newSelected.delete(id);
-        });
-      } else {
-        // Select all current search results
-        currentSearchCardIds.forEach(id => {
-          newSelected.add(id);
-        });
-      }
-
-      // Persist to sessionStorage
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('tabletopSelectedCards', JSON.stringify([...newSelected]));
-      }
-
-      return newSelected;
-    });
-
-    setSelectedCardData(prevData => {
-      const currentSearchCardIds = cards.map(card => card.id);
-      const currentlySelectedFromSearch = currentSearchCardIds.filter(id => selectedCards.has(id));
-      let newCardData = { ...prevData };
-
-      if (currentlySelectedFromSearch.length === currentSearchCardIds.length) {
-        // Remove current search cards from data
-        currentSearchCardIds.forEach(id => {
-          delete newCardData[id];
-        });
-      } else {
-        // Add current search cards to data
-        cards.forEach(card => {
-          newCardData[card.id] = card;
-        });
-      }
-
-      // Persist to sessionStorage
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify(newCardData));
-      }
-
-      return newCardData;
-    });
-  }, [cards, selectedCards]);
-
-  // Clear all selected cards
-  const handleClearAll = useCallback(() => {
-    setSelectedCards(new Set());
-    setSelectedCardData({});
-
-    // Clear from sessionStorage
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('tabletopSelectedCards', JSON.stringify([]));
-      sessionStorage.setItem('tabletopSelectedCardData', JSON.stringify({}));
-    }
-
-    toast({
-      title: 'Selection cleared',
-      description: 'All selected cards have been removed from tabletop',
-      status: 'info',
-      duration: 2000,
-      isClosable: true,
-    });
-  }, [toast]);
-
-  // Bulk Move Location (similar to LocateModal Move All)
   const handleBulkMoveLocation = useCallback(async () => {
     if (selectedCards.size === 0) {
       toast({
@@ -513,57 +466,35 @@ const TabletopCanvas = ({
     const failedMoves = [];
 
     try {
-      const movePromises = Array.from(selectedCards).map(async (cardId) => {
-        const locationId = selectedMoveAllLocation === 'remove' ? null : parseInt(selectedMoveAllLocation);
-        const baseCardId = cardId.replace(/_p\d+$/, '');
-
+      // Use onLocationUpdate for each card (this ensures CardSearch gets updated)
+      for (const cardId of selectedCards) {
         try {
-          const response = await fetch(`${apiUrl}/api/collection/location`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify({
-              cardId: baseCardId,
-              locationId: locationId
-            }),
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            // If it's a 404, it means the card is not in the user's collection
-            if (response.status === 404) {
-              failedMoves.push({
-                cardId,
-                baseCardId,
-                reason: 'Not in collection'
-              });
-            } else {
-              failedMoves.push({
-                cardId,
-                baseCardId,
-                reason: `HTTP ${response.status}: ${errorText}`
-              });
-            }
-            return null;
+          if (onLocationUpdate) {
+            const locationValue = selectedMoveAllLocation === 'remove' ? null : selectedMoveAllLocation;
+            await onLocationUpdate(cardId, locationValue);
+            successfulMoves.push({ cardId, locationId: locationValue });
+          }
+        } catch (error) {
+          // Determine the reason for failure
+          let reason = 'Unknown error';
+          if (error.message && error.message.includes('404')) {
+            reason = 'Not in collection';
+          } else if (error.message) {
+            reason = error.message;
           }
 
-          successfulMoves.push({ cardId, baseCardId, locationId });
-          return { cardId, locationId };
-        } catch (error) {
+          const cardData = selectedCardData[cardId] || cards.find(c => c.id === cardId);
           failedMoves.push({
             cardId,
-            baseCardId,
-            reason: error.message
+            baseCardId: cardId,
+            reason: reason,
+            cardName: cardData?.name || cardId,
+            cardCode: cardData?.card_code || cardId
           });
-          return null;
         }
-      });
+      }
 
-      await Promise.all(movePromises);
-
-      // Show results summary
+      // Show success message if we have successful moves
       if (successfulMoves.length > 0) {
         const locationName = selectedMoveAllLocation === 'remove'
           ? 'removed from all locations'
@@ -578,42 +509,21 @@ const TabletopCanvas = ({
         });
       }
 
-      // Show failed moves in dialog instead of toast
+      // Show failed moves in dialog if there are any
       if (failedMoves.length > 0) {
         const locationName = selectedMoveAllLocation === 'remove'
           ? 'remove location'
           : locations.find(l => l.id.toString() === selectedMoveAllLocation)?.name || 'selected location';
 
-        // Add card names to failed moves by looking them up in our card data
-        const enrichedFailedMoves = failedMoves.map(failed => {
-          const cardData = selectedCardData[failed.cardId] || cards.find(c => c.id === failed.cardId);
-          return {
-            ...failed,
-            cardName: cardData?.name || failed.cardId,
-            cardCode: cardData?.card_code || failed.baseCardId
-          };
-        });
-
         setFailedMoveData({
-          failedCards: enrichedFailedMoves,
+          failedCards: failedMoves,
           successCount: successfulMoves.length,
           operationType: `move to ${locationName}`
         });
         onFailedMoveOpen();
       }
 
-      // Refresh card data if onLocationUpdate is provided
-      if (onLocationUpdate && successfulMoves.length > 0) {
-        for (const move of successfulMoves) {
-          try {
-            await onLocationUpdate(move.cardId, 'location_updated');
-          } catch (updateError) {
-            console.warn('Failed to refresh card data for:', move.cardId, updateError);
-          }
-        }
-      }
-
-      // DO NOT clear selection - keep cards selected
+      // DO NOT clear selection - keep cards selected (same as Bulk Set Count)
       // setSelectedCards(new Set());
       // setSelectedCardData({});
 
@@ -631,7 +541,8 @@ const TabletopCanvas = ({
       setIsMovingAll(false);
       setSelectedMoveAllLocation('');
     }
-  }, [selectedCards, selectedMoveAllLocation, apiUrl, toast, onLocationUpdate, onBulkMoveClose, locations]);
+  }, [selectedCards, selectedMoveAllLocation, onLocationUpdate, toast, onBulkMoveClose, locations, selectedCardData, cards, setFailedMoveData, onFailedMoveOpen]);
+
 
   const handleBulkSetCount = useCallback(async () => {
     if (selectedCards.size === 0) {
@@ -647,34 +558,52 @@ const TabletopCanvas = ({
 
     try {
       for (const cardId of selectedCards) {
-        if (onCountUpdate) {
-          await onCountUpdate(cardId, { owned_count: bulkCount });
+        // Card ID is already the correct format (card code like "OP02-018")
+        // No need to parseInt since the database uses VARCHAR card codes as primary keys
+        const response = await fetch(`${apiUrl}/api/collection/set-count`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            cardId: cardId, // Use card code directly
+            ownedCount: bulkCount,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update count for card ${cardId}`);
+        }
+      }
+
+      // Call onCountUpdate for UI refresh (ORIGINAL APPROACH)
+      if (onCountUpdate) {
+        for (const cardId of selectedCards) {
+          onCountUpdate(cardId, 'count_updated');
         }
       }
 
       toast({
         title: 'Count updated',
-        description: `Updated count for ${selectedCards.size} cards`,
+        description: `Updated count to ${bulkCount} for ${selectedCards.size} cards`,
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
 
-      // DO NOT clear selection - keep cards selected
-      // setSelectedCards(new Set());
-      // setSelectedCardData({});
-
       onBulkCountClose();
     } catch (error) {
+      console.error('Error in bulk set count:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update count',
+        description: 'Failed to update count. Please try again.',
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
     }
-  }, [selectedCards, bulkCount, onCountUpdate, toast, onBulkCountClose]);
+  }, [selectedCards, bulkCount, apiUrl, onCountUpdate, toast, onBulkCountClose]);
 
   const handleBulkSetProxyCount = useCallback(async () => {
     if (selectedCards.size === 0) {
@@ -690,34 +619,52 @@ const TabletopCanvas = ({
 
     try {
       for (const cardId of selectedCards) {
-        if (onCountUpdate) {
-          await onCountUpdate(cardId, { proxy_count: bulkProxyCount });
+        // Card ID is already the correct format (card code like "OP02-018")
+        // No need to parseInt since the database uses VARCHAR card codes as primary keys
+        const response = await fetch(`${apiUrl}/api/collection/set-count`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            cardId: cardId, // Use card code directly
+            proxyCount: bulkProxyCount,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update proxy count for card ${cardId}`);
+        }
+      }
+
+      // Call onCountUpdate for UI refresh (ORIGINAL APPROACH)
+      if (onCountUpdate) {
+        for (const cardId of selectedCards) {
+          onCountUpdate(cardId, 'count_updated');
         }
       }
 
       toast({
         title: 'Proxy count updated',
-        description: `Updated proxy count for ${selectedCards.size} cards`,
+        description: `Updated proxy count to ${bulkProxyCount} for ${selectedCards.size} cards`,
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
 
-      // DO NOT clear selection - keep cards selected
-      // setSelectedCards(new Set());
-      // setSelectedCardData({});
-
       onBulkProxyClose();
     } catch (error) {
+      console.error('Error in bulk set proxy count:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update proxy count',
+        description: 'Failed to update proxy count. Please try again.',
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
     }
-  }, [selectedCards, bulkProxyCount, onCountUpdate, toast, onBulkProxyClose]);
+  }, [selectedCards, bulkProxyCount, apiUrl, onCountUpdate, toast, onBulkProxyClose]);
 
   const handleBulkSetTag = useCallback(async () => {
     if (selectedCards.size === 0) {
@@ -746,10 +693,6 @@ const TabletopCanvas = ({
         isClosable: true,
       });
 
-      // DO NOT clear selection - keep cards selected
-      // setSelectedCards(new Set());
-      // setSelectedCardData({});
-
       onBulkTagClose();
     } catch (error) {
       toast({
@@ -764,95 +707,53 @@ const TabletopCanvas = ({
 
   return (
     <VStack spacing={4} align="stretch">
-      {/* Compact Header */}
-      <HStack
-        justify="space-between"
-        align="center"
-        cursor="pointer"
-        onClick={onToggle}
-        p={2}
-        borderRadius="md"
-        bg="gray.50"
-        _hover={{ bg: "gray.100" }}
-        transition="background-color 0.2s"
-      >
-        <HStack spacing={2}>
-          <IconButton
-            icon={isExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
-            size="xs"
-            variant="ghost"
-          />
-          <Text fontSize="md" fontWeight="bold" color="gray.800">
-            Tabletop
-          </Text>
+      {/* Tabletop Header */}
+      <HStack justify="space-between" align="center">
+        <HStack spacing={3}>
+          <Button
+            leftIcon={isExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+            onClick={onToggle}
+            variant="outline"
+            size="sm"
+          >
+            Tabletop Canvas
+          </Button>
+          <Badge variant="solid" colorScheme={selectedCards.size > 0 ? 'blue' : 'gray'}>
+            {selectedCards.size} selected
+          </Badge>
           {selectedCards.size > 0 && (
-            <Badge colorScheme="blue" variant="outline" fontSize="xs">
-              {selectedCards.size} selected
-            </Badge>
+            <Button size="xs" variant="ghost" colorScheme="red" onClick={handleClearAll}>
+              Clear All
+            </Button>
           )}
         </HStack>
 
-        <HStack spacing={1}>
-          {selectedCards.size > 0 && (
-            <Tooltip label="Clear all selected cards">
-              <IconButton
-                icon={<RepeatIcon />}
-                size="xs"
-                variant="ghost"
-                colorScheme="red"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleClearAll();
-                }}
-                aria-label="Clear all selected cards"
-              />
-            </Tooltip>
-          )}
-        </HStack>
+        <Text fontSize="sm" color="gray.600">
+          {allDisplayCards.length} cards shown
+        </Text>
       </HStack>
 
       <Collapse in={isExpanded} animateOpacity>
         <VStack spacing={4} align="stretch">
           {/* Controls */}
-          <HStack justify="space-between" align="center" flexWrap="wrap" gap={2}>
-            <HStack spacing={2} flexWrap="wrap">
+          <HStack spacing={4} wrap="wrap" justify="space-between">
+            <HStack spacing={3}>
               {/* Sort Controls */}
-              <Menu>
-                <MenuButton
-                  as={IconButton}
-                  icon={
-                    sortMode === 'cost' ? <FiHash /> :
-                    sortMode === 'name' ? <FiSearch /> :
-                    sortMode === 'type' ? <FiType /> :
-                    sortMode === 'rarity' ? <FiTag /> :
-                    <FiSearch />
-                  }
+              <HStack spacing={2}>
+                <Text fontSize="sm" color="gray.600" fontWeight="medium">Sort:</Text>
+                <Select
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value)}
                   size="sm"
-                  variant="outline"
-                />
-                <MenuList>
-                  <MenuItem onClick={() => setSortMode('name')}>
-                    <FiSearch style={{ marginRight: '8px' }} />
-                    Name
-                  </MenuItem>
-                  <MenuItem onClick={() => setSortMode('cost')}>
-                    <FiHash style={{ marginRight: '8px' }} />
-                    Cost
-                  </MenuItem>
-                  <MenuItem onClick={() => setSortMode('type')}>
-                    <FiType style={{ marginRight: '8px' }} />
-                    Type
-                  </MenuItem>
-                  <MenuItem onClick={() => setSortMode('rarity')}>
-                    <FiTag style={{ marginRight: '8px' }} />
-                    Rarity
-                  </MenuItem>
-                  <MenuItem onClick={() => setSortMode('card_code')}>
-                    <FiHash style={{ marginRight: '8px' }} />
-                    Card Code
-                  </MenuItem>
-                </MenuList>
-              </Menu>
+                  width="120px"
+                >
+                  <option value="name">Name</option>
+                  <option value="cost">Cost</option>
+                  <option value="type">Type</option>
+                  <option value="rarity">Rarity</option>
+                  <option value="card_code">Card Code</option>
+                </Select>
+              </HStack>
 
               <Tooltip label={sortReverse ? 'Sort ascending' : 'Sort descending'}>
                 <IconButton
@@ -936,7 +837,7 @@ const TabletopCanvas = ({
               <Box textAlign="center" py={8}>
                 <Text color="gray.500">No cards in tabletop</Text>
                 <Text color="gray.400" fontSize="sm" mt={1}>
-                  Select cards from search results to add them here
+                  Search for cards to see them appear here
                 </Text>
               </Box>
             ) : (
@@ -985,7 +886,7 @@ const TabletopCanvas = ({
                           onCardClick={handleCardClick}
                           isViewOnly={true}
                           thumbnailSize={thumbnailSize}
-                          hideCount={true} // Always hide count
+                          hideCount={true}
                         />
                       </Box>
 
@@ -1023,7 +924,7 @@ const TabletopCanvas = ({
         onCountUpdate={handleCardDetailUpdate}
       />
 
-      {/* Bulk Move Location Modal - Similar to LocateModal Move All */}
+      {/* Bulk Move Location Modal */}
       <Modal isOpen={isBulkMoveOpen} onClose={onBulkMoveClose} size="lg">
         <ModalOverlay />
         <ModalContent>

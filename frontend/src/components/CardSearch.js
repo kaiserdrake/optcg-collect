@@ -375,9 +375,9 @@ function CardSearch({
   // Count update handler using correct API endpoints
   const handleCountUpdate = useCallback(async (cardId, updateData) => {
     try {
-      // Handle different types of updates from CardDetailModal:
-      // 1. String values like 'tag_updated', 'location_updated' - refresh card data
-      // 2. Object values with count data - update the card in results directly
+      // Handle different types of updates from CardDetailModal and bulk operations:
+      // 1. String values like 'tag_updated', 'location_updated', 'count_updated' - refresh card data
+      // 2. Object values with count data - update the card in results directly (from CountControl)
 
       if (typeof updateData === 'string') {
         // For special string updates, refresh the card data from the API
@@ -407,7 +407,7 @@ function CardSearch({
           }
         }
       } else if (typeof updateData === 'object' && updateData !== null) {
-        // For object updates (count changes), directly update the results
+        // For object updates (count changes from CountControl), directly update the results
         setResults(prev =>
           prev.map(card =>
             card.id === cardId ? { ...card, ...updateData } : card
@@ -418,19 +418,10 @@ function CardSearch({
           setSelectedCard(prev => ({ ...prev, ...updateData }));
         }
       }
-    } catch (err) {
-      console.error('Failed to update card:', err);
+    } catch (error) {
+      console.error('Error updating card data:', error);
     }
   }, [apiUrl, selectedCard]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
 
   // Helper functions
   const getSortIcon = (currentSortMode) => {
@@ -493,45 +484,33 @@ function CardSearch({
           cards={results}
           onCardClick={handleCardClick}
           onCountUpdate={handleCountUpdate}
-          onLocationUpdate={async (cardId, location) => {
-            // Implement location update logic similar to handleCountUpdate
+          onLocationUpdate={async (cardId, locationValue) => {
             try {
-              const response = await fetch(`${apiUrl}/api/cards/${cardId}/location`, {
+              const locationId = locationValue === null ? null : parseInt(locationValue);
+
+              const response = await fetch(`${apiUrl}/api/collection/location`, {
                 method: 'PUT',
                 headers: {
                   'Content-Type': 'application/json'
                 },
                 credentials: 'include',
-                body: JSON.stringify({ location })
+                body: JSON.stringify({
+                  cardId: cardId,
+                  locationId: locationId
+                })
               });
 
-              if (response.ok) {
-                // Refresh card data
-                await handleCountUpdate(cardId, 'location_updated');
+              if (!response.ok) {
+                // Throw a specific error that includes the HTTP status
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
               }
+
+              // Refresh card data in search results (same pattern as count updates)
+              await handleCountUpdate(cardId, 'location_updated');
             } catch (error) {
               console.error('Failed to update location:', error);
-              throw error;
-            }
-          }}
-          onTagUpdate={async (cardId, tag) => {
-            // Implement tag update logic
-            try {
-              const response = await fetch(`${apiUrl}/api/cards/${cardId}/tags`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                credentials: 'include',
-                body: JSON.stringify({ tagType: tag, action: 'add' })
-              });
-
-              if (response.ok) {
-                // Refresh card data
-                await handleCountUpdate(cardId, 'tag_updated');
-              }
-            } catch (error) {
-              console.error('Failed to update tag:', error);
+              // Re-throw the error so TabletopCanvas can catch it and show in dialog
               throw error;
             }
           }}
