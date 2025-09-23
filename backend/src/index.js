@@ -887,6 +887,118 @@ app.post('/api/collection/update', isAuthenticated, async (req, res) => {
   }
 });
 
+
+app.put('/api/collection/set-count', isAuthenticated, async (req, res) => {
+  const { cardId, ownedCount, proxyCount } = req.body;
+  const userId = req.user.id;
+
+  if (!cardId) {
+    return res.status(400).json({ message: 'Card ID is required.' });
+  }
+
+  // Validate counts
+  if (ownedCount !== undefined && (ownedCount < 0 || ownedCount > 99)) {
+    return res.status(400).json({ message: 'Owned count must be between 0 and 99.' });
+  }
+
+  if (proxyCount !== undefined && (proxyCount < 0 || proxyCount > 99)) {
+    return res.status(400).json({ message: 'Proxy count must be between 0 and 99.' });
+  }
+
+  try {
+    await query('BEGIN');
+
+    // Handle owned count if provided
+    if (ownedCount !== undefined) {
+      // Get current owned count
+      const currentOwnedResult = await query(
+        'SELECT COUNT(*) FROM owned_cards WHERE user_id = $1 AND card_id = $2 AND is_proxy = false',
+        [userId, cardId] // cardId is already a string (card code)
+      );
+      const currentOwnedCount = parseInt(currentOwnedResult.rows[0].count, 10);
+
+      if (ownedCount > currentOwnedCount) {
+        // Add more owned cards
+        const toAdd = ownedCount - currentOwnedCount;
+        for (let i = 0; i < toAdd; i++) {
+          await query(
+            'INSERT INTO owned_cards (user_id, card_id, is_proxy) VALUES ($1, $2, false)',
+            [userId, cardId]
+          );
+        }
+      } else if (ownedCount < currentOwnedCount) {
+        // Remove owned cards
+        const toRemove = currentOwnedCount - ownedCount;
+        await query(`
+          DELETE FROM owned_cards
+          WHERE instance_id IN (
+            SELECT instance_id
+            FROM owned_cards
+            WHERE user_id = $1 AND card_id = $2 AND is_proxy = false
+            LIMIT $3
+          )
+        `, [userId, cardId, toRemove]);
+      }
+    }
+
+    // Handle proxy count if provided
+    if (proxyCount !== undefined) {
+      // Get current proxy count
+      const currentProxyResult = await query(
+        'SELECT COUNT(*) FROM owned_cards WHERE user_id = $1 AND card_id = $2 AND is_proxy = true',
+        [userId, cardId] // cardId is already a string (card code)
+      );
+      const currentProxyCount = parseInt(currentProxyResult.rows[0].count, 10);
+
+      if (proxyCount > currentProxyCount) {
+        // Add more proxy cards
+        const toAdd = proxyCount - currentProxyCount;
+        for (let i = 0; i < toAdd; i++) {
+          await query(
+            'INSERT INTO owned_cards (user_id, card_id, is_proxy) VALUES ($1, $2, true)',
+            [userId, cardId]
+          );
+        }
+      } else if (proxyCount < currentProxyCount) {
+        // Remove proxy cards
+        const toRemove = currentProxyCount - proxyCount;
+        await query(`
+          DELETE FROM owned_cards
+          WHERE instance_id IN (
+            SELECT instance_id
+            FROM owned_cards
+            WHERE user_id = $1 AND card_id = $2 AND is_proxy = true
+            LIMIT $3
+          )
+        `, [userId, cardId, toRemove]);
+      }
+    }
+
+    // Get final counts to return
+    const finalCountsResult = await query(`
+      SELECT
+        COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
+        COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count
+      FROM owned_cards
+      WHERE user_id = $1 AND card_id = $2
+    `, [userId, cardId]);
+
+    await query('COMMIT');
+
+    res.json({
+      owned_count: parseInt(finalCountsResult.rows[0].owned_count, 10),
+      proxy_count: parseInt(finalCountsResult.rows[0].proxy_count, 10),
+      message: 'Counts updated successfully'
+    });
+
+  } catch (err) {
+    await query('ROLLBACK');
+    console.error('Error setting card count:', err);
+    res.status(500).json({ message: 'Server error while setting card count.' });
+  }
+});
+
+
 app.put('/api/collection/location', isAuthenticated, async (req, res) => {
   const { cardId, locationId } = req.body;
   const userId = req.user.id;
@@ -899,7 +1011,13 @@ app.put('/api/collection/location', isAuthenticated, async (req, res) => {
     await query('BEGIN');
 
     if (locationId) {
-      const locationCheck = await query('SELECT id FROM locations WHERE id = $1 AND user_id = $2', [locationId, userId]);
+      const numericLocationId = parseInt(locationId);
+      if (isNaN(numericLocationId)) {
+        await query('ROLLBACK');
+        return res.status(400).json({ message: 'Location ID must be a valid number.' });
+      }
+
+      const locationCheck = await query('SELECT id FROM locations WHERE id = $1 AND user_id = $2', [numericLocationId, userId]);
       if (locationCheck.rows.length === 0) {
         await query('ROLLBACK');
         return res.status(404).json({ message: 'Location not found or does not belong to user.' });
@@ -917,6 +1035,7 @@ app.put('/api/collection/location', isAuthenticated, async (req, res) => {
     }
 
     await query('COMMIT');
+
     res.json({
       message: 'Location updated successfully.',
       updatedCards: updateResult.rowCount
@@ -1409,9 +1528,6 @@ similarity(immutable_array_to_string(c.types), $${fuzzyParamIndex + 1})
       baseQuery += ' ORDER BY ' + orderByClauses.join(', ');
     }
     baseQuery += ';';
-
-    console.log('Enhanced Search Query with Tags:', baseQuery);
-    console.log('Parameters:', params);
 
     const results = await query(baseQuery, params);
 

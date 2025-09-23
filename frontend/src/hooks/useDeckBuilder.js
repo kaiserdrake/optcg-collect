@@ -359,13 +359,16 @@ export const useDeckBuilder = () => {
     }
 
     const leaderData = getCardData(leader);
-    const leaderText = `LEADER: ${leaderData.name}`;
+
+    // Format: "1xOP10-001" - use card codes instead of names
+    const leaderText = `${leader.count}x${leaderData.card_code}`;
 
     const cardTexts = nonLeaderCards.map(item => {
       const cardData = getCardData(item);
-      return `${item.count}x ${cardData.name}`;
+      return `${item.count}x${cardData.card_code}`;
     });
 
+    // Combine leader and cards in the correct format (each on new line)
     const fullText = [leaderText, ...cardTexts].join('\n');
 
     navigator.clipboard.writeText(fullText).then(() => {
@@ -377,14 +380,14 @@ export const useDeckBuilder = () => {
         isClosable: true,
       });
     }).catch(() => {
-      toast({
-        title: 'Failed to copy',
-        description: 'Could not copy deck list to clipboard',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
+        toast({
+          title: 'Failed to copy',
+          description: 'Could not copy deck list to clipboard',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
       });
-    });
   };
 
   // Delete deck handling

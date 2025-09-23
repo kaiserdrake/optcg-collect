@@ -22,6 +22,8 @@ import ThumbViewCollect from './ThumbViewCollect';
 import ListViewBuilder from './ListViewBuilder';
 import ThumbViewBuilder from './ThumbViewBuilder';
 
+import TabletopCanvas from './TabletopCanvas';
+
 // ISOLATED RESULTS COMPONENT - This prevents re-renders during typing
 const IsolatedResultsComponent = React.memo(({
   results,
@@ -188,14 +190,22 @@ function CardSearch({
 
   // Collection toggle handler
   useEffect(() => {
+    // Don't run if performSearch is not yet defined or component is not client-ready
+    if (!performSearch || !isClient) return;
+
     if (inCollection) {
       performSearch(searchTerm.trim(), true);
     } else {
-      setResults([]);
-      setStatusMessage({
-        type: 'initial',
-        message: 'Start typing to search for cards, or enable "In Collection" to view your collection'
-      });
+      // When toggling to false, perform a search if there's a search term
+      if (searchTerm.trim()) {
+        performSearch(searchTerm.trim(), false);
+      } else {
+        setResults([]);
+        setStatusMessage({
+          type: 'initial',
+          message: 'Start typing to search for cards, or enable "In Collection" to view your collection'
+        });
+      }
     }
   }, [inCollection]);
 
@@ -373,9 +383,9 @@ function CardSearch({
   // Count update handler using correct API endpoints
   const handleCountUpdate = useCallback(async (cardId, updateData) => {
     try {
-      // Handle different types of updates from CardDetailModal:
-      // 1. String values like 'tag_updated', 'location_updated' - refresh card data
-      // 2. Object values with count data - update the card in results directly
+      // Handle different types of updates from CardDetailModal and bulk operations:
+      // 1. String values like 'tag_updated', 'location_updated', 'count_updated' - refresh card data
+      // 2. Object values with count data - update the card in results directly (from CountControl)
 
       if (typeof updateData === 'string') {
         // For special string updates, refresh the card data from the API
@@ -405,7 +415,7 @@ function CardSearch({
           }
         }
       } else if (typeof updateData === 'object' && updateData !== null) {
-        // For object updates (count changes), directly update the results
+        // For object updates (count changes from CountControl), directly update the results
         setResults(prev =>
           prev.map(card =>
             card.id === cardId ? { ...card, ...updateData } : card
@@ -416,19 +426,10 @@ function CardSearch({
           setSelectedCard(prev => ({ ...prev, ...updateData }));
         }
       }
-    } catch (err) {
-      console.error('Failed to update card:', err);
+    } catch (error) {
+      console.error('Error updating card data:', error);
     }
   }, [apiUrl, selectedCard]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
 
   // Helper functions
   const getSortIcon = (currentSortMode) => {
@@ -484,6 +485,46 @@ function CardSearch({
 
   return (
     <VStack spacing={4} align="stretch">
+
+      {/* Tabletop Canvas - Only show in collection mode */}
+      {mode === 'collection' && (
+        <TabletopCanvas
+          cards={results}
+          onCardClick={handleCardClick}
+          onCountUpdate={handleCountUpdate}
+          onLocationUpdate={async (cardId, locationValue) => {
+            try {
+              const locationId = locationValue === null ? null : parseInt(locationValue);
+
+              const response = await fetch(`${apiUrl}/api/collection/location`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                  cardId: cardId,
+                  locationId: locationId
+                })
+              });
+
+              if (!response.ok) {
+                // Throw a specific error that includes the HTTP status
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+              }
+
+              // Refresh card data in search results (same pattern as count updates)
+              await handleCountUpdate(cardId, 'location_updated');
+            } catch (error) {
+              console.error('Failed to update location:', error);
+              // Re-throw the error so TabletopCanvas can catch it and show in dialog
+              throw error;
+            }
+          }}
+        />
+      )}
+
       {/* Search Input */}
       <VStack spacing={3} align="stretch">
         <HStack>
@@ -590,21 +631,19 @@ function CardSearch({
                   <HStack spacing={2}>
                     <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
                     <Box width="120px">
-                      <Tooltip label={`Thumbnail size: ${thumbnailSize}px`}>
-                        <Slider
-                          value={thumbnailSize}
-                          onChange={setThumbnailSize}
-                          min={80}
-                          max={200}
-                          step={10}
-                          size="sm"
-                        >
-                          <SliderTrack>
-                            <SliderFilledTrack />
-                          </SliderTrack>
-                          <SliderThumb boxSize={3} />
-                        </Slider>
-                      </Tooltip>
+                      <Slider
+                        value={thumbnailSize}
+                        onChange={setThumbnailSize}
+                        min={80}
+                        max={200}
+                        step={10}
+                        size="sm"
+                      >
+                        <SliderTrack>
+                          <SliderFilledTrack />
+                        </SliderTrack>
+                        <SliderThumb boxSize={3} />
+                      </Slider>
                     </Box>
                     <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
                   </HStack>
@@ -657,21 +696,19 @@ function CardSearch({
                   <HStack spacing={2}>
                     <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
                     <Box width="120px">
-                      <Tooltip label={`Thumbnail size: ${thumbnailSize}px`}>
-                        <Slider
-                          value={thumbnailSize}
-                          onChange={setThumbnailSize}
-                          min={80}
-                          max={200}
-                          step={10}
-                          size="sm"
-                        >
-                          <SliderTrack>
-                            <SliderFilledTrack />
-                          </SliderTrack>
-                          <SliderThumb boxSize={3} />
-                        </Slider>
-                      </Tooltip>
+                      <Slider
+                        value={thumbnailSize}
+                        onChange={setThumbnailSize}
+                        min={80}
+                        max={200}
+                        step={10}
+                        size="sm"
+                      >
+                        <SliderTrack>
+                          <SliderFilledTrack />
+                        </SliderTrack>
+                        <SliderThumb boxSize={3} />
+                      </Slider>
                     </Box>
                     <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
                   </HStack>
@@ -755,7 +792,6 @@ function CardSearch({
         thumbnailSize={thumbnailSize}
         loading={loading}
       />
-
       {/* Modals */}
       <CardDetailModal
         isOpen={isDetailOpen}

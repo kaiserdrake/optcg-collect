@@ -1,4 +1,3 @@
-// frontend/src/components/LocateModal.js
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Modal,

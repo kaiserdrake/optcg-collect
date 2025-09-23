@@ -1,10 +1,88 @@
 import React, { useState, useEffect } from 'react';
 import { dispatchCardUpdate, CARD_EVENTS } from '@/utils/cardEvents';
-import { HStack, IconButton, Tooltip, useToast, Icon } from '@chakra-ui/react';
-import { FiBookmark, FiHeart, FiSlash, FiAlertTriangle } from 'react-icons/fi';
+import { HStack, IconButton, useToast, Icon, Portal } from '@chakra-ui/react';
+import { TAG_DEFINITIONS } from '@/utils/tagDefinitions';
 import { useAuth } from '@/context/AuthContext';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+// Custom tooltip that renders in a portal to bypass overflow:hidden
+const PortalTooltip = ({ label, children, isDisabled }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [delayTimeout, setDelayTimeout] = useState(null);
+
+  if (isDisabled) return children;
+
+  const handleMouseEnter = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top - 8
+    });
+
+    const timeout = setTimeout(() => {
+      setIsVisible(true);
+    }, 200);
+    setDelayTimeout(timeout);
+  };
+
+  const handleMouseLeave = () => {
+    if (delayTimeout) {
+      clearTimeout(delayTimeout);
+      setDelayTimeout(null);
+    }
+    setIsVisible(false);
+  };
+
+  return (
+    <>
+      <span
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{ display: 'inline-block' }}
+      >
+        {children}
+      </span>
+      {isVisible && (
+        <Portal>
+          <div
+            style={{
+              position: 'fixed',
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              transform: 'translateX(-50%) translateY(-100%)',
+              backgroundColor: '#2D3748',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '6px',
+              fontSize: '14px',
+              whiteSpace: 'nowrap',
+              zIndex: 99999,
+              pointerEvents: 'none',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+            }}
+          >
+            {label}
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: 0,
+                height: 0,
+                borderLeft: '4px solid transparent',
+                borderRight: '4px solid transparent',
+                borderTop: '4px solid #2D3748'
+              }}
+            />
+          </div>
+        </Portal>
+      )}
+    </>
+  );
+};
 
 const CardTags = ({
   cardId,
@@ -172,7 +250,7 @@ const CardTags = ({
   const iconSize = size === "sm" ? 3 : 4;
   const buttonSize = size === "sm" ? "xs" : "sm";
 
-  // Improved TagIcon with solid/ghost variant
+  // TagIcon with portal tooltip that bypasses overflow:hidden
   const TagIcon = ({
     icon,
     colorScheme = "gray",
@@ -202,9 +280,9 @@ const CardTags = ({
     );
 
     return showTooltips ? (
-      <Tooltip label={label} hasArrow>
+      <PortalTooltip label={label} isDisabled={isLoading}>
         {iconElement}
-      </Tooltip>
+      </PortalTooltip>
     ) : iconElement;
   };
 
@@ -213,9 +291,9 @@ const CardTags = ({
       {/* User Tags */}
       {(interactive || hasFavorite) && (
         <TagIcon
-          icon={FiBookmark}
-          colorScheme="blue"
-          label="Favorite"
+          icon={TAG_DEFINITIONS.favorite.icon}
+          colorScheme={TAG_DEFINITIONS.favorite.colorScheme}
+          label={TAG_DEFINITIONS.favorite.label}
           onClick={() => toggleUserTag('favorite')}
           isActive={hasFavorite}
           isLoading={loading.favorite}
@@ -224,9 +302,9 @@ const CardTags = ({
 
       {(interactive || hasWant) && (
         <TagIcon
-          icon={FiHeart}
-          colorScheme="red"
-          label="Want"
+          icon={TAG_DEFINITIONS.want.icon}
+          colorScheme={TAG_DEFINITIONS.want.colorScheme}
+          label={TAG_DEFINITIONS.want.label}
           onClick={() => toggleUserTag('want')}
           isActive={hasWant}
           isLoading={loading.want}
@@ -236,9 +314,9 @@ const CardTags = ({
       {/* Admin Tags */}
       {user?.role === 'Admin' && (interactive || isBanned) && (
         <TagIcon
-          icon={FiSlash}
-          colorScheme="red"
-          label="Banned"
+          icon={TAG_DEFINITIONS.banned.icon}
+          colorScheme={TAG_DEFINITIONS.banned.colorScheme}
+          label={TAG_DEFINITIONS.banned.label}
           onClick={() => toggleAdminTag('banned')}
           isActive={isBanned}
           isLoading={loading.banned}
@@ -247,9 +325,9 @@ const CardTags = ({
 
       {user?.role === 'Admin' && (interactive || isRestricted) && (
         <TagIcon
-          icon={FiAlertTriangle}
-          colorScheme="yellow"
-          label="Restricted"
+          icon={TAG_DEFINITIONS.restricted.icon}
+          colorScheme={TAG_DEFINITIONS.restricted.colorScheme}
+          label={TAG_DEFINITIONS.restricted.label}
           onClick={() => toggleAdminTag('restricted')}
           isActive={isRestricted}
           isLoading={loading.restricted}
@@ -259,9 +337,9 @@ const CardTags = ({
       {/* Global tags visible to non-admin users (display only) */}
       {user?.role !== 'Admin' && isBanned && (
         <TagIcon
-          icon={FiSlash}
-          colorScheme="red"
-          label="Banned"
+          icon={TAG_DEFINITIONS.banned.icon}
+          colorScheme={TAG_DEFINITIONS.banned.colorScheme}
+          label={TAG_DEFINITIONS.banned.label}
           isActive={true}
           disabled={true}
         />
@@ -269,9 +347,9 @@ const CardTags = ({
 
       {user?.role !== 'Admin' && isRestricted && (
         <TagIcon
-          icon={FiAlertTriangle}
-          colorScheme="yellow"
-          label="Restricted"
+          icon={TAG_DEFINITIONS.restricted.icon}
+          colorScheme={TAG_DEFINITIONS.restricted.colorScheme}
+          label={TAG_DEFINITIONS.restricted.label}
           isActive={true}
           disabled={true}
         />

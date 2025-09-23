@@ -198,7 +198,13 @@ export const api = {
     import: (collectionData) => api.post('/api/collection/import', { collectionData }),
     update: (data) => api.post('/api/collection/update', data),
     updateLocation: (cardId, locationId) => api.put('/api/collection/location', { cardId, locationId }),
+    setCount: (cardId, ownedCount, proxyCount) => api.put('/api/collection/set-count', {
+      cardId,
+      ownedCount,
+      proxyCount
+    }),
   },
+
 };
 
 // Error message mapping for better user experience
@@ -222,3 +228,4 @@ export const getErrorMessage = (error) => {
       return error.message || 'An unexpected error occurred';
   }
 };
+
