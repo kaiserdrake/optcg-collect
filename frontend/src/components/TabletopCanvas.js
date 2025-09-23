@@ -44,7 +44,7 @@ import {
 } from '@chakra-ui/react';
 
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
-import { FiMapPin, FiHash, FiSettings, FiTag } from 'react-icons/fi';
+import { FiMapPin, FiHash, FiSettings, FiTag, FiCopy } from 'react-icons/fi';
 import { RiFileSearchFill } from 'react-icons/ri';
 
 import DeckCard from './DeckCard';
@@ -580,6 +580,66 @@ const TabletopCanvas = ({
     }
   }, [selectedCards, bulkTag, onTagUpdate, toast, onBulkTagClose]);
 
+  const handleCopyCardList = useCallback(() => {
+    if (selectedCards.size === 0) {
+      toast({
+        title: 'No cards selected',
+        description: 'Please select cards first',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    // Get selected card data
+    const selectedCardData = [];
+
+    selectedCards.forEach(cardId => {
+      const card = allDisplayCards.find(c => c.id === cardId);
+      if (card && card.card_code) {
+        selectedCardData.push(card);
+      }
+    });
+
+    if (selectedCardData.length === 0) {
+      toast({
+        title: 'No valid cards',
+        description: 'Selected cards do not have valid card codes',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    // Sort by card_code for consistent ordering
+    selectedCardData.sort((a, b) => (a.card_code || '').localeCompare(b.card_code || ''));
+
+    // Generate card list in format: "1xOP10-001"
+    const cardTexts = selectedCardData.map(card => `1x${card.card_code}`);
+    const fullText = cardTexts.join('\n');
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(fullText).then(() => {
+      toast({
+        title: 'Card list copied!',
+        description: `Copied ${selectedCardData.length} cards to clipboard`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
+    }).catch(() => {
+        toast({
+          title: 'Failed to copy',
+          description: 'Could not copy card list to clipboard',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      });
+  }, [selectedCards, allDisplayCards, toast]);
+
   return (
     <VStack spacing={4} align="stretch">
       <Box
@@ -689,9 +749,13 @@ const TabletopCanvas = ({
                         <MenuItem icon={<FiSettings />} onClick={onBulkProxyOpen}>
                           Set Proxy Count
                         </MenuItem>
-                        <MenuItem icon={<FiTag />} onClick={onBulkTagOpen}>
-                          Set Tag
+                        {/* <MenuItem icon={<FiTag />} onClick={onBulkTagOpen}> */}
+                        {/*   Set Tag */}
+                        {/* </MenuItem> */}
+                        <MenuItem icon={<FiCopy />} onClick={handleCopyCardList}>
+                          Copy Card List
                         </MenuItem>
+
                       </MenuList>
                     </Menu>
                   )}
