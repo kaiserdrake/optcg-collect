@@ -45,7 +45,7 @@ import {
   Flex
 } from '@chakra-ui/react';
 
-import { ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
+import { ChevronDownIcon, ChevronUpIcon, RepeatIcon } from '@chakra-ui/icons';
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
 import { FiMapPin, FiHash, FiSettings, FiTag } from 'react-icons/fi';
 
@@ -467,25 +467,12 @@ const TabletopCanvas = ({
           onClick={onToggle}
         >
           <Text fontSize="md" fontWeight="semibold" color={useColorModeValue('gray.700', 'gray.200')}>
-            Tabletop Canvas
+            Tabletop
           </Text>
           <HStack spacing={2}>
             <Badge variant="solid" colorScheme={selectedCards.size > 0 ? 'blue' : 'gray'}>
               {selectedCards.size} selected
             </Badge>
-            {selectedCards.size > 0 && (
-              <Button
-                size="xs"
-                variant="outline"
-                colorScheme="red"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleClearAll();
-                }}
-              >
-                Clear All
-              </Button>
-            )}
             <Text fontSize="sm" color={useColorModeValue('gray.500', 'gray.400')}>
               {allDisplayCards.length} cards shown
             </Text>
@@ -551,6 +538,18 @@ const TabletopCanvas = ({
                   {/* Selection Controls */}
                   <Button size="sm" variant="outline" onClick={handleSelectAll}>
                     {cards.length > 0 && cards.every(card => selectedCards.has(card.id)) ? 'Deselect Current' : 'Select Current'}
+                  </Button>
+
+                  {/* Clear All Button - moved from header */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    colorScheme="red"
+                    leftIcon={<RepeatIcon />}
+                    onClick={handleClearAll}
+                    isDisabled={allDisplayCards.length === 0}
+                  >
+                    Clear All
                   </Button>
 
                   {/* Bulk Actions */}
