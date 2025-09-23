@@ -5,7 +5,6 @@ import {
   HStack,
   Text,
   Button,
-  Grid,
   IconButton,
   Menu,
   MenuButton,
@@ -13,7 +12,6 @@ import {
   MenuItem,
   Tooltip,
   Badge,
-  Checkbox,
   Select,
   Slider,
   SliderTrack,
@@ -45,17 +43,16 @@ import {
   Flex
 } from '@chakra-ui/react';
 
-import { ChevronDownIcon, ChevronUpIcon, RepeatIcon } from '@chakra-ui/icons';
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
 import { FiMapPin, FiHash, FiSettings, FiTag } from 'react-icons/fi';
+import { RiFileSearchFill } from 'react-icons/ri';
 
 import DeckCard from './DeckCard';
 import CardDetailModal from './CardDetailModal';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-// Simple LocationSelector component for bulk operations
-const LocationSelector = ({ selectedLocationId, onLocationSelect, showCreateNew = false }) => {
+const LocationSelector = ({ selectedLocationId, onLocationSelect }) => {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -84,13 +81,26 @@ const LocationSelector = ({ selectedLocationId, onLocationSelect, showCreateNew 
     return <Text>Loading locations...</Text>;
   }
 
+  const selectValue = selectedLocationId === null ? "REMOVE" :
+                     selectedLocationId === undefined ? "" :
+                     selectedLocationId.toString();
+
   return (
     <Select
       placeholder="Select a location"
-      value={selectedLocationId || ''}
-      onChange={(e) => onLocationSelect(e.target.value ? parseInt(e.target.value) : null)}
+      value={selectValue}
+      onChange={(e) => {
+        const value = e.target.value;
+        if (value === "REMOVE") {
+          onLocationSelect(null);
+        } else if (value === "") {
+          onLocationSelect(undefined);
+        } else {
+          onLocationSelect(parseInt(value));
+        }
+      }}
     >
-      <option value="">Remove from location</option>
+      <option value="REMOVE">Remove from location</option>
       {locations.map((location) => (
         <option key={location.id} value={location.id}>
           {location.name} ({location.type})
@@ -108,18 +118,14 @@ const TabletopCanvas = ({
   onTagUpdate
 }) => {
   const toast = useToast();
-
-  // Manage our own collapsible state
   const { isOpen: isExpanded, onToggle } = useDisclosure({ defaultIsOpen: false });
 
-  // State for tabletop management
   const [allDisplayCards, setAllDisplayCards] = useState([]);
   const [selectedCards, setSelectedCards] = useState(new Set());
   const [sortMode, setSortMode] = useState('name');
   const [sortReverse, setSortReverse] = useState(false);
   const [thumbnailSize, setThumbnailSize] = useState(80);
 
-  // Card detail modal
   const {
     isOpen: isCardDetailOpen,
     onOpen: onCardDetailOpen,
@@ -127,7 +133,6 @@ const TabletopCanvas = ({
   } = useDisclosure();
   const [selectedCard, setSelectedCard] = useState(null);
 
-  // Bulk operation modals
   const {
     isOpen: isBulkMoveOpen,
     onOpen: onBulkMoveOpen,
@@ -154,136 +159,174 @@ const TabletopCanvas = ({
     onClose: onFailedMoveClose
   } = useDisclosure();
 
-  // Bulk operation state
   const [bulkLocationId, setBulkLocationId] = useState(null);
   const [bulkCount, setBulkCount] = useState(1);
   const [bulkProxyCount, setBulkProxyCount] = useState(0);
   const [bulkTag, setBulkTag] = useState('');
   const [failedMoves, setFailedMoves] = useState([]);
 
-  // Update allDisplayCards when cards prop changes
   useEffect(() => {
     if (cards.length > 0) {
-      // Add new cards from search, avoid duplicates
-      setAllDisplayCards(prev => {
-        const existingIds = new Set(prev.map(card => card.id));
+      setAllDisplayCards(prevCards => {
+        const currentCardIds = new Set(cards.map(c => c.id));
+        const filteredPrevCards = prevCards.filter(card =>
+          currentCardIds.has(card.id) || selectedCards.has(card.id)
+        );
+
+        const existingIds = new Set(filteredPrevCards.map(c => c.id));
         const newCards = cards.filter(card => !existingIds.has(card.id));
-        return [...prev, ...newCards];
+
+        return [...filteredPrevCards, ...newCards];
       });
     }
-  }, [cards]);
+  }, [cards, selectedCards]);
 
-  // Sort cards
   const sortedCards = React.useMemo(() => {
-    const toSort = [...allDisplayCards];
+    if (!Array.isArray(allDisplayCards) || allDisplayCards.length === 0) {
+      return [];
+    }
 
-    toSort.sort((a, b) => {
-      let result = 0;
+    const sorted = [...allDisplayCards].sort((a, b) => {
+      let comparison = 0;
 
       switch (sortMode) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
         case 'cost':
-          result = (a.cost || 0) - (b.cost || 0);
+          const aCost = a.cost !== null ? a.cost : -1;
+          const bCost = b.cost !== null ? b.cost : -1;
+          comparison = aCost - bCost;
+          if (comparison === 0) comparison = a.name.localeCompare(b.name);
           break;
         case 'type':
-          result = (a.category || '').localeCompare(b.category || '');
+          comparison = (a.category || '').localeCompare(b.category || '');
+          if (comparison === 0) comparison = a.name.localeCompare(b.name);
           break;
         case 'rarity':
-          const rarityOrder = { common: 1, uncommon: 2, rare: 3, 'super rare': 4, leader: 5 };
-          result = (rarityOrder[a.rarity] || 0) - (rarityOrder[b.rarity] || 0);
+          const rarityOrder = { 'C': 1, 'UC': 2, 'R': 3, 'SR': 4, 'SEC': 5, 'L': 6, 'SP': 7 };
+          const aRarity = rarityOrder[a.rarity] || 0;
+          const bRarity = rarityOrder[b.rarity] || 0;
+          comparison = aRarity - bRarity;
+          if (comparison === 0) comparison = a.name.localeCompare(b.name);
           break;
         case 'card_code':
-          result = (a.card_code || '').localeCompare(b.card_code || '');
+          comparison = (a.card_code || '').localeCompare(b.card_code || '');
+          if (comparison === 0) comparison = a.name.localeCompare(b.name);
           break;
-        default: // name
-          result = (a.name || '').localeCompare(b.name || '');
+        default:
+          comparison = a.name.localeCompare(b.name);
       }
 
-      return sortReverse ? -result : result;
+      return sortReverse ? -comparison : comparison;
     });
 
-    return toSort;
+    return sorted;
   }, [allDisplayCards, sortMode, sortReverse]);
 
-  // Card selection handlers
-  const handleCardSelection = (cardId, isSelected) => {
+  const handleCardSelection = useCallback((cardId, forceSelect = null) => {
     setSelectedCards(prev => {
-      const newSelection = new Set(prev);
-      if (isSelected) {
-        newSelection.add(cardId);
+      const newSet = new Set(prev);
+      const shouldSelect = forceSelect !== null ? forceSelect : !newSet.has(cardId);
+
+      if (shouldSelect) {
+        newSet.add(cardId);
       } else {
-        newSelection.delete(cardId);
+        newSet.delete(cardId);
       }
-      return newSelection;
+      return newSet;
     });
-  };
+  }, []);
 
-  const handleSelectAll = () => {
-    if (cards.length > 0 && cards.every(card => selectedCards.has(card.id))) {
-      // Deselect current search results
-      setSelectedCards(prev => {
-        const newSelection = new Set(prev);
-        cards.forEach(card => newSelection.delete(card.id));
-        return newSelection;
-      });
-    } else {
-      // Select current search results
-      setSelectedCards(prev => {
-        const newSelection = new Set(prev);
-        cards.forEach(card => newSelection.add(card.id));
-        return newSelection;
-      });
+  const handleCardClick = useCallback((card) => {
+    handleCardSelection(card.id);
+  }, [handleCardSelection]);
+
+  const handleDetailClick = useCallback((card, event) => {
+    if (event) {
+      event.stopPropagation();
     }
-  };
-
-  const handleClearAll = () => {
-    setSelectedCards(new Set());
-  };
-
-  // Card interaction handlers
-  const handleCardClick = (card) => {
     setSelectedCard(card);
     onCardDetailOpen();
-  };
+  }, [onCardDetailOpen]);
+
+  const handleSelectAll = useCallback(() => {
+    const allSelected = cards.length > 0 && cards.every(card => selectedCards.has(card.id));
+    if (allSelected) {
+      setSelectedCards(prev => {
+        const newSet = new Set(prev);
+        cards.forEach(card => newSet.delete(card.id));
+        return newSet;
+      });
+    } else {
+      setSelectedCards(prev => {
+        const newSet = new Set(prev);
+        cards.forEach(card => newSet.add(card.id));
+        return newSet;
+      });
+    }
+  }, [cards, selectedCards]);
+
+  const handleClearAll = useCallback(() => {
+    setSelectedCards(new Set());
+  }, []);
 
   const handleCardDetailUpdate = useCallback((cardId, updateData) => {
-    // Update the card in allDisplayCards
     setAllDisplayCards(prev =>
       prev.map(card =>
         card.id === cardId ? { ...card, ...updateData } : card
       )
     );
 
-    // Update selected card if it matches
     if (selectedCard && selectedCard.id === cardId) {
       setSelectedCard(prev => ({ ...prev, ...updateData }));
     }
 
-    // Call parent callback if provided
     if (onCountUpdate) {
       onCountUpdate(cardId, updateData);
     }
   }, [selectedCard, onCountUpdate]);
 
-  // Bulk operation handlers
-  const handleBulkMoveLocation = useCallback(async () => {
-    if (selectedCards.size === 0 || !bulkLocationId) return;
+  const handleBulkMove = useCallback(async () => {
+    if (selectedCards.size === 0) {
+      toast({
+        title: 'No cards selected',
+        description: 'Please select cards first',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
 
     const failed = [];
     const succeeded = [];
 
     try {
       for (const cardId of selectedCards) {
+        const card = allDisplayCards.find(c => c.id === cardId);
+        if (!card) continue;
+
+        const hasCard = (card.owned_count || 0) > 0 || (card.proxy_count || 0) > 0;
+        if (!hasCard) {
+          failed.push({
+            cardName: card.name,
+            cardCode: card.card_code,
+            reason: 'Not in collection'
+          });
+          continue;
+        }
+
         try {
           if (onLocationUpdate) {
             await onLocationUpdate(cardId, bulkLocationId);
             succeeded.push(cardId);
           }
         } catch (error) {
-          const card = allDisplayCards.find(c => c.id === cardId);
           failed.push({
-            cardName: card?.name || 'Unknown',
-            cardCode: card?.card_code || 'Unknown',
-            reason: error.message || 'Unknown error'
+            cardName: card.name,
+            cardCode: card.card_code,
+            reason: error.message || 'Update failed'
           });
         }
       }
@@ -303,6 +346,7 @@ const TabletopCanvas = ({
         onFailedMoveOpen();
       }
 
+      setBulkLocationId(null);
       onBulkMoveClose();
     } catch (error) {
       toast({
@@ -327,26 +371,72 @@ const TabletopCanvas = ({
       return;
     }
 
+    const failed = [];
+    const succeeded = [];
+
     try {
       for (const cardId of selectedCards) {
-        if (onCountUpdate) {
-          await onCountUpdate(cardId, { owned_count: bulkCount });
+        const card = allDisplayCards.find(c => c.id === cardId);
+        if (!card) continue;
+
+        try {
+          const response = await fetch(`${api}/api/collection/set-count`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              cardId: cardId,
+              ownedCount: bulkCount,
+              proxyCount: card.proxy_count || 0
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            succeeded.push({ cardId, data });
+
+            setAllDisplayCards(prev =>
+              prev.map(c =>
+                c.id === cardId
+                  ? { ...c, owned_count: data.owned_count, proxy_count: data.proxy_count }
+                  : c
+              )
+            );
+
+            if (onCountUpdate) {
+              onCountUpdate(cardId, data);
+            }
+          } else {
+            const errorData = await response.json();
+            failed.push({
+              cardName: card.name,
+              cardCode: card.card_code,
+              reason: errorData.message || 'Update failed'
+            });
+          }
+        } catch (error) {
+          failed.push({
+            cardName: card.name,
+            cardCode: card.card_code,
+            reason: error.message || 'Network error'
+          });
         }
       }
 
-      setAllDisplayCards(prev =>
-        prev.map(card =>
-          selectedCards.has(card.id) ? { ...card, owned_count: bulkCount } : card
-        )
-      );
+      if (succeeded.length > 0) {
+        toast({
+          title: 'Counts updated',
+          description: `Updated counts for ${succeeded.length} cards`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
 
-      toast({
-        title: 'Counts updated',
-        description: `Updated counts for ${selectedCards.size} cards`,
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
+      if (failed.length > 0) {
+        setFailedMoves(failed);
+        onFailedMoveOpen();
+      }
 
       onBulkCountClose();
     } catch (error) {
@@ -358,7 +448,7 @@ const TabletopCanvas = ({
         isClosable: true,
       });
     }
-  }, [selectedCards, bulkCount, onCountUpdate, toast, onBulkCountClose]);
+  }, [selectedCards, bulkCount, allDisplayCards, onCountUpdate, toast, onBulkCountClose, onFailedMoveOpen]);
 
   const handleBulkSetProxy = useCallback(async () => {
     if (selectedCards.size === 0) {
@@ -372,38 +462,84 @@ const TabletopCanvas = ({
       return;
     }
 
+    const failed = [];
+    const succeeded = [];
+
     try {
       for (const cardId of selectedCards) {
-        if (onCountUpdate) {
-          await onCountUpdate(cardId, { proxy_count: bulkProxyCount });
+        const card = allDisplayCards.find(c => c.id === cardId);
+        if (!card) continue;
+
+        try {
+          const response = await fetch(`${api}/api/collection/set-count`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              cardId: cardId,
+              ownedCount: card.owned_count || 0,
+              proxyCount: bulkProxyCount
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            succeeded.push({ cardId, data });
+
+            setAllDisplayCards(prev =>
+              prev.map(c =>
+                c.id === cardId
+                  ? { ...c, owned_count: data.owned_count, proxy_count: data.proxy_count }
+                  : c
+              )
+            );
+
+            if (onCountUpdate) {
+              onCountUpdate(cardId, data);
+            }
+          } else {
+            const errorData = await response.json();
+            failed.push({
+              cardName: card.name,
+              cardCode: card.card_code,
+              reason: errorData.message || 'Update failed'
+            });
+          }
+        } catch (error) {
+          failed.push({
+            cardName: card.name,
+            cardCode: card.card_code,
+            reason: error.message || 'Network error'
+          });
         }
       }
 
-      setAllDisplayCards(prev =>
-        prev.map(card =>
-          selectedCards.has(card.id) ? { ...card, proxy_count: bulkProxyCount } : card
-        )
-      );
+      if (succeeded.length > 0) {
+        toast({
+          title: 'Proxy counts updated',
+          description: `Updated proxy counts for ${succeeded.length} cards`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
 
-      toast({
-        title: 'Proxy counts updated',
-        description: `Updated proxy counts for ${selectedCards.size} cards`,
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
+      if (failed.length > 0) {
+        setFailedMoves(failed);
+        onFailedMoveOpen();
+      }
 
       onBulkProxyClose();
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Please try again.',
+        description: 'Failed to update proxy counts',
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
     }
-  }, [selectedCards, bulkProxyCount, onCountUpdate, toast, onBulkProxyClose]);
+  }, [selectedCards, bulkProxyCount, allDisplayCards, onCountUpdate, toast, onBulkProxyClose, onFailedMoveOpen]);
 
   const handleBulkSetTag = useCallback(async () => {
     if (selectedCards.size === 0) {
@@ -446,16 +582,14 @@ const TabletopCanvas = ({
 
   return (
     <VStack spacing={4} align="stretch">
-      {/* Tabletop Canvas - Collapsible Box similar to Battle Tools */}
       <Box
         bg={useColorModeValue('white', 'gray.800')}
         border="1px solid"
         borderColor={useColorModeValue('gray.200', 'gray.600')}
         borderRadius="lg"
         overflow="hidden"
-        w="100%" // Extend to full width
+        w="100%"
       >
-        {/* Collapsible Header */}
         <Button
           variant="ghost"
           w="100%"
@@ -482,14 +616,11 @@ const TabletopCanvas = ({
           </HStack>
         </Button>
 
-        {/* Collapsible Content */}
         <Collapse in={isExpanded}>
           <Box p={3} borderTop="1px solid" borderColor={useColorModeValue('gray.200', 'gray.600')}>
             <VStack spacing={3}>
-              {/* Controls */}
               <HStack spacing={4} wrap="wrap" justify="space-between" w="100%">
                 <HStack spacing={3}>
-                  {/* Sort Controls */}
                   <HStack spacing={2}>
                     <Text fontSize="sm" color="gray.600" fontWeight="medium">Sort:</Text>
                     <Select
@@ -515,7 +646,6 @@ const TabletopCanvas = ({
                     />
                   </Tooltip>
 
-                  {/* Thumbnail Size Slider */}
                   <HStack spacing={2} minW="120px">
                     <Text fontSize="xs" color="gray.600">Size:</Text>
                     <Slider
@@ -535,67 +665,41 @@ const TabletopCanvas = ({
                 </HStack>
 
                 <HStack spacing={2}>
-                  {/* Selection Controls */}
                   <Button size="sm" variant="outline" onClick={handleSelectAll}>
-                    {cards.length > 0 && cards.every(card => selectedCards.has(card.id)) ? 'Deselect Current' : 'Select Current'}
+                    {cards.length > 0 && cards.every(card => selectedCards.has(card.id)) ?
+                      'Deselect All' : 'Select All'}
                   </Button>
 
-                  {/* Clear All Button - moved from header */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    colorScheme="red"
-                    leftIcon={<RepeatIcon />}
-                    onClick={handleClearAll}
-                    isDisabled={allDisplayCards.length === 0}
-                  >
+                  <Button size="sm" variant="outline" onClick={handleClearAll}>
                     Clear All
                   </Button>
 
-                  {/* Bulk Actions */}
-                  <Menu>
-                    <MenuButton
-                      as={Button}
-                      rightIcon={<ChevronDownIcon />}
-                      size="sm"
-                      colorScheme="blue"
-                      variant="outline"
-                      isDisabled={selectedCards.size === 0}
-                    >
-                      Actions
-                    </MenuButton>
-                    <MenuList>
-                      <MenuItem onClick={onBulkMoveOpen}>
-                        <FiMapPin style={{ marginRight: '8px' }} />
-                        Bulk Move Location
-                      </MenuItem>
-                      <MenuItem onClick={onBulkCountOpen}>
-                        <FiHash style={{ marginRight: '8px' }} />
-                        Bulk Set Count
-                      </MenuItem>
-                      <MenuItem onClick={onBulkProxyOpen}>
-                        <FiSettings style={{ marginRight: '8px' }} />
-                        Bulk Set Proxy Count
-                      </MenuItem>
-                      <MenuItem onClick={onBulkTagOpen}>
-                        <FiTag style={{ marginRight: '8px' }} />
-                        Bulk Set Tag
-                      </MenuItem>
-                    </MenuList>
-                  </Menu>
+                  {selectedCards.size > 0 && (
+                    <Menu>
+                      <MenuButton as={Button} size="sm" colorScheme="blue" variant="outline">
+                        Bulk Actions ({selectedCards.size})
+                      </MenuButton>
+                      <MenuList>
+                        <MenuItem icon={<FiMapPin />} onClick={onBulkMoveOpen}>
+                          Move to Location
+                        </MenuItem>
+                        <MenuItem icon={<FiHash />} onClick={onBulkCountOpen}>
+                          Set Count
+                        </MenuItem>
+                        <MenuItem icon={<FiSettings />} onClick={onBulkProxyOpen}>
+                          Set Proxy Count
+                        </MenuItem>
+                        <MenuItem icon={<FiTag />} onClick={onBulkTagOpen}>
+                          Set Tag
+                        </MenuItem>
+                      </MenuList>
+                    </Menu>
+                  )}
                 </HStack>
               </HStack>
 
-              {/* Cards Display - Single row with horizontal scrolling */}
-              <Box
-                bg={useColorModeValue('gray.50', 'gray.700')}
-                borderRadius="md"
-                p={4}
-                border="1px solid"
-                borderColor={useColorModeValue('gray.200', 'gray.600')}
-                w="100%"
-              >
-                {sortedCards.length === 0 ? (
+              <Box w="100%" minH="120px" maxH="400px">
+                {allDisplayCards.length === 0 ? (
                   <Box textAlign="center" py={8}>
                     <Text color="gray.500">No cards in tabletop</Text>
                     <Text color="gray.400" fontSize="sm" mt={1}>
@@ -635,44 +739,53 @@ const TabletopCanvas = ({
                           flexShrink={0}
                           width={`${thumbnailSize}px`}
                           height={`${Math.floor(thumbnailSize * 1.4)}px`}
+                          role="group"
                         >
-                          {/* Selection Checkbox */}
-                          <Checkbox
+                          <Box
                             position="absolute"
-                            top="-8px"
-                            left="-8px"
-                            zIndex={2}
-                            isChecked={isSelected}
-                            onChange={(e) => handleCardSelection(card.id, e.target.checked)}
-                            bg="white"
-                            borderRadius="full"
-                            p={1}
-                          />
+                            top="8px"
+                            right="8px"
+                            opacity={0}
+                            _groupHover={{ opacity: 1 }}
+                            transition="opacity 0.2s"
+                            zIndex={3}
+                          >
+                            <IconButton
+                              icon={<RiFileSearchFill />}
+                              size="sm"
+                              colorScheme="blue"
+                              variant="solid"
+                              onClick={(e) => handleDetailClick(card, e)}
+                              aria-label="View card details"
+                              borderRadius="full"
+                              shadow="md"
+                            />
+                          </Box>
 
-                          {/* Card with grayscale filter when not selected */}
                           <Box
                             border={isSelected ? "2px solid" : "1px solid"}
                             borderColor={isSelected ? "blue.400" : "transparent"}
                             borderRadius="md"
                             transition="all 0.2s"
                             filter={isSelected ? "none" : "grayscale(100%)"}
-                            opacity={isFromCurrentSearch ? 1 : 0.8}
+                            opacity={isSelected ? 1 : (isFromCurrentSearch ? 0.7 : 0.5)}
                             _hover={{
                               filter: isSelected ? "none" : "grayscale(50%)",
                               opacity: 1
                             }}
                             height="100%"
+                            cursor="pointer"
+                            onClick={() => handleCardClick(card)}
                           >
                             <DeckCard
                               item={{ card, count: card.owned_count || 1 }}
-                              onCardClick={handleCardClick}
+                              onCardClick={() => {}}
                               isViewOnly={true}
                               thumbnailSize={thumbnailSize}
                               hideCount={true}
                             />
                           </Box>
 
-                          {/* Indicator for cards from previous searches */}
                           {!isFromCurrentSearch && (
                             <Box
                               position="absolute"
@@ -699,7 +812,6 @@ const TabletopCanvas = ({
         </Collapse>
       </Box>
 
-      {/* Card Detail Modal */}
       <CardDetailModal
         isOpen={isCardDetailOpen}
         onClose={onCardDetailClose}
@@ -708,7 +820,6 @@ const TabletopCanvas = ({
         onCountUpdate={handleCardDetailUpdate}
       />
 
-      {/* Bulk Move Location Modal */}
       <Modal isOpen={isBulkMoveOpen} onClose={onBulkMoveClose} size="lg">
         <ModalOverlay />
         <ModalContent>
@@ -723,11 +834,11 @@ const TabletopCanvas = ({
             <VStack spacing={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
                 Moving {selectedCards.size} selected cards to a new location.
+                Only cards you own will be moved.
               </Text>
               <LocationSelector
                 selectedLocationId={bulkLocationId}
                 onLocationSelect={setBulkLocationId}
-                showCreateNew={true}
               />
             </VStack>
           </ModalBody>
@@ -738,17 +849,16 @@ const TabletopCanvas = ({
               </Button>
               <Button
                 colorScheme="blue"
-                onClick={handleBulkMoveLocation}
-                isDisabled={!bulkLocationId}
+                onClick={handleBulkMove}
+                isDisabled={bulkLocationId === undefined}
               >
-                Move Cards
+                {bulkLocationId === null ? 'Remove from Location' : 'Move Cards'}
               </Button>
             </HStack>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      {/* Bulk Count Modal */}
       <Modal isOpen={isBulkCountOpen} onClose={onBulkCountClose}>
         <ModalOverlay />
         <ModalContent>
@@ -762,11 +872,11 @@ const TabletopCanvas = ({
           <ModalBody>
             <VStack spacing={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
-                Setting count for {selectedCards.size} selected cards.
+                Set the owned count for {selectedCards.size} selected cards.
               </Text>
               <NumberInput
                 value={bulkCount}
-                onChange={(valueString) => setBulkCount(parseInt(valueString) || 0)}
+                onChange={(value) => setBulkCount(parseInt(value) || 0)}
                 min={0}
                 max={99}
               >
@@ -791,7 +901,6 @@ const TabletopCanvas = ({
         </ModalContent>
       </Modal>
 
-      {/* Bulk Proxy Modal */}
       <Modal isOpen={isBulkProxyOpen} onClose={onBulkProxyClose}>
         <ModalOverlay />
         <ModalContent>
@@ -805,11 +914,11 @@ const TabletopCanvas = ({
           <ModalBody>
             <VStack spacing={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
-                Setting proxy count for {selectedCards.size} selected cards.
+                Set the proxy count for {selectedCards.size} selected cards.
+                Owned counts will remain unchanged.
               </Text>
               <NumberInput
                 value={bulkProxyCount}
-                onChange={(valueString) => setBulkProxyCount(parseInt(valueString) || 0)}
                 min={0}
                 max={99}
               >
@@ -834,7 +943,6 @@ const TabletopCanvas = ({
         </ModalContent>
       </Modal>
 
-      {/* Bulk Tag Modal */}
       <Modal isOpen={isBulkTagOpen} onClose={onBulkTagClose}>
         <ModalOverlay />
         <ModalContent>
@@ -848,7 +956,7 @@ const TabletopCanvas = ({
           <ModalBody>
             <VStack spacing={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
-                Setting tag for {selectedCards.size} selected cards.
+                Set a tag for {selectedCards.size} selected cards.
               </Text>
               <Input
                 value={bulkTag}
@@ -870,18 +978,17 @@ const TabletopCanvas = ({
         </ModalContent>
       </Modal>
 
-      {/* Failed Move Modal */}
       <Modal isOpen={isFailedMoveOpen} onClose={onFailedMoveClose} size="lg">
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Move Results</ModalHeader>
+          <ModalHeader>Operation Results</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={4} align="stretch">
               {failedMoves.length > 0 && (
                 <>
                   <Text fontSize="md" fontWeight="semibold" color="red.600">
-                    Failed to move {failedMoves.length} cards:
+                    Failed to process {failedMoves.length} cards:
                   </Text>
                   <Box maxHeight="300px" overflowY="auto">
                     <Table size="sm">
@@ -914,7 +1021,6 @@ const TabletopCanvas = ({
                       </Tbody>
                     </Table>
                   </Box>
-
                   <Text fontSize="sm" color="gray.600">
                     Cards marked as "Not in collection" are not owned by you and were skipped.
                     Other errors may require checking your collection or trying again.
