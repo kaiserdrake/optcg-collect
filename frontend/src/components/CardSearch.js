@@ -190,14 +190,22 @@ function CardSearch({
 
   // Collection toggle handler
   useEffect(() => {
+    // Don't run if performSearch is not yet defined or component is not client-ready
+    if (!performSearch || !isClient) return;
+
     if (inCollection) {
       performSearch(searchTerm.trim(), true);
     } else {
-      setResults([]);
-      setStatusMessage({
-        type: 'initial',
-        message: 'Start typing to search for cards, or enable "In Collection" to view your collection'
-      });
+      // When toggling to false, perform a search if there's a search term
+      if (searchTerm.trim()) {
+        performSearch(searchTerm.trim(), false);
+      } else {
+        setResults([]);
+        setStatusMessage({
+          type: 'initial',
+          message: 'Start typing to search for cards, or enable "In Collection" to view your collection'
+        });
+      }
     }
   }, [inCollection]);
 
