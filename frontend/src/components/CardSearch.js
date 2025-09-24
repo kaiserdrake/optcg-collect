@@ -24,70 +24,119 @@ import ThumbViewBuilder from './ThumbViewBuilder';
 
 import TabletopCanvas from './TabletopCanvas';
 
+// Style helpers
+const subtleBoxStyle = (bgColor, borderColor) => ({
+  p: 3,
+  bg: bgColor,
+  borderWidth: '1px',
+  borderColor: borderColor,
+  borderRadius: 'md',
+  mb: 4
+});
+
+const subtleTextStyle = (color) => ({
+  fontSize: 'sm',
+  color: color
+});
+
 const PaginationControls = ({
   currentPage,
   itemsPerPage,
   totalItems,
   onPageChange,
   onItemsPerPageChange,
-  loading
+  loading,
+  statusMessage
 }) => {
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startItem = totalPages > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 
-  if (totalItems === 0) return null;
+  // Helper functions to get color styling based on status type
+  const getBoxStyle = (type) => {
+    switch (type) {
+      case 'error':
+        return subtleBoxStyle('red.50', 'red.200');
+      case 'success':
+        return subtleBoxStyle('green.50', 'green.200');
+      case 'no-results':
+        return subtleBoxStyle('gray.50', 'gray.200');
+      default:
+        return subtleBoxStyle('blue.50', 'blue.200');
+    }
+  };
+
+  const getTextStyle = (type) => {
+    switch (type) {
+      case 'error':
+        return subtleTextStyle('red.700');
+      case 'success':
+        return subtleTextStyle('green.700');
+      case 'no-results':
+        return subtleTextStyle('gray.700');
+      default:
+        return subtleTextStyle('blue.700');
+    }
+  };
+
+  // Show status message for initial, error, or no-results states
+  if (totalItems === 0) {
+    if (statusMessage && (statusMessage.type === 'initial' || statusMessage.type === 'error' || statusMessage.type === 'no-results')) {
+      const boxStyles = getBoxStyle(statusMessage.type);
+      const textStyles = getTextStyle(statusMessage.type);
+
+      return (
+        <Box {...boxStyles} textAlign="center">
+          <Text {...textStyles}>
+            {statusMessage.message}
+          </Text>
+        </Box>
+      );
+    }
+    return null;
+  }
+
+  // For results, use success color scheme
+  const boxStyles = getBoxStyle('success');
+  const textStyles = getTextStyle('success');
 
   return (
-    <HStack justify="space-between" align="center" p={4} bg="gray.50" borderRadius="md">
-      <HStack spacing={4}>
-        <Text fontSize="sm" color="gray.600">
-          Showing {startItem}-{endItem} of {totalItems} cards
-        </Text>
+    <HStack
+      justify="space-between"
+      align="center"
+      {...boxStyles}
+    >
+      {/* Combined Status and Pagination Info */}
+      <Text fontSize="sm" color={textStyles.color}>
+        {startItem}-{endItem} of {totalItems}
+      </Text>
 
-        <HStack spacing={2}>
-          <Text fontSize="sm" color="gray.600">Per page:</Text>
-          <Menu>
-            <MenuButton
-              as={Button}
-              size="sm"
-              variant="outline"
-              rightIcon={<ChevronDownIcon />}
-              minW="60px"
-              isDisabled={loading}
-            >
-              {itemsPerPage}
-            </MenuButton>
-            <MenuList>
-              <MenuItem onClick={() => onItemsPerPageChange(25)}>25</MenuItem>
-              <MenuItem onClick={() => onItemsPerPageChange(50)}>50</MenuItem>
-              <MenuItem onClick={() => onItemsPerPageChange(100)}>100</MenuItem>
-            </MenuList>
-          </Menu>
-        </HStack>
-      </HStack>
-
+      {/* Simple Navigation Controls */}
       <HStack spacing={2}>
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
           onClick={() => onPageChange(currentPage - 1)}
           isDisabled={currentPage <= 1 || loading}
+          px={2}
+          minW="auto"
+          color={textStyles.color}
+          _hover={{ bg: boxStyles.borderColor }}
         >
-          Previous
+          &lt;
         </Button>
-
-        <Text fontSize="sm" color="gray.600" px={2}>
-          Page {currentPage} of {totalPages}
-        </Text>
 
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
           onClick={() => onPageChange(currentPage + 1)}
           isDisabled={currentPage >= totalPages || loading}
+          px={2}
+          minW="auto"
+          color={textStyles.color}
+          _hover={{ bg: boxStyles.borderColor }}
         >
-          Next
+          &gt;
         </Button>
       </HStack>
     </HStack>
@@ -193,21 +242,6 @@ const IsolatedResultsComponent = React.memo(({
 });
 
 IsolatedResultsComponent.displayName = 'IsolatedResultsComponent';
-
-// Style helpers
-const subtleBoxStyle = (bgColor, borderColor) => ({
-  p: 3,
-  bg: bgColor,
-  borderWidth: '1px',
-  borderColor: borderColor,
-  borderRadius: 'md',
-  mb: 4
-});
-
-const subtleTextStyle = (color) => ({
-  fontSize: 'sm',
-  color: color
-});
 
 function CardSearch({
   mode = 'collection',
@@ -872,24 +906,6 @@ function CardSearch({
         )}
       </VStack>
 
-      {/* Status Message */}
-      {statusMessage && (
-        <Box {...getStatusBoxStyle(statusMessage.type)}>
-          <Text {...getStatusTextStyle(statusMessage.type)}>
-            {statusMessage.message}
-          </Text>
-        </Box>
-      )}
-
-      {/* Error Display */}
-      {error && (
-        <Box {...subtleBoxStyle('red.50', 'red.200')}>
-          <Text {...subtleTextStyle('red.700')}>
-            Error: {error}
-          </Text>
-        </Box>
-      )}
-
       {/* Loading Spinner */}
       {loading && (
         <Box {...subtleBoxStyle('blue.50', 'blue.200')}>
@@ -899,6 +915,17 @@ function CardSearch({
           </HStack>
         </Box>
       )}
+
+      {/* Pagination Controls with integrated status */}
+      <PaginationControls
+        currentPage={currentPage}
+        itemsPerPage={itemsPerPage}
+        totalItems={totalResults}
+        onPageChange={handlePageChange}
+        onItemsPerPageChange={handleItemsPerPageChange}
+        loading={loading}
+        statusMessage={statusMessage}
+      />
 
       {/* Results */}
       <IsolatedResultsComponent
@@ -913,18 +940,6 @@ function CardSearch({
         thumbnailSize={thumbnailSize}
         loading={loading}
       />
-
-      {/* Pagination Controls */}
-      {(results.length > 0 || totalResults > 0) && (
-        <PaginationControls
-          currentPage={currentPage}
-          itemsPerPage={itemsPerPage}
-          totalItems={totalResults}
-          onPageChange={handlePageChange}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          loading={loading}
-        />
-      )}
 
       {/* Modals */}
       <CardDetailModal
