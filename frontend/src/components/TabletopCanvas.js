@@ -34,6 +34,7 @@ import {
   NumberInputStepper,
   NumberIncrementStepper,
   NumberDecrementStepper,
+  Spinner,
   Table,
   Thead,
   Tbody,
@@ -125,6 +126,7 @@ const TabletopCanvas = ({
   const [sortMode, setSortMode] = useState('name');
   const [sortReverse, setSortReverse] = useState(false);
   const [thumbnailSize, setThumbnailSize] = useState(80);
+  const [isActionOngoing, setIsActionOngoing] = useState(false);
 
   const {
     isOpen: isCardDetailOpen,
@@ -299,6 +301,7 @@ const TabletopCanvas = ({
       return;
     }
 
+    setIsActionOngoing(true);
     const failed = [];
     const succeeded = [];
 
@@ -307,26 +310,23 @@ const TabletopCanvas = ({
         const card = allDisplayCards.find(c => c.id === cardId);
         if (!card) continue;
 
-        const hasCard = (card.owned_count || 0) > 0 || (card.proxy_count || 0) > 0;
-        if (!hasCard) {
-          failed.push({
-            cardName: card.name,
-            cardCode: card.card_code,
-            reason: 'Not in collection'
-          });
-          continue;
-        }
-
         try {
           if (onLocationUpdate) {
             await onLocationUpdate(cardId, bulkLocationId);
             succeeded.push(cardId);
           }
         } catch (error) {
+          // Provide user-friendly error message for collection validation
+          let reason = error.message || 'Update failed';
+          if (error.message && error.message.includes('HTTP 404') &&
+            error.message.includes('No owned cards found to update location for')) {
+            reason = 'Not in collection';
+          }
+
           failed.push({
             cardName: card.name,
             cardCode: card.card_code,
-            reason: error.message || 'Update failed'
+            reason: reason
           });
         }
       }
@@ -356,6 +356,8 @@ const TabletopCanvas = ({
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      setIsActionOngoing(false);
     }
   }, [selectedCards, bulkLocationId, allDisplayCards, onLocationUpdate, toast, onBulkMoveClose, onFailedMoveOpen]);
 
@@ -371,6 +373,7 @@ const TabletopCanvas = ({
       return;
     }
 
+    setIsActionOngoing(true);
     const failed = [];
     const succeeded = [];
 
@@ -447,8 +450,11 @@ const TabletopCanvas = ({
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      setIsActionOngoing(false);
     }
-  }, [selectedCards, bulkCount, allDisplayCards, onCountUpdate, toast, onBulkCountClose, onFailedMoveOpen]);
+  }, [selectedCards, bulkCount, allDisplayCards, onCountUpdate, toast, onBulkCountClose, onFailedMoveOpen, api]);
+
 
   const handleBulkSetProxy = useCallback(async () => {
     if (selectedCards.size === 0) {
@@ -462,6 +468,7 @@ const TabletopCanvas = ({
       return;
     }
 
+    setIsActionOngoing(true);
     const failed = [];
     const succeeded = [];
 
@@ -538,8 +545,11 @@ const TabletopCanvas = ({
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      setIsActionOngoing(false);
     }
-  }, [selectedCards, bulkProxyCount, allDisplayCards, onCountUpdate, toast, onBulkProxyClose, onFailedMoveOpen]);
+  }, [selectedCards, bulkProxyCount, allDisplayCards, onCountUpdate, toast, onBulkProxyClose, onFailedMoveOpen, api]);
+
 
   const handleBulkSetTag = useCallback(async () => {
     if (selectedCards.size === 0) {
@@ -884,22 +894,30 @@ const TabletopCanvas = ({
         onCountUpdate={handleCardDetailUpdate}
       />
 
-      <Modal isOpen={isBulkMoveOpen} onClose={onBulkMoveClose} size="lg">
-        <ModalOverlay />
+      <Modal isOpen={isBulkMoveOpen} onClose={onBulkMoveClose} size="lg" closeOnOverlayClick={!isActionOngoing}>
+        <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent>
           <ModalHeader>
             <HStack spacing={3}>
               <FiMapPin />
-              <Text>Move Selected Cards to Location</Text>
+              <Text>Move Selected Cards</Text>
             </HStack>
           </ModalHeader>
-          <ModalCloseButton />
+          <ModalCloseButton isDisabled={isActionOngoing} />
           <ModalBody>
             <VStack spacing={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
                 Moving {selectedCards.size} selected cards to a new location.
                 Only cards you own will be moved.
               </Text>
+              {isActionOngoing && (
+                <VStack spacing={2}>
+                  <Spinner size="md" color="blue.500" />
+                  <Text fontSize="sm" color="blue.600">
+                    Moving cards, please wait...
+                  </Text>
+                </VStack>
+              )}
               <LocationSelector
                 selectedLocationId={bulkLocationId}
                 onLocationSelect={setBulkLocationId}
@@ -908,13 +926,19 @@ const TabletopCanvas = ({
           </ModalBody>
           <ModalFooter>
             <HStack spacing={3}>
-              <Button variant="ghost" onClick={onBulkMoveClose}>
+              <Button
+                variant="ghost"
+                onClick={onBulkMoveClose}
+                isDisabled={isActionOngoing}
+              >
                 Cancel
               </Button>
               <Button
                 colorScheme="blue"
                 onClick={handleBulkMove}
-                isDisabled={bulkLocationId === undefined}
+                isDisabled={bulkLocationId === undefined || isActionOngoing}
+                isLoading={isActionOngoing}
+                loadingText="Moving..."
               >
                 {bulkLocationId === null ? 'Remove from Location' : 'Move Cards'}
               </Button>
@@ -923,8 +947,8 @@ const TabletopCanvas = ({
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={isBulkCountOpen} onClose={onBulkCountClose}>
-        <ModalOverlay />
+      <Modal isOpen={isBulkCountOpen} onClose={onBulkCountClose} closeOnOverlayClick={!isActionOngoing}>
+        <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent>
           <ModalHeader>
             <HStack spacing={3}>
@@ -932,17 +956,26 @@ const TabletopCanvas = ({
               <Text>Set Count for Selected Cards</Text>
             </HStack>
           </ModalHeader>
-          <ModalCloseButton />
+          <ModalCloseButton isDisabled={isActionOngoing} />
           <ModalBody>
             <VStack spacing={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
                 Set the owned count for {selectedCards.size} selected cards.
               </Text>
+              {isActionOngoing && (
+                <VStack spacing={2}>
+                  <Spinner size="md" color="blue.500" />
+                  <Text fontSize="sm" color="blue.600">
+                    Updating counts, please wait...
+                  </Text>
+                </VStack>
+              )}
               <NumberInput
                 value={bulkCount}
                 onChange={(value) => setBulkCount(parseInt(value) || 0)}
                 min={0}
                 max={99}
+                isDisabled={isActionOngoing}
               >
                 <NumberInputField />
                 <NumberInputStepper>
@@ -954,10 +987,20 @@ const TabletopCanvas = ({
           </ModalBody>
           <ModalFooter>
             <HStack spacing={3}>
-              <Button variant="ghost" onClick={onBulkCountClose}>
+              <Button
+                variant="ghost"
+                onClick={onBulkCountClose}
+                isDisabled={isActionOngoing}
+              >
                 Cancel
               </Button>
-              <Button colorScheme="blue" onClick={handleBulkSetCount}>
+              <Button
+                colorScheme="blue"
+                onClick={handleBulkSetCount}
+                isDisabled={isActionOngoing}
+                isLoading={isActionOngoing}
+                loadingText="Updating..."
+              >
                 Set Count
               </Button>
             </HStack>
@@ -965,8 +1008,8 @@ const TabletopCanvas = ({
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={isBulkProxyOpen} onClose={onBulkProxyClose}>
-        <ModalOverlay />
+      <Modal isOpen={isBulkProxyOpen} onClose={onBulkProxyClose} closeOnOverlayClick={!isActionOngoing}>
+        <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent>
           <ModalHeader>
             <HStack spacing={3}>
@@ -974,17 +1017,27 @@ const TabletopCanvas = ({
               <Text>Set Proxy Count for Selected Cards</Text>
             </HStack>
           </ModalHeader>
-          <ModalCloseButton />
+          <ModalCloseButton isDisabled={isActionOngoing} />
           <ModalBody>
             <VStack spacing={4} align="stretch">
               <Text fontSize="sm" color="gray.600">
                 Set the proxy count for {selectedCards.size} selected cards.
                 Owned counts will remain unchanged.
               </Text>
+              {isActionOngoing && (
+                <VStack spacing={2}>
+                  <Spinner size="md" color="blue.500" />
+                  <Text fontSize="sm" color="blue.600">
+                    Updating proxy counts, please wait...
+                  </Text>
+                </VStack>
+              )}
               <NumberInput
                 value={bulkProxyCount}
+                onChange={(value) => setBulkProxyCount(parseInt(value) || 0)}
                 min={0}
                 max={99}
+                isDisabled={isActionOngoing}
               >
                 <NumberInputField />
                 <NumberInputStepper>
@@ -996,10 +1049,20 @@ const TabletopCanvas = ({
           </ModalBody>
           <ModalFooter>
             <HStack spacing={3}>
-              <Button variant="ghost" onClick={onBulkProxyClose}>
+              <Button
+                variant="ghost"
+                onClick={onBulkProxyClose}
+                isDisabled={isActionOngoing}
+              >
                 Cancel
               </Button>
-              <Button colorScheme="blue" onClick={handleBulkSetProxy}>
+              <Button
+                colorScheme="blue"
+                onClick={handleBulkSetProxy}
+                isDisabled={isActionOngoing}
+                isLoading={isActionOngoing}
+                loadingText="Updating..."
+              >
                 Set Proxy Count
               </Button>
             </HStack>
@@ -1008,7 +1071,7 @@ const TabletopCanvas = ({
       </Modal>
 
       <Modal isOpen={isBulkTagOpen} onClose={onBulkTagClose}>
-        <ModalOverlay />
+        <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent>
           <ModalHeader>
             <HStack spacing={3}>
@@ -1043,7 +1106,7 @@ const TabletopCanvas = ({
       </Modal>
 
       <Modal isOpen={isFailedMoveOpen} onClose={onFailedMoveClose} size="lg">
-        <ModalOverlay />
+        <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent>
           <ModalHeader>Operation Results</ModalHeader>
           <ModalCloseButton />
