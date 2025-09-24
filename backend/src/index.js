@@ -297,12 +297,13 @@ app.post('/api/decks/:id/publish', isAuthenticated, async (req, res) => {
     }
 
     const deck = deckCheck.rows[0];
-    const publisher = deck.alias || 'Anonymous'; // Use alias or fallback
+    const publisher = deck.alias || 'Anonymous';
 
-    // Get deck cards with their details
+    // Get deck cards with their details - use card ID instead of card_code
     const cardsResult = await query(`
       SELECT
         dc.count,
+        c.id as card_id,
         c.card_code,
         c.category
       FROM deck_cards dc
@@ -310,7 +311,7 @@ app.post('/api/decks/:id/publish', isAuthenticated, async (req, res) => {
       WHERE dc.deck_id = $1
       ORDER BY
         CASE WHEN c.category = 'LEADER' THEN 0 ELSE 1 END,
-        c.card_code ASC
+        c.id ASC
     `, [id]);
 
     if (cardsResult.rows.length === 0) {
@@ -318,33 +319,33 @@ app.post('/api/decks/:id/publish', isAuthenticated, async (req, res) => {
       return res.status(400).json({ message: 'Cannot publish empty deck.' });
     }
 
-    // Count cards by card_code (no normalization needed)
-    const cardCodeCounts = {};
+    // Count cards by card ID (not card_code) to preserve variants
+    const cardIdCounts = {};
     cardsResult.rows.forEach(row => {
-      const cardCode = row.card_code;
-      if (!cardCodeCounts[cardCode]) {
-        cardCodeCounts[cardCode] = { count: 0, isLeader: row.category === 'LEADER' };
+      const cardId = row.card_id;
+      if (!cardIdCounts[cardId]) {
+        cardIdCounts[cardId] = { count: 0, isLeader: row.category === 'LEADER' };
       }
-      cardCodeCounts[cardCode].count += row.count;
+      cardIdCounts[cardId].count += row.count;
     });
 
-    // Build deck content string according to spec
+    // Build deck content string using card IDs
     const deckContentParts = [];
 
     // Add leader first
-    const leaderEntry = Object.entries(cardCodeCounts).find(([code, data]) => data.isLeader);
+    const leaderEntry = Object.entries(cardIdCounts).find(([id, data]) => data.isLeader);
     if (leaderEntry) {
-      const [code, data] = leaderEntry;
-      deckContentParts.push(`${data.count}x${code}`);
-      // Remove from cardCodeCounts so it's not duplicated
-      delete cardCodeCounts[code];
+      const [cardId, data] = leaderEntry;
+      deckContentParts.push(`${data.count}x${cardId}`);
+      // Remove from cardIdCounts so it's not duplicated
+      delete cardIdCounts[cardId];
     }
 
-    // Add other cards sorted by card_code
-    Object.keys(cardCodeCounts)
+    // Add other cards sorted by card ID
+    Object.keys(cardIdCounts)
       .sort()
-      .forEach(code => {
-        deckContentParts.push(`${cardCodeCounts[code].count}x${code}`);
+      .forEach(cardId => {
+        deckContentParts.push(`${cardIdCounts[cardId].count}x${cardId}`);
       });
 
     // Join with commas as specified
@@ -387,7 +388,6 @@ app.post('/api/decks/:id/publish', isAuthenticated, async (req, res) => {
   }
 });
 
-
 // Publish deck from current state (without requiring saved deck)
 app.post('/api/decks/publish-current', isAuthenticated, async (req, res) => {
   const { deckData } = req.body;
@@ -409,51 +409,49 @@ app.post('/api/decks/publish-current', isAuthenticated, async (req, res) => {
     const userResult = await query('SELECT alias FROM users WHERE id = $1', [userId]);
     const publisher = userResult.rows[0]?.alias || 'Anonymous';
 
-
-    // Process deck cards to create deck content string
-    const cardCodeCounts = {};
+    // Process deck cards to create deck content string using card IDs
+    const cardIdCounts = {};
 
     for (const item of deckData.cards) {
-      if (!item.card || !item.card.card_code || !item.count) {
+      if (!item.card || !item.card.id || !item.count) {
         await query('ROLLBACK');
         return res.status(400).json({ message: 'Invalid card data in deck.' });
       }
 
-      const cardCode = item.card.card_code;
+      const cardId = item.card.id; // Use card ID instead of card_code
       const count = item.count;
       const isLeader = item.card.category === 'LEADER';
 
-      if (!cardCodeCounts[cardCode]) {
-        cardCodeCounts[cardCode] = { count: 0, isLeader };
+      if (!cardIdCounts[cardId]) {
+        cardIdCounts[cardId] = { count: 0, isLeader };
       }
-      cardCodeCounts[cardCode].count += count;
+      cardIdCounts[cardId].count += count;
     }
 
     // Validate that deck has a leader
-    const hasLeader = Object.values(cardCodeCounts).some(data => data.isLeader);
+    const hasLeader = Object.values(cardIdCounts).some(data => data.isLeader);
     if (!hasLeader) {
       await query('ROLLBACK');
       return res.status(400).json({ message: 'Deck must have a leader to be published.' });
     }
 
-    // Build deck content string according to spec
+    // Build deck content string according to spec using card IDs
     const deckContentParts = [];
 
     // Add leader first
-    const leaderEntry = Object.entries(cardCodeCounts).find(([code, data]) => data.isLeader);
+    const leaderEntry = Object.entries(cardIdCounts).find(([id, data]) => data.isLeader);
     if (leaderEntry) {
-      const [code, data] = leaderEntry;
-
-      deckContentParts.push(`${data.count}x${code}`);
-      // Remove from cardCodeCounts so it's not duplicated
-      delete cardCodeCounts[code];
+      const [cardId, data] = leaderEntry;
+      deckContentParts.push(`${data.count}x${cardId}`);
+      // Remove from cardIdCounts so it's not duplicated
+      delete cardIdCounts[cardId];
     }
 
-    // Add other cards sorted by card_code
-    Object.keys(cardCodeCounts)
+    // Add other cards sorted by card ID
+    Object.keys(cardIdCounts)
       .sort()
-      .forEach(code => {
-        deckContentParts.push(`${cardCodeCounts[code].count}x${code}`);
+      .forEach(cardId => {
+        deckContentParts.push(`${cardIdCounts[cardId].count}x${cardId}`);
       });
 
     // Join with commas as specified
@@ -2594,14 +2592,14 @@ app.post('/api/public/decks/parse', async (req, res) => {
       }
 
       const count = parseInt(match[1], 10);
-      const cardCode = match[2].trim();
+      const cardId = match[2].trim(); // This is actually the card ID, not card_code!
 
       if (count < 1 || count > 4) {
-        fetchErrors.push(`Invalid count for ${cardCode}: ${count}`);
+        fetchErrors.push(`Invalid count for ${cardId}: ${count}`);
         continue;
       }
 
-      // Find card by normalized card code
+      // Find card by ID (the published deck content uses card IDs, not card_codes)
       const cardResult = await query(`
         SELECT
           id,
@@ -2620,12 +2618,9 @@ app.post('/api/public/decks/parse', async (req, res) => {
           types,
           block
         FROM cards
-        WHERE REPLACE(card_code, '_p1', '') = $1
-           OR REPLACE(card_code, '_p2', '') = $1
-           OR REPLACE(card_code, '_p3', '') = $1
-           OR card_code = $1
+        WHERE id = $1
         LIMIT 1
-      `, [cardCode]);
+      `, [cardId]);
 
       if (cardResult.rows.length > 0) {
         const card = cardResult.rows[0];
@@ -2650,7 +2645,7 @@ app.post('/api/public/decks/parse', async (req, res) => {
           count: count
         });
       } else {
-        fetchErrors.push(`Card not found: ${cardCode}`);
+        fetchErrors.push(`Card not found: ${cardId}`);
       }
     }
 
