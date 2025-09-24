@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
-  Box, Text, VStack, HStack, Spinner,
+  Box, Text, VStack, HStack, Spinner, Button,
   useDisclosure, IconButton, FormControl, FormLabel, Switch,
   Tooltip, Slider, SliderTrack, SliderFilledTrack, SliderThumb,
   Menu, MenuButton, MenuList, MenuItem, useBreakpointValue
 } from '@chakra-ui/react';
-import { QuestionOutlineIcon } from '@chakra-ui/icons';
+import { QuestionOutlineIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { FiMapPin, FiSearch, FiHash, FiType, FiTag } from 'react-icons/fi';
 import { FaGripLines, FaGripHorizontal } from 'react-icons/fa';
 import { BsSortDown, BsSortUp } from 'react-icons/bs';
@@ -24,6 +24,78 @@ import ThumbViewBuilder from './ThumbViewBuilder';
 
 import TabletopCanvas from './TabletopCanvas';
 
+const PaginationControls = ({
+  currentPage,
+  itemsPerPage,
+  totalItems,
+  onPageChange,
+  onItemsPerPageChange,
+  loading
+}) => {
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startItem = totalPages > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  if (totalItems === 0) return null;
+
+  return (
+    <HStack justify="space-between" align="center" p={4} bg="gray.50" borderRadius="md">
+      <HStack spacing={4}>
+        <Text fontSize="sm" color="gray.600">
+          Showing {startItem}-{endItem} of {totalItems} cards
+        </Text>
+
+        <HStack spacing={2}>
+          <Text fontSize="sm" color="gray.600">Per page:</Text>
+          <Menu>
+            <MenuButton
+              as={Button}
+              size="sm"
+              variant="outline"
+              rightIcon={<ChevronDownIcon />}
+              minW="60px"
+              isDisabled={loading}
+            >
+              {itemsPerPage}
+            </MenuButton>
+            <MenuList>
+              <MenuItem onClick={() => onItemsPerPageChange(25)}>25</MenuItem>
+              <MenuItem onClick={() => onItemsPerPageChange(50)}>50</MenuItem>
+              <MenuItem onClick={() => onItemsPerPageChange(100)}>100</MenuItem>
+            </MenuList>
+          </Menu>
+        </HStack>
+      </HStack>
+
+      <HStack spacing={2}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onPageChange(currentPage - 1)}
+          isDisabled={currentPage <= 1 || loading}
+        >
+          Previous
+        </Button>
+
+        <Text fontSize="sm" color="gray.600" px={2}>
+          Page {currentPage} of {totalPages}
+        </Text>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onPageChange(currentPage + 1)}
+          isDisabled={currentPage >= totalPages || loading}
+        >
+          Next
+        </Button>
+      </HStack>
+    </HStack>
+  );
+};
+
+PaginationControls.displayName = 'PaginationControls';
+
 // ISOLATED RESULTS COMPONENT - This prevents re-renders during typing
 const IsolatedResultsComponent = React.memo(({
   results,
@@ -37,7 +109,7 @@ const IsolatedResultsComponent = React.memo(({
   thumbnailSize,
   loading
 }) => {
-  // Sort results within this isolated component
+  // Sort results within this isolated component (server already limits results)
   const sortedResults = useMemo(() => {
     if (!Array.isArray(results) || results.length === 0) {
       return [];
@@ -86,7 +158,7 @@ const IsolatedResultsComponent = React.memo(({
     return null;
   }
 
-  // Render the appropriate view
+  // Render the appropriate view with all results (already paginated by server)
   if (viewMode === 'list') {
     return mode === 'collection' ? (
       <ListViewCollect
@@ -163,6 +235,10 @@ function CardSearch({
   const [sortMode, setSortMode] = useState('name');
   const [sortReverse, setSortReverse] = useState(false);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [totalResults, setTotalResults] = useState(0);
+
   // Modal states
   const [selectedCard, setSelectedCard] = useState(null);
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
@@ -176,79 +252,6 @@ function CardSearch({
 
   // Check if we should use mobile layout for controls
   const isMobile = useBreakpointValue({ base: true, md: false });
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // Initialize from external search keyword - SIMPLE VERSION
-  useEffect(() => {
-    if (mode === 'deckbuilder' && searchKeyword && !searchTerm) {
-      setSearchTerm(searchKeyword);
-    }
-  }, [searchKeyword, mode, searchTerm]);
-
-  // Collection toggle handler
-  useEffect(() => {
-    // Don't run if performSearch is not yet defined or component is not client-ready
-    if (!performSearch || !isClient) return;
-
-    if (inCollection) {
-      performSearch(searchTerm.trim(), true);
-    } else {
-      // When toggling to false, perform a search if there's a search term
-      if (searchTerm.trim()) {
-        performSearch(searchTerm.trim(), false);
-      } else {
-        setResults([]);
-        setStatusMessage({
-          type: 'initial',
-          message: 'Start typing to search for cards, or enable "In Collection" to view your collection'
-        });
-      }
-    }
-  }, [inCollection]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleCardUpdate = (event) => {
-      const { cardId, card } = event.detail;
-
-      // Use the updated card data from the event if provided
-      if (card) {
-        setResults(currentResults => {
-          const cardInResults = currentResults.some(result => result.id === cardId);
-          if (!cardInResults) return currentResults;
-
-          // Update the card with the fresh data from the event
-          return currentResults.map(result =>
-            result.id === cardId ? { ...result, ...card } : result
-          );
-        });
-
-        // Update selected card if it matches
-        setSelectedCard(currentSelected => {
-          if (currentSelected && currentSelected.id === cardId) {
-            return { ...currentSelected, ...card };
-          }
-          return currentSelected;
-        });
-      }
-    };
-
-    // Add event listeners for all card update types
-    window.addEventListener(CARD_EVENTS.TAG_UPDATED, handleCardUpdate);
-    window.addEventListener(CARD_EVENTS.LOCATION_UPDATED, handleCardUpdate);
-    window.addEventListener(CARD_EVENTS.COUNT_UPDATED, handleCardUpdate);
-
-    // Cleanup function
-    return () => {
-      window.removeEventListener(CARD_EVENTS.TAG_UPDATED, handleCardUpdate);
-      window.removeEventListener(CARD_EVENTS.LOCATION_UPDATED, handleCardUpdate);
-      window.removeEventListener(CARD_EVENTS.COUNT_UPDATED, handleCardUpdate);
-    };
-  }, []); // Empty dependency array - no re-renders!
 
   // Helper function to detect and transform card ID patterns
   const transformCardIdPattern = useCallback((searchTerm) => {
@@ -288,22 +291,29 @@ function CardSearch({
     }
   }, [mode, onSearchKeywordChange, transformCardIdPattern]);
 
-  // Manual search trigger
-  const handleManualSearch = useCallback(() => {
-    performSearch(searchTerm.trim(), inCollection);
-  }, [searchTerm, inCollection]);
+  const ensureTagsAreArrays = (card) => {
+    if (!card) return card;
+
+    return {
+      ...card,
+      user_tags: Array.isArray(card.user_tags) ? card.user_tags : [],
+      global_tags: Array.isArray(card.global_tags) ? card.global_tags : []
+    };
+  };
 
   // Search function with proper error handling
-  const performSearch = useCallback(async (keyword, ownedOnly = false) => {
+  const performSearch = useCallback(async (keyword, ownedOnly = false, page = 1, limitPerPage = 25) => {
     const validation = validateSearchInput(keyword, ownedOnly);
     if (!validation.isValid && keyword.trim() && !ownedOnly) {
       setResults([]);
+      setTotalResults(0);
       setStatusMessage({ type: 'error', message: validation.message });
       return;
     }
 
     if (!keyword && !ownedOnly) {
       setResults([]);
+      setTotalResults(0);
       setStatusMessage({
         type: 'initial',
         message: 'Start typing to search for cards, or enable "In Collection" to view your collection'
@@ -314,12 +324,16 @@ function CardSearch({
     const searchParams = {
       keyword: keyword.trim(),
       ownedOnly: ownedOnly.toString(),
-      showProxies: 'true'
+      showProxies: 'true',
+      limit: limitPerPage.toString(),
+      offset: ((page - 1) * limitPerPage).toString()
     };
 
     const paramsString = JSON.stringify(searchParams);
-    if (lastSearchParamsRef.current === paramsString && loading) {
-      return;
+
+    // Check if we're already running the same search
+    if (lastSearchParamsRef.current === paramsString) {
+      return; // Don't run duplicate searches
     }
     lastSearchParamsRef.current = paramsString;
 
@@ -344,17 +358,28 @@ function CardSearch({
       }
 
       const data = await response.json();
-      const processedResults = Array.isArray(data) ? data : [];
+
+      // Handle both new paginated response format and legacy format
+      const rawResults = Array.isArray(data.results) ? data.results : Array.isArray(data) ? data : [];
+      const totalCount = data.totalCount || data.total || rawResults.length;
+
+      // Ensure all cards have valid tag arrays
+      const processedResults = rawResults.map(card => ({
+        ...card,
+        user_tags: Array.isArray(card.user_tags) ? card.user_tags : [],
+        global_tags: Array.isArray(card.global_tags) ? card.global_tags : []
+      }));
 
       setResults(processedResults);
+      setTotalResults(totalCount);
       setError(null);
 
       if (processedResults.length === 0) {
         setStatusMessage({ type: 'no-results', message: 'No cards found matching your search.' });
       } else {
-        const message = processedResults.length === 50
-          ? `Found ${processedResults.length}+ cards. If your card isn't shown, refine your keywords.`
-          : `Found ${processedResults.length} cards`;
+        const startItem = (page - 1) * limitPerPage + 1;
+        const endItem = Math.min(page * limitPerPage, totalCount);
+        const message = `Showing ${startItem}-${endItem} of ${totalCount} cards`;
         setStatusMessage({ type: 'success', message });
       }
     } catch (err) {
@@ -362,11 +387,31 @@ function CardSearch({
       console.error('Search error:', err);
       setError(err.message);
       setResults([]);
+      setTotalResults(0);
       setStatusMessage({ type: 'error', message: err.message });
     } finally {
       setLoading(false);
     }
-  }, [apiUrl, loading]);
+  }, [apiUrl]);
+
+  const handlePageChange = useCallback((newPage) => {
+    if (newPage < 1) return;
+    setCurrentPage(newPage);
+    performSearch(searchTerm.trim(), inCollection, newPage, itemsPerPage);
+  }, [searchTerm, inCollection, itemsPerPage, performSearch]);
+
+  const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
+    if (newItemsPerPage <= 0) return;
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+    performSearch(searchTerm.trim(), inCollection, 1, newItemsPerPage);
+  }, [searchTerm, inCollection, performSearch]);
+
+  // Manual search trigger
+  const handleManualSearch = useCallback(() => {
+    setCurrentPage(1); // Reset to first page on new search
+    performSearch(searchTerm.trim(), inCollection, 1, itemsPerPage);
+  }, [searchTerm, inCollection, itemsPerPage, performSearch]);
 
   // Stable handlers
   const handleCardClick = useCallback((card) => {
@@ -375,7 +420,8 @@ function CardSearch({
     if (mode === 'deckbuilder' && onCardClick) {
       onCardClick(card);
     } else {
-      setSelectedCard(card);
+      const sanitizedCard = ensureTagsAreArrays(card);
+      setSelectedCard(sanitizedCard);
       onDetailOpen();
     }
   }, [mode, onCardClick, onDetailOpen]);
@@ -383,10 +429,6 @@ function CardSearch({
   // Count update handler using correct API endpoints
   const handleCountUpdate = useCallback(async (cardId, updateData) => {
     try {
-      // Handle different types of updates from CardDetailModal and bulk operations:
-      // 1. String values like 'tag_updated', 'location_updated', 'count_updated' - refresh card data
-      // 2. Object values with count data - update the card in results directly (from CountControl)
-
       if (typeof updateData === 'string') {
         // For special string updates, refresh the card data from the API
         const searchParams = new URLSearchParams({
@@ -402,7 +444,7 @@ function CardSearch({
         if (response.ok) {
           const searchResults = await response.json();
           if (searchResults.length > 0) {
-            const updatedCard = searchResults[0];
+            const updatedCard = ensureTagsAreArrays(searchResults[0]);
             setResults(prev =>
               prev.map(card =>
                 card.id === cardId ? { ...card, ...updatedCard } : card
@@ -430,6 +472,7 @@ function CardSearch({
       console.error('Error updating card data:', error);
     }
   }, [apiUrl, selectedCard]);
+
 
   // Helper functions
   const getSortIcon = (currentSortMode) => {
@@ -464,6 +507,84 @@ function CardSearch({
         return subtleTextStyle('blue.700');
     }
   };
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Initialize from external search keyword - SIMPLE VERSION
+  useEffect(() => {
+    if (mode === 'deckbuilder' && searchKeyword && !searchTerm) {
+      setSearchTerm(searchKeyword);
+    }
+  }, [searchKeyword, mode, searchTerm]);
+
+  // Collection toggle handler
+  useEffect(() => {
+    if (!performSearch || !isClient) return;
+
+    setCurrentPage(1); // Reset to first page when toggling collection
+    if (inCollection) {
+      performSearch(searchTerm.trim(), true, 1, itemsPerPage);
+    } else {
+      if (searchTerm.trim()) {
+        performSearch(searchTerm.trim(), false, 1, itemsPerPage);
+      } else {
+        setResults([]);
+        setTotalResults(0);
+        setStatusMessage({
+          type: 'initial',
+          message: 'Start typing to search for cards, or enable "In Collection" to view your collection'
+        });
+      }
+    }
+  }, [inCollection, isClient]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleCardUpdate = (event) => {
+      const { cardId, card } = event.detail;
+
+      // Use the updated card data from the event if provided
+      if (card) {
+        setResults(currentResults => {
+          const cardInResults = currentResults.some(result => result.id === cardId);
+          if (!cardInResults) return currentResults;
+
+          // FIX: Ensure the updated card has valid tag arrays
+          const sanitizedCard = ensureTagsAreArrays(card);
+
+          // Update the card with the fresh data from the event
+          return currentResults.map(result =>
+            result.id === cardId ? { ...result, ...sanitizedCard } : result
+          );
+        });
+
+        // Update selected card if it matches
+        setSelectedCard(currentSelected => {
+          if (currentSelected && currentSelected.id === cardId) {
+            // FIX: Ensure selected card has valid tag arrays
+            const sanitizedCard = ensureTagsAreArrays(card);
+            return { ...currentSelected, ...sanitizedCard };
+          }
+          return currentSelected;
+        });
+      }
+    };
+
+    // Add event listeners for all card update types
+    window.addEventListener(CARD_EVENTS.TAG_UPDATED, handleCardUpdate);
+    window.addEventListener(CARD_EVENTS.LOCATION_UPDATED, handleCardUpdate);
+    window.addEventListener(CARD_EVENTS.COUNT_UPDATED, handleCardUpdate);
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener(CARD_EVENTS.TAG_UPDATED, handleCardUpdate);
+      window.removeEventListener(CARD_EVENTS.LOCATION_UPDATED, handleCardUpdate);
+      window.removeEventListener(CARD_EVENTS.COUNT_UPDATED, handleCardUpdate);
+    };
+  }, []); // Empty dependency array - no re-renders!
 
   if (!isClient) {
     return (
@@ -792,6 +913,19 @@ function CardSearch({
         thumbnailSize={thumbnailSize}
         loading={loading}
       />
+
+      {/* Pagination Controls */}
+      {(results.length > 0 || totalResults > 0) && (
+        <PaginationControls
+          currentPage={currentPage}
+          itemsPerPage={itemsPerPage}
+          totalItems={totalResults}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          loading={loading}
+        />
+      )}
+
       {/* Modals */}
       <CardDetailModal
         isOpen={isDetailOpen}
