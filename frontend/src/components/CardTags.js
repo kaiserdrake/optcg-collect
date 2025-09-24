@@ -247,8 +247,8 @@ const CardTags = ({
   }
 
   // Icon size mapping
-  const iconSize = size === "sm" ? 3 : 4;
-  const buttonSize = size === "sm" ? "xs" : "sm";
+  const iconSize = size === "sm" ? 4 : 6;
+  const buttonSize = size === "sm" ? "sm" : "md";
 
   // TagIcon with portal tooltip that bypasses overflow:hidden
   const TagIcon = ({

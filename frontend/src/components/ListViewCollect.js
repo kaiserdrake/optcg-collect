@@ -102,13 +102,6 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => 
           suppressHydrationWarning={true}
           position="relative"
         >
-          {/* Top right - CardTags and LocationDisplay for desktop only */}
-          {!isMobile && hasTags && (
-            <HStack position="absolute" top={2} right={2} zIndex={2} spacing={2}>
-              <CardTags card={card} interactive={false} size="xl" showTooltips={true} />
-            </HStack>
-          )}
-
           <VStack spacing={3} align="stretch">
             {/* First Row: Card Image and Basic Info */}
             <Flex>
@@ -141,7 +134,7 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => 
                     </Text>
                   </HStack>
                   {hasTags && (
-                    <CardTags card={card} interactive={false} size="xl" showTooltips={true} />
+                    <CardTags card={card} interactive={false} size="sm" showTooltips={true} />
                   )}
                 </HStack>
 
@@ -231,7 +224,7 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => 
                 <LocationDisplay card={card} />
               )}
               {hasTags && (
-                <CardTags card={card} interactive={false} size="sm" showTooltips={true} />
+                <CardTags card={card} interactive={false} size="md" showTooltips={true} />
               )}
             </HStack>
           )}
