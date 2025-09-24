@@ -1778,10 +1778,15 @@ SELECT
 // Import collection endpoint
 app.post('/api/collection/import', isAuthenticated, async (req, res) => {
   const userId = req.user.id;
-  const { collectionData } = req.body;
+  const { collectionData, mode = 'override' } = req.body; // Default to 'override' for backward compatibility
 
   if (!collectionData || typeof collectionData !== 'string') {
     return res.status(400).json({ message: 'Collection data is required.' });
+  }
+
+  // Validate mode parameter
+  if (!['override', 'append'].includes(mode)) {
+    return res.status(400).json({ message: 'Import mode must be either "override" or "append".' });
   }
 
   // Reprint handling utility functions (same as in backend/scripts/init.js)
@@ -1877,21 +1882,37 @@ app.post('/api/collection/import', isAuthenticated, async (req, res) => {
           );
           const currentCount = parseInt(currentResult.rows[0].count, 10);
 
-          if (currentCount === count) {
+          let targetCount;
+          if (mode === 'append') {
+            // Append mode: add to existing count
+            targetCount = currentCount + count;
+
+            // Ensure we don't exceed the maximum of 99
+            if (targetCount > 99) {
+              targetCount = 99;
+              // Optional: Log a warning or add to error details
+              console.warn(`IMPORT: Capping ${cardId} at 99 cards (would have been ${currentCount + count})`);
+            }
+          } else {
+            // Override mode: set exact count (existing behavior)
+            targetCount = count;
+          }
+
+          if (currentCount === targetCount) {
             // No change needed
             continue;
           }
 
-          if (count === 0) {
+          if (targetCount === 0) {
             // Delete all owned (non-proxy) cards for this card
             await client.query(
               'DELETE FROM owned_cards WHERE user_id = $1 AND card_id = $2 AND is_proxy = false',
               [userId, actualCardId]
             );
             results.updated++;
-          } else if (count > currentCount) {
+          } else if (targetCount > currentCount) {
             // Add more cards
-            const toAdd = count - currentCount;
+            const toAdd = targetCount - currentCount;
             for (let i = 0; i < toAdd; i++) {
               await client.query(
                 'INSERT INTO owned_cards (user_id, card_id, is_proxy) VALUES ($1, $2, false)',
@@ -1900,8 +1921,8 @@ app.post('/api/collection/import', isAuthenticated, async (req, res) => {
             }
             results.updated++;
           } else {
-            // Remove some cards (count < currentCount)
-            const toRemove = currentCount - count;
+            // Remove some cards (targetCount < currentCount)
+            const toRemove = currentCount - targetCount;
 
             // Remove the specified number of cards
             await client.query(`
@@ -1939,10 +1960,11 @@ LIMIT $3
     });
 
     res.json({
-      message: 'Collection import completed',
+      message: `Collection import completed (${mode} mode)`,
       processed: results.processed,
       updated: results.updated,
       errors: results.errors,
+      mode: mode, // Include the mode in the response
       errorDetails: results.errorDetails.slice(0, 10), // Limit error details to first 10
       errorLines: results.errorLines.slice(0, 10) // Add this for frontend compatibility
     });
@@ -1958,6 +1980,7 @@ LIMIT $3
         processed: results.processed,
         updated: 0, // Nothing was committed due to rollback
         errors: results.errors,
+        mode: mode,
         errorDetails: results.errorDetails.slice(0, 5),
         errorLines: results.errorLines.slice(0, 5)
       });
@@ -1967,12 +1990,13 @@ LIMIT $3
         processed: results.processed,
         updated: 0, // Nothing was committed due to rollback
         errors: results.errors,
+        mode: mode,
         errorDetails: results.errorDetails.slice(0, 5),
         errorLines: results.errorLines.slice(0, 5)
       });
     }
   }
-})
+});
 
 // --- DECK ROUTES ---
 
