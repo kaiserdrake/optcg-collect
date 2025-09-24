@@ -493,7 +493,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       {/* Sync Modal (Admin only) */}
       {user?.role === 'Admin' && (
         <Modal isOpen={isSyncOpen} onClose={onSyncClose} size="xl" closeOnOverlayClick={false}>
-          <ModalOverlay />
+          <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
           <ModalContent>
             <ModalHeader>Card Database Sync</ModalHeader>
             <ModalCloseButton isDisabled={isSyncing} />
