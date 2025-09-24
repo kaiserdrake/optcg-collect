@@ -308,14 +308,26 @@ const TabletopCanvas = ({
     try {
       for (const cardId of selectedCards) {
         const card = allDisplayCards.find(c => c.id === cardId);
-        if (!card) continue;
+        if (!card) {
+          console.warn('Card not found in allDisplayCards:', cardId);
+          continue;
+        }
 
         try {
           if (onLocationUpdate) {
             await onLocationUpdate(cardId, bulkLocationId);
             succeeded.push(cardId);
+          } else {
+            console.error('onLocationUpdate is not defined');
+            failed.push({
+              cardName: card.name,
+              cardCode: card.card_code,
+              reason: 'onLocationUpdate not available'
+            });
           }
         } catch (error) {
+          console.error(`Error updating ${cardId}:`, error);
+
           // Provide user-friendly error message for collection validation
           let reason = error.message || 'Update failed';
           if (error.message && error.message.includes('HTTP 404') &&
@@ -349,6 +361,7 @@ const TabletopCanvas = ({
       setBulkLocationId(null);
       onBulkMoveClose();
     } catch (error) {
+      console.error('Critical error in bulk move:', error);
       toast({
         title: 'Error',
         description: 'Failed to update locations',
@@ -401,7 +414,13 @@ const TabletopCanvas = ({
             setAllDisplayCards(prev =>
               prev.map(c =>
                 c.id === cardId
-                  ? { ...c, owned_count: data.owned_count, proxy_count: data.proxy_count }
+                  ? {
+                    ...c,
+                    location: bulkLocationId === null ? null : {
+                      id: bulkLocationId,
+                      name: locations.find(loc => loc.id === bulkLocationId)?.name || 'Unknown Location'
+                    }
+                  }
                   : c
               )
             );

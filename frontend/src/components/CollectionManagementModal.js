@@ -392,11 +392,6 @@ export default function CollectionManagementModal({ isOpen, onClose }) {
               <Text fontSize="sm" color="gray.600">
                 Paste your collection data below. Each line should be in the format:
               </Text>
-              <Box bg="gray.100" p={3} borderRadius="md" fontFamily="monospace" fontSize="sm">
-                <Text>4 x OP10-082</Text>
-                <Text>1 x OP11-040_p1</Text>
-              </Box>
-
               {/* Import Mode Switch */}
               <Box borderWidth="1px" borderRadius="md" p={4} bg="blue.50" borderColor="blue.200">
                 <FormControl display="flex" alignItems="center" justifyContent="space-between">

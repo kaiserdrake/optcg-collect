@@ -349,11 +349,13 @@ function CardSearch({
     };
 
     // Convert location_name/location_id to location object
-    if (card.location_name && card.location_id) {
+    if (card.location_name !== null && card.location_id !== null) {
       processedCard.location = {
         id: card.location_id,
         name: card.location_name
       };
+    } else {
+      processedCard.location = null; // Explicitly set to null when no location
     }
 
     return processedCard;
@@ -496,19 +498,27 @@ function CardSearch({
         });
 
         if (response.ok) {
-          const searchResults = await response.json();
+          const searchData = await response.json();
+          // Handle both formats
+          const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
           if (searchResults.length > 0) {
             const updatedCard = ensureTagsAreArrays(searchResults[0]);
-            setResults(prev =>
-              prev.map(card =>
+            setResults(prev => {
+              const oldCard = prev.find(card => card.id === cardId);
+              const newResults = prev.map(card =>
                 card.id === cardId ? { ...card, ...updatedCard } : card
-              )
-            );
+              );
+              return newResults;
+            });
 
             if (selectedCard && selectedCard.id === cardId) {
               setSelectedCard(prev => ({ ...prev, ...updatedCard }));
             }
+          } else {
+            console.warn(`handleCountUpdate - No search results found for ${cardId}`);
           }
+        } else {
+          console.error(`handleCountUpdate - API error for ${cardId}:`, response.status, response.statusText);
         }
       } else if (typeof updateData === 'object' && updateData !== null) {
         // For object updates (count changes from CountControl), directly update the results
@@ -523,10 +533,9 @@ function CardSearch({
         }
       }
     } catch (error) {
-      console.error('Error updating card data:', error);
+      console.error(`handleCountUpdate - Error for ${cardId}:`, error);
     }
-  }, [apiUrl, selectedCard]);
-
+  }, [apiUrl, selectedCard, ensureTagsAreArrays]);
 
   // Helper functions
   const getSortIcon = (currentSortMode) => {
@@ -670,7 +679,6 @@ function CardSearch({
           onLocationUpdate={async (cardId, locationValue) => {
             try {
               const locationId = locationValue === null ? null : parseInt(locationValue);
-
               const response = await fetch(`${apiUrl}/api/collection/location`, {
                 method: 'PUT',
                 headers: {
@@ -686,17 +694,21 @@ function CardSearch({
               if (!response.ok) {
                 // Throw a specific error that includes the HTTP status
                 const errorText = await response.text();
+                console.error(`API error: HTTP ${response.status}: ${errorText}`);
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
               }
+
+              const responseData = await response.json();
 
               // Refresh card data in search results (same pattern as count updates)
               await handleCountUpdate(cardId, 'location_updated');
             } catch (error) {
-              console.error('Failed to update location:', error);
+              console.error(`Error in onLocationUpdate for ${cardId}:`, error);
               // Re-throw the error so TabletopCanvas can catch it and show in dialog
               throw error;
             }
           }}
+
         />
       )}
 
