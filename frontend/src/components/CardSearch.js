@@ -328,11 +328,35 @@ function CardSearch({
   const ensureTagsAreArrays = (card) => {
     if (!card) return card;
 
-    return {
-      ...card,
-      user_tags: Array.isArray(card.user_tags) ? card.user_tags : [],
-      global_tags: Array.isArray(card.global_tags) ? card.global_tags : []
+    const parsePostgreSQLArray = (pgArray) => {
+      if (Array.isArray(pgArray)) return pgArray;
+      if (!pgArray || pgArray === 'null') return [];
+
+      // Parse PostgreSQL array format like "{favorite,want}" -> ["favorite", "want"]
+      if (typeof pgArray === 'string') {
+        if (pgArray === '{}') return [];
+        const cleaned = pgArray.replace(/[{}]/g, '');
+        return cleaned ? cleaned.split(',') : [];
+      }
+
+      return [];
     };
+
+    const processedCard = {
+      ...card,
+      user_tags: parsePostgreSQLArray(card.user_tags),
+      global_tags: parsePostgreSQLArray(card.global_tags)
+    };
+
+    // Convert location_name/location_id to location object
+    if (card.location_name && card.location_id) {
+      processedCard.location = {
+        id: card.location_id,
+        name: card.location_name
+      };
+    }
+
+    return processedCard;
   };
 
   // Search function with proper error handling
@@ -397,12 +421,8 @@ function CardSearch({
       const rawResults = Array.isArray(data.results) ? data.results : Array.isArray(data) ? data : [];
       const totalCount = data.totalCount || data.total || rawResults.length;
 
-      // Ensure all cards have valid tag arrays
-      const processedResults = rawResults.map(card => ({
-        ...card,
-        user_tags: Array.isArray(card.user_tags) ? card.user_tags : [],
-        global_tags: Array.isArray(card.global_tags) ? card.global_tags : []
-      }));
+      // Process all cards with the proper tag and location parsing
+      const processedResults = rawResults.map(card => ensureTagsAreArrays(card));
 
       setResults(processedResults);
       setTotalResults(totalCount);
