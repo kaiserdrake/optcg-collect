@@ -58,7 +58,7 @@ const PaginationControls = ({
       case 'error':
         return subtleBoxStyle('red.50', 'red.200');
       case 'success':
-        return subtleBoxStyle('green.50', 'green.200');
+        // fallthrough
       case 'no-results':
         return subtleBoxStyle('gray.50', 'gray.200');
       default:
@@ -71,7 +71,7 @@ const PaginationControls = ({
       case 'error':
         return subtleTextStyle('red.700');
       case 'success':
-        return subtleTextStyle('green.700');
+        // fallthrough
       case 'no-results':
         return subtleTextStyle('gray.700');
       default:
@@ -87,9 +87,17 @@ const PaginationControls = ({
 
       return (
         <Box {...boxStyles} textAlign="center">
-          <Text {...textStyles}>
-            {statusMessage.message}
-          </Text>
+          {loading && (
+            <HStack spacing={4} align="center" justify="center" mb={2}>
+              <Spinner size="lg" color="blue.500" />
+              <Text {...textStyles}>Searching cards...</Text>
+            </HStack>
+          )}
+          {!loading && (
+            <Text {...textStyles}>
+              {statusMessage.message}
+            </Text>
+          )}
         </Box>
       );
     }
@@ -101,45 +109,54 @@ const PaginationControls = ({
   const textStyles = getTextStyle('success');
 
   return (
-    <HStack
-      justify="space-between"
-      align="center"
-      {...boxStyles}
-    >
-      {/* Combined Status and Pagination Info */}
-      <Text fontSize="sm" color={textStyles.color}>
-        {startItem}-{endItem} of {totalItems}
-      </Text>
+    <Box {...boxStyles}>
+      <HStack justify="space-between" align="center" spacing={4}>
+        {/* Left side - Loading spinner */}
+        <HStack spacing={3}>
+          {loading && (
+            <>
+              <Spinner size="md" color="blue.500" />
+              <Text {...textStyles} fontSize="sm">Searching cards...</Text>
+            </>
+          )}
+        </HStack>
 
-      {/* Simple Navigation Controls */}
-      <HStack spacing={2}>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => onPageChange(currentPage - 1)}
-          isDisabled={currentPage <= 1 || loading}
-          px={2}
-          minW="auto"
-          color={textStyles.color}
-          _hover={{ bg: boxStyles.borderColor }}
-        >
-          &lt;
-        </Button>
+        {/* Right side - Pagination info and controls */}
+        <HStack spacing={4}>
+          <Text fontSize="sm" color={textStyles.color}>
+            {startItem}-{endItem} of {totalItems}
+          </Text>
 
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => onPageChange(currentPage + 1)}
-          isDisabled={currentPage >= totalPages || loading}
-          px={2}
-          minW="auto"
-          color={textStyles.color}
-          _hover={{ bg: boxStyles.borderColor }}
-        >
-          &gt;
-        </Button>
+          <HStack spacing={2}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onPageChange(currentPage - 1)}
+              isDisabled={currentPage <= 1 || loading}
+              px={2}
+              minW="auto"
+              color={textStyles.color}
+              _hover={{ bg: boxStyles.borderColor }}
+            >
+              &lt;
+            </Button>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onPageChange(currentPage + 1)}
+              isDisabled={currentPage >= totalPages || loading}
+              px={2}
+              minW="auto"
+              color={textStyles.color}
+              _hover={{ bg: boxStyles.borderColor }}
+            >
+              &gt;
+            </Button>
+          </HStack>
+        </HStack>
       </HStack>
-    </HStack>
+    </Box>
   );
 };
 
@@ -937,16 +954,6 @@ function CardSearch({
           </VStack>
         )}
       </VStack>
-
-      {/* Loading Spinner */}
-      {loading && (
-        <Box {...subtleBoxStyle('blue.50', 'blue.200')}>
-          <HStack spacing={4} align="center" justify="center">
-            <Spinner size="lg" color="blue.500" />
-            <Text {...subtleTextStyle('blue.700')}>Searching cards...</Text>
-          </HStack>
-        </Box>
-      )}
 
       {/* Pagination Controls with integrated status */}
       <PaginationControls

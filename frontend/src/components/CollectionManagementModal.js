@@ -438,7 +438,7 @@ export default function CollectionManagementModal({ isOpen, onClose }) {
                 <Textarea
                   value={importData}
                   onChange={(e) => setImportData(e.target.value)}
-                  placeholder="4 x OP10-082&#10;1 x OP11-040_p1"
+                  placeholder={`4 x OP10-082\n1 x OP11-040_p1`}
                   rows={10}
                   fontFamily="monospace"
                   fontSize="sm"

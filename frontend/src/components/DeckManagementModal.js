@@ -271,6 +271,7 @@ const DeckManagementModal = ({ isOpen, onClose }) => {
   const [filteredMyDecks, setFilteredMyDecks] = useState([]);
   const [filteredPublishedDecks, setFilteredPublishedDecks] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isDeletingDeck, setIsDeletingDeck] = useState(false);
   const [myDecksSearchTerm, setMyDecksSearchTerm] = useState('');
   const [publishedDecksSearchTerm, setPublishedDecksSearchTerm] = useState('');
   const [deckToDelete, setDeckToDelete] = useState(null);
@@ -372,8 +373,7 @@ const DeckManagementModal = ({ isOpen, onClose }) => {
 
   const confirmDeleteDeck = async () => {
     if (!deckToDelete) return;
-
-
+    setIsDeletingDeck(true);
     try {
       // Determine if it's a published deck or my deck
       const isPublishedDeck = 'deck_title' in deckToDelete;
@@ -418,6 +418,7 @@ const DeckManagementModal = ({ isOpen, onClose }) => {
       });
 
     } finally {
+      setIsDeletingDeck(false)
       onDeleteClose();
       setDeckToDelete(null);
     }
@@ -434,9 +435,9 @@ const DeckManagementModal = ({ isOpen, onClose }) => {
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} size="6xl" isCentered>
+      <Modal isOpen={isOpen} onClose={onClose} size="full" isCentered>
         <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
-        <ModalContent maxH="80vh">
+        <ModalContent maxH="90vh">
           <ModalHeader>
             <HStack spacing={2}>
               <Icon as={FiLayers} color="blue.500" />
@@ -445,8 +446,7 @@ const DeckManagementModal = ({ isOpen, onClose }) => {
           </ModalHeader>
           <ModalCloseButton />
 
-
-          <ModalBody>
+          <ModalBody overflow="auto">
             <Tabs index={activeTab} onChange={setActiveTab}>
 
               <TabList>
@@ -612,12 +612,21 @@ const DeckManagementModal = ({ isOpen, onClose }) => {
                 This action cannot be undone.
               </Text>
             </AlertDialogBody>
-
             <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onDeleteClose}>
+              <Button
+                ref={cancelRef}
+                onClick={onDeleteClose}
+                isDisabled={isDeletingDeck}
+              >
                 Cancel
               </Button>
-              <Button colorScheme="red" onClick={confirmDeleteDeck} ml={3}>
+              <Button
+                colorScheme="red"
+                onClick={confirmDeleteDeck}
+                ml={3}
+                isLoading={isDeletingDeck}
+                loadingText="Deleting..."
+              >
                 Delete
               </Button>
             </AlertDialogFooter>
