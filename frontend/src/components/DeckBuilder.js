@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   VStack,
@@ -36,10 +36,12 @@ import ImportDeckModal from './ImportDeckModal';
 
 import { useDeckBuilder } from '../hooks/useDeckBuilder';
 import { useAuth } from '../context/AuthContext';
+import { useSearchParams } from 'next/navigation';
 
 export default function DeckBuilder() {
   const toast = useToast();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
 
   const {
 
@@ -253,6 +255,18 @@ export default function DeckBuilder() {
 
     );
   }
+
+  useEffect(() => {
+    // Only run if isClient (component mounted in browser)
+    if (typeof window === 'undefined') return;
+    const loadDeckId = searchParams.get('loadDeck');
+    // If there is a loadDeck param and current deck is not already that deck
+    if (loadDeckId && deck?.id !== loadDeckId) {
+      // Try to load the deck via API (handleLoadDeck expects deck object or id, and a close callback)
+      handleLoadDeck(loadDeckId, () => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   return (
     <VStack spacing={6} align="stretch">

@@ -460,7 +460,13 @@ export const useDeckBuilder = () => {
 
       if (response.ok) {
         const loadedDeck = await response.json();
+
         setDeck(loadedDeck);
+        if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('loadDeck');
+          window.history.replaceState({}, '', url);
+        }
 
         setPreviousLeaderColors([]);
 
