@@ -43,7 +43,7 @@ import SettingsModal from './SettingsModal';
 import UserManagementModal from './UserManagementModal';
 import LocationManagementModal from './LocationManagementModal';
 import CollectionManagementModal from './CollectionManagementModal';
-import DeckManagementModal from './DeckManagementModal';
+import UnifiedDeckModal from './UnifiedDeckModal';
 
 // Modern Tab Component
 const ModernTab = ({ isActive, onClick, children, badge }) => {
@@ -485,9 +485,17 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       />
 
       {/* Deck Management Modal */}
-      <DeckManagementModal
+      <UnifiedDeckModal
         isOpen={isDeckManagementOpen}
         onClose={onDeckManagementClose}
+        onSelect={(selectedDeck) => {
+          // For navbar context, the deck selection just highlights the deck
+          // The actual navigation happens via the "To MatchUp" and "To Builder" buttons
+          // So we don't need to do anything here except maybe log it
+          console.log('Deck selected in navbar:', selectedDeck.name || selectedDeck.deck_title);
+        }}
+        context="navbar"
+        title="Deck Management"
       />
 
       {/* Sync Modal (Admin only) */}

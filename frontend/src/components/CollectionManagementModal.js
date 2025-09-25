@@ -27,8 +27,10 @@ import {
   Heading,
   Textarea,
   FormHelperText,
+  Switch,
+  Badge,
 } from '@chakra-ui/react';
-import { FiDatabase, FiDownload, FiUpload, FiTrash2 } from 'react-icons/fi';
+import { FiDatabase, FiDownload, FiUpload, FiTrash2, FiPlus } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 
 export default function CollectionManagementModal({ isOpen, onClose }) {
@@ -40,6 +42,7 @@ export default function CollectionManagementModal({ isOpen, onClose }) {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [importMode, setImportMode] = useState('override'); // 'override' or 'append'
 
   // Delete collection dialog state
   const { isOpen: isDeleteCollectionOpen, onOpen: onDeleteCollectionOpen, onClose: onDeleteCollectionClose } = useDisclosure();
@@ -127,14 +130,18 @@ export default function CollectionManagementModal({ isOpen, onClose }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ collectionData: importData.trim() }),
+        body: JSON.stringify({
+          collectionData: importData.trim(),
+          mode: importMode // Send the import mode to the backend
+        }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
         // Create success message with error details if any
-        let successMessage = `Successfully imported ${data.processed} cards. Updated: ${data.updated}`;
+        const modeText = importMode === 'append' ? 'appended to' : 'updated in';
+        let successMessage = `Successfully imported ${data.processed} cards. ${data.updated} cards ${modeText} your collection`;
 
         if (data.errors > 0 && data.errorLines && data.errorLines.length > 0) {
           successMessage += `, Errors: ${data.errors}`;
@@ -255,6 +262,7 @@ export default function CollectionManagementModal({ isOpen, onClose }) {
 
   const handleImportModalClose = () => {
     setImportData('');
+    setImportMode('override'); // Reset to default
     onImportClose();
   };
 
@@ -285,60 +293,65 @@ export default function CollectionManagementModal({ isOpen, onClose }) {
                 Import, export, or manage your card collection data.
               </Text>
 
-              {/* Export Collection */}
-              <Box bg="blue.50" p={4} borderRadius="md" border="1px" borderColor="blue.200">
-                <VStack spacing={3} align="stretch">
-                  <Text fontSize="sm" color="blue.700" fontWeight="medium">
-                    Export Collection
-                  </Text>
-                  <Text fontSize="sm" color="blue.600">
-                    Download your collection as a text file in the format: "4 x OP10-082"
-                  </Text>
-                  <Button
-                    colorScheme="blue"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExportCollection}
-                    isLoading={isExporting}
-                    loadingText="Exporting..."
-                    leftIcon={<FiDownload />}
-                    isDisabled={isLoading}
-                  >
-                    Export Collection
-                  </Button>
-                </VStack>
+              <Box borderWidth="1px" borderRadius="lg" p={4} bg="blue.50" borderColor="blue.200">
+                <Heading size="sm" mb={3} color="blue.700">
+                  <HStack spacing={2}>
+                    <FiUpload />
+                    <Text>Import Collection</Text>
+                  </HStack>
+                </Heading>
+                <Text fontSize="sm" mb={3} color="blue.600">
+                  Import card data from a text file or another application.
+                </Text>
+                <Button
+                  colorScheme="blue"
+                  variant="outline"
+                  size="sm"
+                  onClick={onImportOpen}
+                  leftIcon={<FiUpload />}
+                  isDisabled={isLoading}
+                >
+                  Import Collection
+                </Button>
               </Box>
 
-              {/* Import Collection */}
-              <Box bg="green.50" p={4} borderRadius="md" border="1px" borderColor="green.200">
-                <VStack spacing={3} align="stretch">
-                  <Text fontSize="sm" color="green.700" fontWeight="medium">
-                    Import Collection
-                  </Text>
-                  <Text fontSize="sm" color="green.600">
-                    Import collection data from a text file. Each line should be in format: "4 x OP10-082"
-                  </Text>
-                  <Button
-                    colorScheme="green"
-                    variant="outline"
-                    size="sm"
-                    onClick={onImportOpen}
-                    leftIcon={<FiUpload />}
-                    isDisabled={isLoading}
-                  >
-                    Import Collection
-                  </Button>
-                </VStack>
+              <Box borderWidth="1px" borderRadius="lg" p={4} bg="green.50" borderColor="green.200">
+                <Heading size="sm" mb={3} color="green.700">
+                  <HStack spacing={2}>
+                    <FiDownload />
+                    <Text>Export Collection</Text>
+                  </HStack>
+                </Heading>
+                <Text fontSize="sm" mb={3} color="green.600">
+                  Export your collection to a text file for backup or sharing.
+                </Text>
+                <Button
+                  colorScheme="green"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCollection}
+                  isLoading={isExporting}
+                  loadingText="Exporting..."
+                  isDisabled={isLoading}
+                  leftIcon={<FiDownload />}
+                >
+                  Export Collection
+                </Button>
               </Box>
 
-              {/* Delete Collection */}
-              <Box bg="orange.50" p={4} borderRadius="md" border="1px" borderColor="orange.200">
-                <VStack spacing={3} align="stretch">
-                  <Text fontSize="sm" color="orange.700" fontWeight="medium">
-                    Delete Collection
-                  </Text>
-                  <Text fontSize="sm" color="orange.600">
-                    Delete your entire card collection while keeping your account.
+              <Box borderWidth="1px" borderRadius="lg" p={4} bg="orange.50" borderColor="orange.200">
+                <Heading size="sm" mb={3} color="orange.700">
+                  <HStack spacing={2}>
+                    <FiTrash2 />
+                    <Text>Delete Collection</Text>
+                  </HStack>
+                </Heading>
+                <Text fontSize="sm" mb={3} color="orange.600">
+                  Permanently delete your entire card collection. This cannot be undone.
+                </Text>
+                <VStack spacing={2} align="stretch">
+                  <Text fontSize="xs" color="orange.500" fontStyle="italic">
+                    Warning: This will delete all owned and proxy cards
                   </Text>
                   <Button
                     colorScheme="orange"
@@ -379,22 +392,62 @@ export default function CollectionManagementModal({ isOpen, onClose }) {
               <Text fontSize="sm" color="gray.600">
                 Paste your collection data below. Each line should be in the format:
               </Text>
-              <Box bg="gray.100" p={3} borderRadius="md" fontFamily="monospace" fontSize="sm">
-                <Text>4 x OP10-082</Text>
-                <Text>1 x OP11-040_p1</Text>
+              {/* Import Mode Switch */}
+              <Box borderWidth="1px" borderRadius="md" p={4} bg="blue.50" borderColor="blue.200">
+                <FormControl display="flex" alignItems="center" justifyContent="space-between">
+                  <Box>
+                    <FormLabel mb={1} color="blue.700" fontWeight="semibold">
+                      Import Mode
+                    </FormLabel>
+                    <Text fontSize="xs" color="blue.600">
+                      {importMode === 'override'
+                        ? 'Override: Set exact counts for each card (cards not listed will remain unchanged)'
+                        : 'Append: Add to existing counts (if you have 2 cards and import 3, you\'ll have 5 total)'
+                      }
+                    </Text>
+                  </Box>
+                  <VStack spacing={2} align="center">
+                    <HStack spacing={3}>
+                      <Badge colorScheme={importMode === 'override' ? 'blue' : 'gray'} variant="solid">
+                        Override
+                      </Badge>
+                      <Switch
+                        colorScheme="green"
+                        isChecked={importMode === 'append'}
+                        onChange={(e) => setImportMode(e.target.checked ? 'append' : 'override')}
+                        size="md"
+                      />
+                      <Badge colorScheme={importMode === 'append' ? 'green' : 'gray'} variant="solid">
+                        Append
+                      </Badge>
+                    </HStack>
+                    {importMode === 'append' && (
+                      <HStack spacing={1}>
+                        <FiPlus size="12px" />
+                        <Text fontSize="xs" color="green.600" fontWeight="medium">
+                          Add to existing
+                        </Text>
+                      </HStack>
+                    )}
+                  </VStack>
+                </FormControl>
               </Box>
+
               <FormControl>
                 <FormLabel>Collection Data</FormLabel>
                 <Textarea
                   value={importData}
                   onChange={(e) => setImportData(e.target.value)}
-                  placeholder="4 x OP10-082"
+                  placeholder={`4 x OP10-082\n1 x OP11-040_p1`}
                   rows={10}
                   fontFamily="monospace"
                   fontSize="sm"
                 />
                 <FormHelperText>
-                  This will update the owned count for each card. Cards not in the list will remain unchanged.
+                  {importMode === 'override'
+                    ? 'This will set the exact owned count for each card. Cards not in the list will remain unchanged.'
+                    : 'This will add the specified counts to your existing collection. For example, if you own 2 cards and import 3, you\'ll have 5 total.'
+                  }
                 </FormHelperText>
               </FormControl>
             </VStack>
@@ -410,13 +463,13 @@ export default function CollectionManagementModal({ isOpen, onClose }) {
               Cancel
             </Button>
             <Button
-              colorScheme="green"
+              colorScheme={importMode === 'append' ? 'green' : 'blue'}
               onClick={handleImportCollection}
               isLoading={isImporting}
               loadingText="Importing..."
               leftIcon={!isImporting ? <FiUpload /> : undefined}
             >
-              Import Collection
+              {importMode === 'append' ? 'Append to Collection' : 'Import Collection'}
             </Button>
           </ModalFooter>
         </ModalContent>

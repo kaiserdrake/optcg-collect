@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   VStack,
@@ -26,8 +26,8 @@ import CardSearch from './CardSearch';
 import CardDetailModal from './CardDetailModal';
 import ThumbnailSelector from './ThumbnailSelector';
 import SaveDeckModal from './SaveDeckModal';
-import LoadDeckModal from './LoadDeckModal';
 import LocateModal from './LocateModal';
+import UnifiedDeckModal from './UnifiedDeckModal';
 import PublishConfirmationModal from './PublishConfirmationModal';
 
 import DeckHeader from './DeckHeader';
@@ -36,10 +36,12 @@ import ImportDeckModal from './ImportDeckModal';
 
 import { useDeckBuilder } from '../hooks/useDeckBuilder';
 import { useAuth } from '../context/AuthContext';
+import { useSearchParams } from 'next/navigation';
 
 export default function DeckBuilder() {
   const toast = useToast();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
 
   const {
 
@@ -123,7 +125,7 @@ export default function DeckBuilder() {
     onImportOpen();
   };
 
-  // LoadDeckModal callback - replaces the entire deck
+  // Load deck callback - replaces the entire deck
   const handleLoadSuccess = (loadedDeckData) => {
     // For loading, we DO want to replace the entire deck
     setDeck(loadedDeckData);
@@ -241,16 +243,59 @@ export default function DeckBuilder() {
     console.log('Card refreshed:', updatedCard);
   };
 
+  useEffect(() => {
+    // Only run if isClient (component mounted in browser)
+    if (typeof window === 'undefined' || !isClient) return;
+
+    const loadDeckId = searchParams.get('loadDeck');
+    const tempDeckParam = searchParams.get('tempDeck');
+
+    // Check for temporary deck data from sessionStorage (for published decks from navbar)
+    if (tempDeckParam === 'published') {
+      console.log('Loading temporary deck from sessionStorage');
+      try {
+        const tempDeckData = sessionStorage.getItem('tempDeckData');
+        if (tempDeckData) {
+          const deckData = JSON.parse(tempDeckData);
+          console.log('Loaded published deck from sessionStorage:', deckData.name);
+          setDeck(deckData);
+
+          // Clean up
+          sessionStorage.removeItem('tempDeckData');
+          const url = new URL(window.location.href);
+          url.searchParams.delete('tempDeck');
+          window.history.replaceState({}, '', url);
+
+          toast({
+            title: 'Published deck loaded',
+            description: `"${deckData.name}" has been loaded from published decks`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading temp deck data:', error);
+        sessionStorage.removeItem('tempDeckData'); // Clean up on error
+      }
+    }
+    // Check for regular loadDeck parameter (for saved decks)
+    else if (loadDeckId && deck?.id !== parseInt(loadDeckId)) {
+      console.log('Loading deck from URL param:', loadDeckId);
+      handleLoadDeck(loadDeckId, () => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClient, searchParams, deck?.id]); // Add dependencies to ensure proper updates
+
+  // Early return AFTER all hooks
   if (!isClient) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minH="400px">
         <VStack spacing={4}>
           <Spinner size="xl" color="blue.500" />
-
           <Text color="gray.600">Loading Deck Builder...</Text>
         </VStack>
       </Box>
-
     );
   }
 
@@ -327,10 +372,15 @@ export default function DeckBuilder() {
         onSave={handleSaveSuccess}
       />
 
-      <LoadDeckModal
+      <UnifiedDeckModal
         isOpen={isLoadOpen}
         onClose={onLoadClose}
-        onLoad={handleLoadSuccess}
+        onSelect={(selectedDeck) => {
+          // Handle deck loading directly without URL navigation
+          handleLoadDeck(selectedDeck, onLoadClose);
+        }}
+        context="deckbuilder"
+        title="Load Deck in Deck Builder"
       />
 
       <LocateModal

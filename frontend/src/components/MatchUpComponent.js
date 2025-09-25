@@ -24,7 +24,7 @@ import {
 
 import { AddIcon, RepeatIcon, ExternalLinkIcon } from '@chakra-ui/icons';
 import { useSearchParams } from 'next/navigation';
-import SelectDeckModal from '@/components/SelectDeckModal';
+import UnifiedDeckModal from './UnifiedDeckModal';
 import DeckViewerCanvas from '@/components/DeckViewerCanvas';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -615,13 +615,13 @@ const MatchUpComponent = () => {
 
       {/* Deck Comparison Grid */}
       <Grid
-        templateColumns={{ base: "1fr", lg: "repeat(2, 1fr)" }}
+        templateColumns={{ base: "1fr", lg: "1fr 1fr" }}
         gap={gridGap}
         minH="500px"
         w="100%"
       >
         {/* Player 1 Deck */}
-        <GridItem>
+        <GridItem w="100%" minW={0}>
           <VStack spacing={4} align="stretch" h="100%">
             {isMobile ? (
               <VStack spacing={2} align="stretch">
@@ -664,39 +664,38 @@ const MatchUpComponent = () => {
                 </HStack>
               </VStack>
             ) : (
-              <HStack justify="space-between" align="center">
-                <HStack spacing={2}>
-                  <Badge colorScheme="blue" variant="solid" fontSize="sm">
-                    Player 1
-                  </Badge>
-                  <Text fontWeight="semibold" color="gray.700" isTruncated>
-                    {deck1?.name || 'No Deck Selected'}
-                  </Text>
-                </HStack>
-                <HStack spacing={2} flexShrink={0}>
-                  {(deck1?.cards?.length || 0) > 0 && (
-                    <IconButton
-                      icon={<RepeatIcon />}
+                <HStack justify="space-between" align="center">
+                  <HStack spacing={2} flex="1" minW={0}>
+                    <Badge colorScheme="blue" variant="solid" fontSize="sm">
+                      Player 1
+                    </Badge>
+                    <Text fontWeight="semibold" color="gray.700" isTruncated>
+                      {deck1?.name || 'No Deck Selected'}
+                    </Text>
+                  </HStack>
+                  <HStack spacing={2} flexShrink={0}>
+                    {(deck1?.cards?.length || 0) > 0 && (
+                      <IconButton
+                        icon={<RepeatIcon />}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => clearDeck(1)}
+                        aria-label="Clear deck"
+                      />
+                    )}
+                    <Button
+                      leftIcon={<AddIcon />}
                       size="sm"
+                      colorScheme="blue"
                       variant="outline"
-                      onClick={() => clearDeck(1)}
-                      aria-label="Clear deck"
-                    />
-                  )}
-                  <Button
-                    leftIcon={<AddIcon />}
-                    size="sm"
-
-                    colorScheme="blue"
-                    variant="outline"
-                    onClick={() => handleSelectDeck(1)}
-                    isLoading={loadingDeck1}
-                  >
-                    Select Deck
-                  </Button>
+                      onClick={() => handleSelectDeck(1)}
+                      isLoading={loadingDeck1}
+                    >
+                      Select Deck
+                    </Button>
+                  </HStack>
                 </HStack>
-              </HStack>
-            )}
+              )}
 
             {loadingDeck1 ? (
               <Box textAlign="center" py={8}>
@@ -704,18 +703,19 @@ const MatchUpComponent = () => {
                 <Text mt={4} color="gray.600">Loading deck...</Text>
               </Box>
             ) : (
-              <DeckViewerCanvas
-                deck={deck1}
-                showStats={true}
-                playerNumber={1}
-              />
-            )}
+                <Box w="100%" minW={0}>
+                  <DeckViewerCanvas
+                    deck={deck1}
+                    showStats={true}
+                    playerNumber={1}
+                  />
+                </Box>
+              )}
           </VStack>
         </GridItem>
 
         {/* Player 2 Deck */}
-
-        <GridItem>
+        <GridItem w="100%" minW={0}>
           <VStack spacing={4} align="stretch" h="100%">
             {isMobile ? (
               <VStack spacing={2} align="stretch">
@@ -733,7 +733,6 @@ const MatchUpComponent = () => {
                   </Text>
                 </Box>
 
-
                 {/* Mobile: Action buttons */}
                 <HStack spacing={2}>
                   {(deck2?.cards?.length || 0) > 0 && (
@@ -747,7 +746,6 @@ const MatchUpComponent = () => {
                   )}
                   <Button
                     leftIcon={<AddIcon />}
-
                     size="sm"
                     colorScheme="red"
                     variant="outline"
@@ -760,39 +758,38 @@ const MatchUpComponent = () => {
                 </HStack>
               </VStack>
             ) : (
-              <HStack justify="space-between" align="center">
-                <HStack spacing={2}>
-                  <Badge colorScheme="red" variant="solid" fontSize="sm">
-                    Player 2
-                  </Badge>
-                  <Text fontWeight="semibold" color="gray.700" isTruncated>
-                    {deck2?.name || 'No Deck Selected'}
-                  </Text>
-                </HStack>
-                <HStack spacing={2} flexShrink={0}>
-                  {(deck2?.cards?.length || 0) > 0 && (
-                    <IconButton
-                      icon={<RepeatIcon />}
+                <HStack justify="space-between" align="center">
+                  <HStack spacing={2} flex="1" minW={0}>
+                    <Badge colorScheme="red" variant="solid" fontSize="sm">
+                      Player 2
+                    </Badge>
+                    <Text fontWeight="semibold" color="gray.700" isTruncated>
+                      {deck2?.name || 'No Deck Selected'}
+                    </Text>
+                  </HStack>
+                  <HStack spacing={2} flexShrink={0}>
+                    {(deck2?.cards?.length || 0) > 0 && (
+                      <IconButton
+                        icon={<RepeatIcon />}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => clearDeck(2)}
+                        aria-label="Clear deck"
+                      />
+                    )}
+                    <Button
+                      leftIcon={<AddIcon />}
                       size="sm"
+                      colorScheme="red"
                       variant="outline"
-                      onClick={() => clearDeck(2)}
-                      aria-label="Clear deck"
-                    />
-                  )}
-                  <Button
-                    leftIcon={<AddIcon />}
-                    size="sm"
-                    colorScheme="red"
-                    variant="outline"
-                    onClick={() => handleSelectDeck(2)}
-
-                    isLoading={loadingDeck2}
-                  >
-                    Select Deck
-                  </Button>
+                      onClick={() => handleSelectDeck(2)}
+                      isLoading={loadingDeck2}
+                    >
+                      Select Deck
+                    </Button>
+                  </HStack>
                 </HStack>
-              </HStack>
-            )}
+              )}
 
             {loadingDeck2 ? (
               <Box textAlign="center" py={8}>
@@ -800,23 +797,29 @@ const MatchUpComponent = () => {
                 <Text mt={4} color="gray.600">Loading deck...</Text>
               </Box>
             ) : (
-              <DeckViewerCanvas
-                deck={deck2}
-                showStats={true}
-                playerNumber={2}
-              />
-            )}
+                <Box w="100%" minW={0}>
+                  <DeckViewerCanvas
+                    deck={deck2}
+                    showStats={true}
+                    playerNumber={2}
+                  />
+                </Box>
+              )}
           </VStack>
         </GridItem>
       </Grid>
-
-      {/* Select Deck Modal */}
-      <SelectDeckModal
+      {/* Select Deck using UnifiedDeckModal */}
+      <UnifiedDeckModal
         isOpen={isSelectOpen}
         onClose={onSelectClose}
-        onDeckSelected={handleDeckSelected}
-        playerNumber={selectedPlayerNumber}
+        onSelect={(selectedDeck) => {
+          // Use the existing handleDeckSelected logic
+          handleDeckSelected(selectedDeck);
+        }}
+        context="matchup"
+        title={`Select Deck for Player ${selectedPlayerNumber}`}
       />
+
     </VStack>
   );
 };
