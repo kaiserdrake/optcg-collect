@@ -310,7 +310,7 @@ const DeckCard = ({
             {isPublished ? `Published: ${date}` : `Updated: ${date}`}
           </Text>
 
-          {/* Hover Actions - Only show when hovered and selected (navbar) or always show delete for My Decks */}
+          {/* Hover Actions - Show navigation buttons when selected, delete when applicable */}
           {isHovered && (
             <HStack
               position="absolute"
@@ -346,6 +346,7 @@ const DeckCard = ({
                       onClick={handleBuilderClick}
                     />
                   </Tooltip>
+                  {/* Show delete button for any deck that can be deleted when hovered */}
                   {showDelete && (
                     <Tooltip label="DELETE" placement="top">
                       <IconButton
@@ -697,7 +698,8 @@ const UnifiedDeckModal = ({
   // Check if user can delete a deck - Fixed logic for My Decks
   const canDeleteMyDeck = (deck) => {
     // Users can always delete their own saved decks
-    return user && deck.user_id === user.id;
+    // If user_id is undefined, assume it belongs to current user (since /api/decks only returns user's own decks)
+    return user && (deck.user_id === user.id || deck.user_id === undefined);
   };
 
   const canDeletePublishedDeck = (deck) => {
