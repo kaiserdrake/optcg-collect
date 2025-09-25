@@ -454,32 +454,48 @@ export const useDeckBuilder = () => {
 
   const handleLoadDeck = async (deckToLoad, onLoadClose) => {
     try {
-      const response = await fetch(`${api}/api/decks/${deckToLoad.id || deckToLoad}`, {
-        credentials: 'include',
-      });
+      let loadedDeck;
 
-      if (response.ok) {
-        const loadedDeck = await response.json();
+      // Check if deckToLoad is already a complete deck object (published deck case)
+      if (deckToLoad && typeof deckToLoad === 'object' && deckToLoad.cards && Array.isArray(deckToLoad.cards)) {
+        // It's already a complete deck object (from UnifiedDeckModal published deck)
+        console.log('Loading complete deck object:', deckToLoad);
+        loadedDeck = deckToLoad;
+      } else {
+        // It's a deck ID or deck object that needs to be fetched from API
+        const deckId = deckToLoad.id || deckToLoad;
+        console.log('Fetching deck from API:', deckId);
 
-        setDeck(loadedDeck);
-        if (typeof window !== 'undefined') {
-          const url = new URL(window.location.href);
-          url.searchParams.delete('loadDeck');
-          window.history.replaceState({}, '', url);
+        const response = await fetch(`${api}/api/decks/${deckId}`, {
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load deck');
         }
 
-        setPreviousLeaderColors([]);
-
-        toast({
-          title: 'Deck loaded',
-          description: `"${loadedDeck.name}" has been loaded`,
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
-      } else {
-        throw new Error('Failed to load deck');
+        loadedDeck = await response.json();
       }
+
+      // Set the deck in the builder
+      setDeck(loadedDeck);
+
+      // Clear URL parameters if they exist
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('loadDeck');
+        window.history.replaceState({}, '', url);
+      }
+
+      setPreviousLeaderColors([]);
+
+      toast({
+        title: 'Deck loaded',
+        description: `"${loadedDeck.name}" has been loaded`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
     } catch (error) {
       console.error('Load deck error:', error);
       toast({

@@ -558,85 +558,122 @@ const UnifiedDeckModal = ({
   };
 
   const handleDeckSelect = async (deck) => {
-    setSelectedDeckId(deck.id);
+  setSelectedDeckId(deck.id);
 
-    if (context !== 'navbar') {
-      // For DeckBuilder and MatchUp contexts, process the deck immediately
-      if (context === 'deckbuilder') {
-        try {
-          // For deckbuilder, we always need to fetch full deck details
-          if (deck.type === 'published' || 'deck_title' in deck) {
-            // Published deck - use parsed data
-            const deckToReturn = {
-              ...deck,
-              name: deck.deck_title || deck.name,
-              cards: deck.parsedDeck?.cards || []
-            };
-            onSelect(deckToReturn);
-          } else {
-            // Saved deck - fetch full details with cards
-            const response = await fetch(`${api}/api/decks/${deck.id}`, {
-              credentials: 'include'
-            });
-
-            if (response.ok) {
-              const fullDeckData = await response.json();
-              onSelect(fullDeckData);
-            } else {
-              throw new Error('Failed to load full deck details');
-            }
-          }
-        } catch (error) {
-          console.error('Error loading full deck details:', error);
-          toast({
-            title: 'Error loading deck',
-            description: 'Failed to load complete deck data',
-            status: 'error',
-            duration: 3000,
-            isClosable: true,
+  if (context !== 'navbar') {
+    // For DeckBuilder and MatchUp contexts, process the deck immediately
+    if (context === 'deckbuilder') {
+      try {
+        // For deckbuilder, we always need to fetch full deck details
+        if (deck.type === 'published' || 'deck_title' in deck) {
+          // Published deck - use parsed data
+          const deckToReturn = {
+            ...deck,
+            name: deck.deck_title || deck.name,
+            cards: deck.parsedDeck?.cards || []
+          };
+          onSelect(deckToReturn);
+        } else {
+          // Saved deck - fetch full details with cards
+          const response = await fetch(`${api}/api/decks/${deck.id}`, {
+            credentials: 'include'
           });
-          return;
-        }
-      } else if (context === 'matchup') {
-        try {
-          // For MatchUp, ensure we have proper deck structure with cards
-          if (deck.type === 'published' || 'deck_title' in deck) {
-            // Published deck - use parsed data
-            const deckToReturn = {
-              ...deck,
-              name: deck.deck_title || deck.name,
-              cards: deck.parsedDeck?.cards || []
-            };
-            onSelect(deckToReturn);
-          } else {
-            // Saved deck - fetch full details with cards
-            const response = await fetch(`${api}/api/decks/${deck.id}`, {
-              credentials: 'include'
-            });
 
-            if (response.ok) {
-              const fullDeckData = await response.json();
-              onSelect(fullDeckData);
-            } else {
-              throw new Error('Failed to load full deck details');
-            }
+          if (response.ok) {
+            const fullDeckData = await response.json();
+            onSelect(fullDeckData);
+          } else {
+            throw new Error('Failed to load full deck details');
           }
-        } catch (error) {
-          console.error('Error loading deck for MatchUp:', error);
-          toast({
-            title: 'Error loading deck',
-            description: 'Failed to load complete deck data',
-            status: 'error',
-            duration: 3000,
-            isClosable: true,
-          });
-          return;
         }
+      } catch (error) {
+        console.error('Error loading full deck details:', error);
+        toast({
+          title: 'Error loading deck',
+          description: 'Failed to load complete deck data',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
       }
+    } else if (context === 'matchup') {
+      try {
+        // For MatchUp, ensure we have proper deck structure with cards
+        if (deck.type === 'published' || 'deck_title' in deck) {
+          // Published deck - use parsed data
+          const deckToReturn = {
+            ...deck,
+            name: deck.deck_title || deck.name,
+            cards: deck.parsedDeck?.cards || []
+          };
+          onSelect(deckToReturn);
+        } else {
+          // Saved deck - fetch full details with cards
+          const response = await fetch(`${api}/api/decks/${deck.id}`, {
+            credentials: 'include'
+          });
 
-      onClose();
+          if (response.ok) {
+            const fullDeckData = await response.json();
+            onSelect(fullDeckData);
+          } else {
+            throw new Error('Failed to load full deck details');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading deck for MatchUp:', error);
+        toast({
+          title: 'Error loading deck',
+          description: 'Failed to load complete deck data',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
     }
-  };
+
+    onClose();
+  } else {
+    // FIXED: For navbar context, also call onSelect to notify parent component
+    if (onSelect) {
+      try {
+        if (deck.type === 'published' || 'deck_title' in deck) {
+          // Published deck - use parsed data
+          const deckToReturn = {
+            ...deck,
+            name: deck.deck_title || deck.name,
+            cards: deck.parsedDeck?.cards || []
+          };
+          onSelect(deckToReturn);
+        } else {
+          // Saved deck - fetch full details with cards
+          const response = await fetch(`${api}/api/decks/${deck.id}`, {
+            credentials: 'include'
+          });
+
+          if (response.ok) {
+            const fullDeckData = await response.json();
+            onSelect(fullDeckData);
+          } else {
+            throw new Error('Failed to load full deck details');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading deck in navbar context:', error);
+        toast({
+          title: 'Error loading deck',
+          description: 'Failed to load deck details',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    }
+    // Note: Don't auto-close in navbar context, let user choose action with buttons
+  }
+};
 
   // Helper function to generate deck content string for navigation
   const generateDeckContentForNavigation = async (deck) => {
@@ -681,6 +718,7 @@ const UnifiedDeckModal = ({
     }
   };
 
+
   const handleLoadInDeckBuilder = async () => {
     if (!selectedDeckId) return;
 
@@ -689,9 +727,60 @@ const UnifiedDeckModal = ({
     const deck = selectedFromMyDecks || selectedFromPublished;
 
     if (deck) {
-      // Navigate to DeckBuilder page and trigger deck loading
-      window.location.href = `/?tab=decks&loadDeck=${deck.id}`;
-      onClose();
+      try {
+        // Use direct callback instead of URL navigation for better UX
+        if (onSelect && (context === 'deckbuilder')) {
+          // For DeckBuilder context, use onSelect callback (already implemented above)
+          if (deck.deck_title || deck.type === 'published') {
+            // Published deck - use already parsed data
+            const deckToReturn = {
+              ...deck,
+              name: deck.deck_title || deck.name,
+              cards: deck.parsedDeck?.cards || []
+            };
+            onSelect(deckToReturn);
+          } else {
+            // Saved deck - fetch full details with cards
+            const response = await fetch(`${api}/api/decks/${deck.id}`, {
+              credentials: 'include'
+            });
+
+            if (response.ok) {
+              const fullDeckData = await response.json();
+              onSelect(fullDeckData);
+            } else {
+              throw new Error('Failed to load full deck details');
+            }
+          }
+        } else {
+          // For navbar context, use URL navigation
+          if (deck.deck_title || deck.type === 'published') {
+            // For published decks, we can't use loadDeck parameter since there's no API endpoint
+            // Instead, navigate to deck builder and the user can import manually
+            toast({
+              title: 'Published Deck',
+              description: 'Published decks will need to be imported manually in the Deck Builder.',
+              status: 'info',
+              duration: 5000,
+              isClosable: true,
+            });
+            window.location.href = `/?tab=decks`;
+          } else {
+            // For saved decks, use loadDeck parameter
+            window.location.href = `/?tab=decks&loadDeck=${deck.id}`;
+          }
+        }
+        onClose();
+      } catch (error) {
+        console.error('Error loading deck in DeckBuilder:', error);
+        toast({
+          title: 'Error loading deck',
+          description: 'Failed to load deck in Deck Builder',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
     }
   };
 

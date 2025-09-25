@@ -488,17 +488,11 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       <UnifiedDeckModal
         isOpen={isDeckManagementOpen}
         onClose={onDeckManagementClose}
-        onSelect={(deck, destination) => {
-          // Handle deck selection with destination choice
-          if (destination === 'matchup') {
-            // Navigate to MatchUp with the selected deck
-            // You can implement navigation logic here if needed
-            console.log('Opening deck in MatchUp:', deck);
-          } else if (destination === 'deckbuilder') {
-            // Navigate to DeckBuilder with the selected deck
-            // You can implement navigation logic here if needed
-            console.log('Opening deck in DeckBuilder:', deck);
-          }
+        onSelect={(selectedDeck) => {
+          // For navbar context, the deck selection just highlights the deck
+          // The actual navigation happens via the "To MatchUp" and "To Builder" buttons
+          // So we don't need to do anything here except maybe log it
+          console.log('Deck selected in navbar:', selectedDeck.name || selectedDeck.deck_title);
         }}
         context="navbar"
         title="Deck Management"

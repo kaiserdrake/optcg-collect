@@ -243,30 +243,61 @@ export default function DeckBuilder() {
     console.log('Card refreshed:', updatedCard);
   };
 
+  useEffect(() => {
+    // Only run if isClient (component mounted in browser)
+    if (typeof window === 'undefined' || !isClient) return;
+
+    const loadDeckId = searchParams.get('loadDeck');
+    const tempDeckParam = searchParams.get('tempDeck');
+
+    // Check for temporary deck data from sessionStorage (for published decks from navbar)
+    if (tempDeckParam === 'published') {
+      console.log('Loading temporary deck from sessionStorage');
+      try {
+        const tempDeckData = sessionStorage.getItem('tempDeckData');
+        if (tempDeckData) {
+          const deckData = JSON.parse(tempDeckData);
+          console.log('Loaded published deck from sessionStorage:', deckData.name);
+          setDeck(deckData);
+
+          // Clean up
+          sessionStorage.removeItem('tempDeckData');
+          const url = new URL(window.location.href);
+          url.searchParams.delete('tempDeck');
+          window.history.replaceState({}, '', url);
+
+          toast({
+            title: 'Published deck loaded',
+            description: `"${deckData.name}" has been loaded from published decks`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading temp deck data:', error);
+        sessionStorage.removeItem('tempDeckData'); // Clean up on error
+      }
+    }
+    // Check for regular loadDeck parameter (for saved decks)
+    else if (loadDeckId && deck?.id !== parseInt(loadDeckId)) {
+      console.log('Loading deck from URL param:', loadDeckId);
+      handleLoadDeck(loadDeckId, () => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClient, searchParams, deck?.id]); // Add dependencies to ensure proper updates
+
+  // Early return AFTER all hooks
   if (!isClient) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minH="400px">
         <VStack spacing={4}>
           <Spinner size="xl" color="blue.500" />
-
           <Text color="gray.600">Loading Deck Builder...</Text>
         </VStack>
       </Box>
-
     );
   }
-
-  useEffect(() => {
-    // Only run if isClient (component mounted in browser)
-    if (typeof window === 'undefined') return;
-    const loadDeckId = searchParams.get('loadDeck');
-    // If there is a loadDeck param and current deck is not already that deck
-    if (loadDeckId && deck?.id !== loadDeckId) {
-      // Try to load the deck via API (handleLoadDeck expects deck object or id, and a close callback)
-      handleLoadDeck(loadDeckId, () => {});
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run on mount
 
   return (
     <VStack spacing={6} align="stretch">
@@ -344,7 +375,10 @@ export default function DeckBuilder() {
       <UnifiedDeckModal
         isOpen={isLoadOpen}
         onClose={onLoadClose}
-        onSelect={handleLoadSuccess}  // This calls setDeck() which replaces the entire deck
+        onSelect={(selectedDeck) => {
+          // Handle deck loading directly without URL navigation
+          handleLoadDeck(selectedDeck, onLoadClose);
+        }}
         context="deckbuilder"
         title="Load Deck in Deck Builder"
       />
