@@ -718,7 +718,6 @@ const UnifiedDeckModal = ({
     }
   };
 
-
   const handleLoadInDeckBuilder = async () => {
     if (!selectedDeckId) return;
 
@@ -753,21 +752,25 @@ const UnifiedDeckModal = ({
             }
           }
         } else {
-          // For navbar context, use URL navigation
+          // For navbar context, use sessionStorage to pass deck data
+
           if (deck.deck_title || deck.type === 'published') {
-            // For published decks, we can't use loadDeck parameter since there's no API endpoint
-            // Instead, navigate to deck builder and the user can import manually
-            toast({
-              title: 'Published Deck',
-              description: 'Published decks will need to be imported manually in the Deck Builder.',
-              status: 'info',
-              duration: 5000,
-              isClosable: true,
-            });
-            window.location.href = `/?tab=decks`;
+            // For published decks, store the complete deck data in sessionStorage
+            const deckToStore = {
+              ...deck,
+              name: deck.deck_title || deck.name,
+              cards: deck.parsedDeck?.cards || [],
+              isPublished: true
+            };
+
+            // Store the deck data in sessionStorage
+            sessionStorage.setItem('tempDeckData', JSON.stringify(deckToStore));
+
+            // Navigate with tempDeck parameter
+            window.history.replaceState(null, '', '/?tab=decks&tempDeck=published');
           } else {
-            // For saved decks, use loadDeck parameter
-            window.location.href = `/?tab=decks&loadDeck=${deck.id}`;
+            // For saved decks, use the existing loadDeck parameter approach
+            window.history.replaceState(null, '', `/?tab=decks&loadDeck=${deck.id}`);
           }
         }
         onClose();
