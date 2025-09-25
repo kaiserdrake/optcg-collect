@@ -376,7 +376,11 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
 
           if (exactResponse.ok) {
             const exactResults = await exactResponse.json();
-            const exactCard = exactResults.find(card => card.id === deckCardId);
+
+            // Handle both new paginated format and legacy format
+            const exactSearchResults = Array.isArray(exactResults) ? exactResults : exactResults.results || [];
+
+            const exactCard = exactSearchResults.find(card => card.id === deckCardId);
 
             if (exactCard) {
               const exactOwnedCount = exactCard.owned_count || 0;
@@ -429,8 +433,11 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           if (altResponse.ok) {
             const altResults = await altResponse.json();
 
+            // Handle both new paginated format and legacy format
+            const altSearchResults = Array.isArray(altResults) ? altResults : altResults.results || [];
+
             // Find alternative cards with the same card_code but different ID
-            const alternatives = altResults.filter(card =>
+            const alternatives = altSearchResults.filter(card =>
               card.card_code === deckCardCode &&
               card.id !== deckCardId &&
               (card.owned_count > 0 || card.proxy_count > 0)
