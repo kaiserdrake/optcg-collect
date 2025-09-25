@@ -24,7 +24,7 @@ import {
 
 import { AddIcon, RepeatIcon, ExternalLinkIcon } from '@chakra-ui/icons';
 import { useSearchParams } from 'next/navigation';
-import SelectDeckModal from '@/components/SelectDeckModal';
+import UnifiedDeckModal from './UnifiedDeckModal';
 import DeckViewerCanvas from '@/components/DeckViewerCanvas';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -810,13 +810,18 @@ const MatchUpComponent = () => {
         </GridItem>
       </Grid>
 
-      {/* Select Deck Modal */}
-      <SelectDeckModal
+      {/* Select Deck using UnifiedDeckModal */}
+      <UnifiedDeckModal
         isOpen={isSelectOpen}
         onClose={onSelectClose}
-        onDeckSelected={handleDeckSelected}
-        playerNumber={selectedPlayerNumber}
+        onSelect={(selectedDeck) => {
+          // Use the existing handleDeckSelected logic
+          handleDeckSelected(selectedDeck);
+        }}
+        context="matchup"
+        title={`Select Deck for Player ${selectedPlayerNumber}`}
       />
+
     </VStack>
   );
 };

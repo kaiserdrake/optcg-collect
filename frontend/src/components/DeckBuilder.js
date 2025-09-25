@@ -26,8 +26,8 @@ import CardSearch from './CardSearch';
 import CardDetailModal from './CardDetailModal';
 import ThumbnailSelector from './ThumbnailSelector';
 import SaveDeckModal from './SaveDeckModal';
-import LoadDeckModal from './LoadDeckModal';
 import LocateModal from './LocateModal';
+import UnifiedDeckModal from './UnifiedDeckModal';
 import PublishConfirmationModal from './PublishConfirmationModal';
 
 import DeckHeader from './DeckHeader';
@@ -123,7 +123,7 @@ export default function DeckBuilder() {
     onImportOpen();
   };
 
-  // LoadDeckModal callback - replaces the entire deck
+  // Load deck callback - replaces the entire deck
   const handleLoadSuccess = (loadedDeckData) => {
     // For loading, we DO want to replace the entire deck
     setDeck(loadedDeckData);
@@ -327,10 +327,12 @@ export default function DeckBuilder() {
         onSave={handleSaveSuccess}
       />
 
-      <LoadDeckModal
+      <UnifiedDeckModal
         isOpen={isLoadOpen}
         onClose={onLoadClose}
-        onLoad={handleLoadSuccess}
+        onSelect={handleLoadSuccess}  // This calls setDeck() which replaces the entire deck
+        context="deckbuilder"
+        title="Load Deck in Deck Builder"
       />
 
       <LocateModal

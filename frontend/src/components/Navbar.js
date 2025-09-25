@@ -43,7 +43,7 @@ import SettingsModal from './SettingsModal';
 import UserManagementModal from './UserManagementModal';
 import LocationManagementModal from './LocationManagementModal';
 import CollectionManagementModal from './CollectionManagementModal';
-import DeckManagementModal from './DeckManagementModal';
+import UnifiedDeckModal from './UnifiedDeckModal';
 
 // Modern Tab Component
 const ModernTab = ({ isActive, onClick, children, badge }) => {
@@ -485,9 +485,23 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       />
 
       {/* Deck Management Modal */}
-      <DeckManagementModal
+      <UnifiedDeckModal
         isOpen={isDeckManagementOpen}
         onClose={onDeckManagementClose}
+        onSelect={(deck, destination) => {
+          // Handle deck selection with destination choice
+          if (destination === 'matchup') {
+            // Navigate to MatchUp with the selected deck
+            // You can implement navigation logic here if needed
+            console.log('Opening deck in MatchUp:', deck);
+          } else if (destination === 'deckbuilder') {
+            // Navigate to DeckBuilder with the selected deck
+            // You can implement navigation logic here if needed
+            console.log('Opening deck in DeckBuilder:', deck);
+          }
+        }}
+        context="navbar"
+        title="Deck Management"
       />
 
       {/* Sync Modal (Admin only) */}
