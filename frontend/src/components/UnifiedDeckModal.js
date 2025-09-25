@@ -6,10 +6,8 @@ import {
   ModalOverlay,
   ModalContent,
   ModalHeader,
-  ModalFooter,
   ModalBody,
   ModalCloseButton,
-  Button,
   VStack,
   HStack,
   Text,
@@ -33,20 +31,15 @@ import {
   AlertDialogOverlay,
   IconButton,
   Badge,
-  Flex,
   SimpleGrid,
   Icon,
-  useColorModeValue,
   Card,
   CardBody,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
-  Divider
+  Tooltip,
+  Button
 } from '@chakra-ui/react';
-import { SearchIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiTrash2, FiUser, FiCalendar, FiDatabase, FiFolder, FiLayers, FiPlay, FiEdit3 } from 'react-icons/fi';
+import { SearchIcon } from '@chakra-ui/icons';
+import { FiTrash2, FiUser, FiDatabase, FiFolder, FiLayers, FiPlay, FiEdit3 } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 import CardImage from './CardImage';
 
@@ -82,14 +75,16 @@ const getFirstCardImageUrl = async (deckContent) => {
       const searchData = await response.json();
 
       // Handle both new paginated response format and legacy format
-      const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
+      const searchResults = Array.isArray(searchData) ?
+        searchData : (searchData.cards || []);
 
       if (searchResults.length > 0) {
-        return searchResults[0].img_url;
+        const card = searchResults.find(c => c.card_code === cardCode) || searchResults[0];
+        return card.img_url;
       }
     }
   } catch (error) {
-    console.error('Error getting first card image:', error);
+    console.error('Error fetching card image:', error);
   }
 
   return null;
@@ -115,132 +110,95 @@ const getFirstCardImageFromSavedDeck = async (deckId) => {
   return null;
 };
 
-// Utility function to parse deck content string into deck structure
-const parseDeckContent = async (deckContent) => {
-  if (!deckContent || typeof deckContent !== 'string') {
-    return { cards: [] };
-  }
+// Individual Deck Card Component with improved hover interactions
+const DeckCard = ({
+  deck,
+  isSelected,
+  onSelect,
+  context,
+  onDelete,
+  onLoadInMatchUp,
+  onLoadInDeckBuilder,
+  canDelete,
+  isLoading = false,
+  hoveredDeckId,
+  setHoveredDeckId
+}) => {
+  const [thumbnailImage, setThumbnailImage] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
 
-  try {
-    const response = await fetch(`${api}/api/public/decks/parse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deckContent })
-    });
+  const isPublished = 'deck_title' in deck;
+  const deckName = isPublished ? deck.deck_title : deck.name;
+  const publisher = isPublished ? deck.publisher : null;
+  const date = isPublished ?
+    (deck.created_at ? new Date(deck.created_at).toLocaleDateString() : 'Unknown') :
+    (deck.updated_at ? new Date(deck.updated_at).toLocaleDateString() : 'Unknown');
 
-    if (!response.ok) {
-      throw new Error('Failed to parse deck content');
-    }
+  const isHovered = hoveredDeckId === deck.id;
 
-    const parsedDeck = await response.json();
-    return parsedDeck;
-  } catch (error) {
-    console.error('Error parsing deck content:', error);
-    return { cards: [] };
-  }
-};
-
-const DeckCard = ({ deck, onSelect, onDelete, canDelete, isSelected, type, context }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [firstCardThumbnailUrl, setFirstCardThumbnailUrl] = useState(null);
-  const toast = useToast();
-
-  const isPublished = type === 'published';
-
-  // Load first card thumbnail for published decks OR saved decks without thumbnails
   useEffect(() => {
-    if (isPublished && deck?.deck_content) {
-      // For published decks, use deck_content to get first card image
-      getFirstCardImageUrl(deck.deck_content).then(url => {
-        setFirstCardThumbnailUrl(url);
-      });
-    } else if (!isPublished && !deck?.thumbnail && deck?.id) {
-      // For saved decks without thumbnails, fetch deck details to get first card image
-      getFirstCardImageFromSavedDeck(deck.id).then(url => {
-        setFirstCardThumbnailUrl(url);
-      });
-    }
-  }, [deck, isPublished]);
-
-  const formatDate = (dateString) => {
-    try {
-      if (!dateString) return 'Unknown';
-      return new Date(dateString).toISOString().split('T')[0]; // YYYY-MM-DD format
-    } catch {
-      return 'Unknown';
-    }
-  };
-
-  const deckName = isPublished ? (deck?.deck_title || 'Untitled Deck') : (deck?.name || 'Untitled Deck');
-  const publisher = deck?.publisher || '';
-  const date = formatDate(isPublished ? deck?.date_published : deck?.updated_at);
-
-  // Determine which thumbnail to show
-  const getThumbnailImage = () => {
-    if (!isPublished) {
-      // For saved decks, use deck thumbnail from database first, then first card thumbnail, then placeholder
-      return deck?.thumbnail || firstCardThumbnailUrl || '/placeholder.png';
-    } else {
-      // For published decks, use first card thumbnail (no deck thumbnail stored)
-      return firstCardThumbnailUrl || '/placeholder.png';
-    }
-  };
-
-  const handleSelect = async () => {
-    if (isLoading) return;
-
-    setIsLoading(true);
-    try {
-      if (isPublished) {
-        const parsedDeck = await parseDeckContent(deck.deck_content);
-        const deckWithCards = {
-          ...deck,
-          name: deck.deck_title || 'Untitled Deck',
-          cards: parsedDeck.cards || [],
-          type: 'published'
-        };
-        onSelect(deckWithCards);
-      } else {
-        const response = await fetch(`${api}/api/decks/${deck.id}`, {
-          credentials: 'include'
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to load saved deck details: ${response.status}`);
+    const loadThumbnailImage = async () => {
+      if (isPublished && deck.deck_content && !thumbnailImage) {
+        // For published decks, always try to get first card image
+        setImageLoading(true);
+        try {
+          const imageUrl = await getFirstCardImageUrl(deck.deck_content);
+          setThumbnailImage(imageUrl);
+        } catch (error) {
+          console.error('Error loading thumbnail:', error);
+        } finally {
+          setImageLoading(false);
         }
-
-        const deckWithCards = await response.json();
-        onSelect({
-          ...deckWithCards,
-          type: 'saved'
-        });
+      } else if (!isPublished && !deck?.thumbnail && deck?.id && !thumbnailImage) {
+        // For saved decks without thumbnails, try to get first card image
+        setImageLoading(true);
+        try {
+          const imageUrl = await getFirstCardImageFromSavedDeck(deck.id);
+          setThumbnailImage(imageUrl);
+        } catch (error) {
+          console.error('Error loading thumbnail:', error);
+        } finally {
+          setImageLoading(false);
+        }
       }
-    } catch (error) {
-      console.error('Error loading deck:', error);
-      toast({
-        title: 'Error loading deck',
-        description: 'Failed to load deck content',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-    } finally {
-      setIsLoading(false);
+    };
+
+    loadThumbnailImage();
+  }, [deck, isPublished, thumbnailImage]);
+
+  const getThumbnailImage = () => {
+    if (isPublished) {
+      // For published decks, use first card image or fallback to placeholder
+      return thumbnailImage || '/placeholder.png';
+    } else {
+      // For saved decks, use deck thumbnail first, then first card image, then placeholder
+      return deck?.thumbnail || thumbnailImage || '/placeholder.png';
     }
   };
 
-  const handleDelete = async () => {
-    if (isLoading) return;
-
-    setIsLoading(true);
-    try {
-      await onDelete(deck);
-    } catch (error) {
-      console.error('Error deleting deck:', error);
-    } finally {
-      setIsLoading(false);
+  const handleSelect = () => {
+    if (!isLoading) {
+      onSelect(deck);
     }
   };
+
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    onDelete(deck);
+  };
+
+  const handleMatchUpClick = (e) => {
+    e.stopPropagation();
+    onLoadInMatchUp();
+  };
+
+  const handleBuilderClick = (e) => {
+    e.stopPropagation();
+    onLoadInDeckBuilder();
+  };
+
+  const showDelete = canDelete && context !== 'matchup';
+  const showNavbarButtons = context === 'navbar';
 
   return (
     <Card
@@ -248,6 +206,8 @@ const DeckCard = ({ deck, onSelect, onDelete, canDelete, isSelected, type, conte
       colorScheme={isSelected ? "blue" : undefined}
       cursor={isLoading ? "not-allowed" : "pointer"}
       onClick={isLoading ? undefined : handleSelect}
+      onMouseEnter={() => setHoveredDeckId(deck.id)}
+      onMouseLeave={() => setHoveredDeckId(null)}
       _hover={{
         shadow: "md",
         borderColor: isSelected ? "blue.400" : "blue.300",
@@ -277,24 +237,27 @@ const DeckCard = ({ deck, onSelect, onDelete, canDelete, isSelected, type, conte
               <CardImage
                 src={getThumbnailImage()}
                 alt={isPublished ? 'First card thumbnail' : 'Deck thumbnail'}
-                width="140px"  // 2x the container width for zoom
-                height="196px" // 2x the proportional height (70px * 2.8 aspect ratio)
+                width="140px"
+                height="196px"
                 objectFit="cover"
                 position="absolute"
-                top="-14px"    // Focus on middle-top portion (20% of height)
-                left="-35px"   // Center horizontally (50% of width difference)
+                top="-14px"
+                left="-35px"
                 borderRadius="lg"
               />
             ) : (
-              <VStack spacing={1}>
-                <Text fontSize="xs" color="gray.500" fontWeight="bold">
-                  {isPublished ? 'PUB' : 'DECK'}
-                </Text>
-              </VStack>
+              <CardImage
+                src="/placeholder.png"
+                alt="Placeholder"
+                width="70px"
+                height="98px"
+                objectFit="cover"
+                borderRadius="lg"
+              />
             )}
 
             {/* Loading overlay */}
-            {isLoading && (
+            {(isLoading || imageLoading) && (
               <Box
                 position="absolute"
                 top="0"
@@ -347,23 +310,57 @@ const DeckCard = ({ deck, onSelect, onDelete, canDelete, isSelected, type, conte
             {isPublished ? `Published: ${date}` : `Updated: ${date}`}
           </Text>
 
-          {/* Delete Button - Only show if canDelete and not in MatchUp context */}
-          {canDelete && context !== 'matchup' && (
-            <IconButton
-              aria-label="Delete deck"
-              icon={<FiTrash2 />}
-              size="sm"
-              colorScheme="red"
-              variant="ghost"
+          {/* Hover Actions - Only show when hovered and selected (navbar) or always show delete for My Decks */}
+          {isHovered && (
+            <HStack
               position="absolute"
-              top="8px"
-              right="8px"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete();
-              }}
-              isLoading={isLoading}
-            />
+              top="50%"
+              left="50%"
+              transform="translate(-50%, -50%)"
+              bg="blackAlpha.800"
+              borderRadius="md"
+              p={1}
+              spacing={1}
+              zIndex={10}
+            >
+              {showNavbarButtons && isSelected && (
+                <>
+                  <Tooltip label="To MatchUp" placement="top">
+                    <IconButton
+                      aria-label="To MatchUp"
+                      icon={<FiPlay />}
+                      size="sm"
+                      colorScheme="green"
+                      variant="solid"
+                      onClick={handleMatchUpClick}
+                    />
+                  </Tooltip>
+
+                  <Tooltip label="To Builder" placement="top">
+                    <IconButton
+                      aria-label="To Builder"
+                      icon={<FiEdit3 />}
+                      size="sm"
+                      colorScheme="blue"
+                      variant="solid"
+                      onClick={handleBuilderClick}
+                    />
+                  </Tooltip>
+                  {showDelete && (
+                    <Tooltip label="DELETE" placement="top">
+                      <IconButton
+                        aria-label="Delete deck"
+                        icon={<FiTrash2 />}
+                        size="sm"
+                        colorScheme="red"
+                        variant="solid"
+                        onClick={handleDelete}
+                      />
+                    </Tooltip>
+                  )}
+                </>
+              )}
+            </HStack>
           )}
         </VStack>
       </CardBody>
@@ -391,85 +388,83 @@ const UnifiedDeckModal = ({
   const [isDeletingDeck, setIsDeletingDeck] = useState(false);
   const [myDecksSearchTerm, setMyDecksSearchTerm] = useState('');
   const [publishedDecksSearchTerm, setPublishedDecksSearchTerm] = useState('');
-  const [deckToDelete, setDeckToDelete] = useState(null);
-  const [activeTab, setActiveTab] = useState(0);
-  const [selectedDeckId, setSelectedDeckId] = useState(selectedDeck?.id || null);
+  const [selectedDeckId, setSelectedDeckId] = useState(null);
+  const [hoveredDeckId, setHoveredDeckId] = useState(null);
 
-  // Modal control for delete confirmation
+  // Delete confirmation dialog
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
+  const [deckToDelete, setDeckToDelete] = useState(null);
   const cancelRef = useRef();
 
   // Load decks when modal opens
   useEffect(() => {
-    if (isOpen && user) {
-      loadAllDecks();
-      setMyDecksSearchTerm('');
-      setPublishedDecksSearchTerm('');
-      setSelectedDeckId(selectedDeck?.id || null);
+    if (isOpen) {
+      fetchDecks();
     }
-  }, [isOpen, user, selectedDeck]);
+  }, [isOpen]);
 
-  // Filter my decks based on search term
+  // Filter decks based on search
   useEffect(() => {
-    if (!myDecksSearchTerm.trim()) {
-      setFilteredMyDecks(myDecks);
-    } else {
-      const filtered = myDecks.filter(deck =>
+    setFilteredMyDecks(
+      myDecks.filter(deck =>
         deck.name.toLowerCase().includes(myDecksSearchTerm.toLowerCase())
-      );
-      setFilteredMyDecks(filtered);
-    }
+      )
+    );
   }, [myDecks, myDecksSearchTerm]);
 
-  // Filter published decks based on search term
   useEffect(() => {
-    if (!publishedDecksSearchTerm.trim()) {
-      setFilteredPublishedDecks(publishedDecks);
-    } else {
-      const filtered = publishedDecks.filter(deck =>
+    setFilteredPublishedDecks(
+      publishedDecks.filter(deck =>
         deck.deck_title.toLowerCase().includes(publishedDecksSearchTerm.toLowerCase()) ||
-        deck.publisher.toLowerCase().includes(publishedDecksSearchTerm.toLowerCase())
-      );
-      setFilteredPublishedDecks(filtered);
-    }
+        (deck.publisher && deck.publisher.toLowerCase().includes(publishedDecksSearchTerm.toLowerCase()))
+      )
+    );
   }, [publishedDecks, publishedDecksSearchTerm]);
 
-  const loadAllDecks = async () => {
+  const fetchDecks = async () => {
     setLoading(true);
     try {
-      // Load both my decks and published decks in parallel
+      // Fetch both my decks and published decks in parallel
       const [myDecksResponse, publishedDecksResponse] = await Promise.all([
-        fetch(`${api}/api/decks`, {
-          method: 'GET',
-          credentials: 'include',
-        }),
-        fetch(`${api}/api/public/decks`, {
-          method: 'GET',
-          credentials: 'include',
-        })
+        user ? fetch(`${api}/api/decks`, { credentials: 'include' }) : Promise.resolve(null),
+        fetch(`${api}/api/public/decks`, { credentials: 'include' })
       ]);
 
-      if (myDecksResponse.ok) {
+      // Process my decks
+      if (myDecksResponse && myDecksResponse.ok) {
         const myDecksData = await myDecksResponse.json();
-        setMyDecks(myDecksData);
+        setMyDecks(Array.isArray(myDecksData) ? myDecksData : []);
       } else {
-        console.error('Failed to load my decks');
         setMyDecks([]);
       }
 
-      if (publishedDecksResponse.ok) {
+      // Process published decks
+      if (publishedDecksResponse && publishedDecksResponse.ok) {
         const publishedDecksData = await publishedDecksResponse.json();
-        setPublishedDecks(publishedDecksData);
+
+        // Handle both paginated and non-paginated responses
+        const decks = Array.isArray(publishedDecksData)
+          ? publishedDecksData
+          : publishedDecksData.decks || [];
+
+        // Parse deck content for published decks
+        const parsedDecks = await Promise.all(
+          decks.map(async (deck) => ({
+            ...deck,
+            parsedDeck: await parseDeckContent(deck.deck_content),
+            type: 'published'
+          }))
+        );
+
+        setPublishedDecks(parsedDecks);
       } else {
-        console.error('Failed to load published decks');
         setPublishedDecks([]);
       }
-
     } catch (error) {
-      console.error('Error loading decks:', error);
+      console.error('Error fetching decks:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to load decks. Please try again.',
+        title: 'Error loading decks',
+        description: 'Could not load decks. Please try again.',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -478,6 +473,31 @@ const UnifiedDeckModal = ({
       setPublishedDecks([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Function to parse deck content string
+  const parseDeckContent = async (deckContent) => {
+    if (!deckContent || typeof deckContent !== 'string') {
+      return { cards: [] };
+    }
+
+    try {
+      const response = await fetch(`${api}/api/public/decks/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deckContent })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to parse deck content');
+      }
+
+      const parsedDeck = await response.json();
+      return parsedDeck;
+    } catch (error) {
+      console.error('Error parsing deck content:', error);
+      return { cards: [] };
     }
   };
 
@@ -539,15 +559,21 @@ const UnifiedDeckModal = ({
   const handleDeckSelect = async (deck) => {
     setSelectedDeckId(deck.id);
 
-    if (context === 'navbar') {
-      // Don't close modal yet, let user choose destination
-      return;
-    } else {
-      // For DeckBuilder context, we need to ensure we have full deck details
+    if (context !== 'navbar') {
+      // For DeckBuilder and MatchUp contexts, process the deck immediately
       if (context === 'deckbuilder') {
         try {
-          // Check if this is a saved deck that needs full details
-          if (deck.type === 'saved' || (!deck.type && !deck.deck_content)) {
+          // For deckbuilder, we always need to fetch full deck details
+          if (deck.type === 'published' || 'deck_title' in deck) {
+            // Published deck - use parsed data
+            const deckToReturn = {
+              ...deck,
+              name: deck.deck_title || deck.name,
+              cards: deck.parsedDeck?.cards || []
+            };
+            onSelect(deckToReturn);
+          } else {
+            // Saved deck - fetch full details with cards
             const response = await fetch(`${api}/api/decks/${deck.id}`, {
               credentials: 'include'
             });
@@ -558,9 +584,6 @@ const UnifiedDeckModal = ({
             } else {
               throw new Error('Failed to load full deck details');
             }
-          } else {
-            // Published deck, already has full data from parsing
-            onSelect(deck);
           }
         } catch (error) {
           console.error('Error loading full deck details:', error);
@@ -573,68 +596,32 @@ const UnifiedDeckModal = ({
           });
           return;
         }
-      } else {
-        // For MatchUp, use deck as-is
-        onSelect(deck);
-      }
-
-      onClose();
-    }
-  };
-
-  const handleLoadInMatchUp = async () => {
-    if (!selectedDeckId) return;
-
-    const selectedFromMyDecks = filteredMyDecks.find(deck => deck.id === selectedDeckId);
-    const selectedFromPublished = filteredPublishedDecks.find(deck => deck.id === selectedDeckId);
-    const deck = selectedFromMyDecks || selectedFromPublished;
-
-    if (deck) {
-      if (context === 'navbar') {
-        // Navigate to MatchUp page with deck parameters
-        const deckContent = deck.deck_content || await generateDeckContentForNavigation(deck);
-        if (deckContent) {
-          window.location.href = `/?tab=matchup&deck=${encodeURIComponent(deckContent)}`;
-        }
-      } else {
-        onSelect(deck, 'matchup');
-      }
-      onClose();
-    }
-  };
-
-  const handleLoadInDeckBuilder = async () => {
-    if (!selectedDeckId) return;
-
-    const selectedFromMyDecks = filteredMyDecks.find(deck => deck.id === selectedDeckId);
-    const selectedFromPublished = filteredPublishedDecks.find(deck => deck.id === selectedDeckId);
-    const deck = selectedFromMyDecks || selectedFromPublished;
-
-    if (deck) {
-      if (context === 'navbar') {
-        // Navigate to DeckBuilder page and trigger deck loading
-        window.location.href = `/?tab=decks&loadDeck=${deck.id}`;
-      } else {
+      } else if (context === 'matchup') {
         try {
-          // For DeckBuilder context, we need full deck details
-          if (selectedFromMyDecks) {
-            // Saved deck - fetch full details
+          // For MatchUp, ensure we have proper deck structure with cards
+          if (deck.type === 'published' || 'deck_title' in deck) {
+            // Published deck - use parsed data
+            const deckToReturn = {
+              ...deck,
+              name: deck.deck_title || deck.name,
+              cards: deck.parsedDeck?.cards || []
+            };
+            onSelect(deckToReturn);
+          } else {
+            // Saved deck - fetch full details with cards
             const response = await fetch(`${api}/api/decks/${deck.id}`, {
               credentials: 'include'
             });
 
             if (response.ok) {
               const fullDeckData = await response.json();
-              onSelect(fullDeckData, 'deckbuilder');
+              onSelect(fullDeckData);
             } else {
               throw new Error('Failed to load full deck details');
             }
-          } else {
-            // Published deck - already parsed with full data
-            onSelect(deck, 'deckbuilder');
           }
         } catch (error) {
-          console.error('Error loading deck for DeckBuilder:', error);
+          console.error('Error loading deck for MatchUp:', error);
           toast({
             title: 'Error loading deck',
             description: 'Failed to load complete deck data',
@@ -645,6 +632,7 @@ const UnifiedDeckModal = ({
           return;
         }
       }
+
       onClose();
     }
   };
@@ -675,13 +663,46 @@ const UnifiedDeckModal = ({
     return null;
   };
 
-  // Check if user can delete a deck
+  const handleLoadInMatchUp = async () => {
+    if (!selectedDeckId) return;
+
+    const selectedFromMyDecks = filteredMyDecks.find(deck => deck.id === selectedDeckId);
+    const selectedFromPublished = filteredPublishedDecks.find(deck => deck.id === selectedDeckId);
+    const deck = selectedFromMyDecks || selectedFromPublished;
+
+    if (deck) {
+      // Navigate to MatchUp page with deck parameters
+      const deckContent = deck.deck_content || await generateDeckContentForNavigation(deck);
+      if (deckContent) {
+        window.location.href = `/?tab=matchup&deck=${encodeURIComponent(deckContent)}`;
+      }
+      onClose();
+    }
+  };
+
+  const handleLoadInDeckBuilder = async () => {
+    if (!selectedDeckId) return;
+
+    const selectedFromMyDecks = filteredMyDecks.find(deck => deck.id === selectedDeckId);
+    const selectedFromPublished = filteredPublishedDecks.find(deck => deck.id === selectedDeckId);
+    const deck = selectedFromMyDecks || selectedFromPublished;
+
+    if (deck) {
+      // Navigate to DeckBuilder page and trigger deck loading
+      window.location.href = `/?tab=decks&loadDeck=${deck.id}`;
+      onClose();
+    }
+  };
+
+  // Check if user can delete a deck - Fixed logic for My Decks
   const canDeleteMyDeck = (deck) => {
+    // Users can always delete their own saved decks
     return user && deck.user_id === user.id;
   };
 
   const canDeletePublishedDeck = (deck) => {
-    return user && (user.role === 'admin' || deck.publisher === user.username);
+    // Admin users can delete any published deck, or users can delete their own published decks
+    return user && (user.role === 'admin' || user.role === 'Admin' || deck.publisher === user.username);
   };
 
   // Get appropriate title based on context
@@ -712,218 +733,147 @@ const UnifiedDeckModal = ({
               </HStack>
               {context === 'navbar' && (
                 <Text fontSize="sm" color="gray.600">
-                  Select a deck and choose where to open it
+                  Select a deck and choose where to use it
                 </Text>
               )}
             </VStack>
           </ModalHeader>
+
           <ModalCloseButton />
 
-          <ModalBody px={6} py={4} overflow="auto">
-            <Tabs index={activeTab} onChange={setActiveTab} variant="enclosed" colorScheme="blue">
-              <TabList mb={4}>
-                <Tab>
-                  <HStack spacing={2}>
-                    <Icon as={FiUser} />
-                    <Text>My Decks</Text>
-                    <Badge variant="subtle" colorScheme="blue">{filteredMyDecks.length}</Badge>
-                  </HStack>
-                </Tab>
-                <Tab>
-                  <HStack spacing={2}>
-                    <Icon as={FiDatabase} />
-                    <Text>Published Decks</Text>
-                    <Badge variant="subtle" colorScheme="green">{filteredPublishedDecks.length}</Badge>
-                  </HStack>
-                </Tab>
-              </TabList>
+          <ModalBody px={6} py={0}>
+            {loading ? (
+              <Box textAlign="center" py={8}>
+                <Spinner size="xl" color="blue.500" />
+                <Text mt={4} color="gray.600">Loading decks...</Text>
+              </Box>
+            ) : (
+              <Tabs variant="enclosed" colorScheme="blue">
+                <TabList>
+                  <Tab>
+                    <HStack spacing={2}>
+                      <Icon as={FiFolder} />
+                      <Text>My Decks</Text>
+                      <Badge colorScheme="blue" variant="subtle">
+                        {filteredMyDecks.length}
+                      </Badge>
+                    </HStack>
+                  </Tab>
+                  <Tab>
+                    <HStack spacing={2}>
+                      <Icon as={FiDatabase} />
+                      <Text>Published Decks</Text>
+                      <Badge colorScheme="green" variant="subtle">
+                        {filteredPublishedDecks.length}
+                      </Badge>
+                    </HStack>
+                  </Tab>
+                </TabList>
 
-              <TabPanels>
-                {/* My Decks Tab */}
-                <TabPanel px={0}>
-                  <VStack spacing={4} align="stretch">
-                    {/* Search */}
-                    <InputGroup>
-                      <InputLeftElement pointerEvents="none">
-                        <SearchIcon color="gray.400" />
-                      </InputLeftElement>
-                      <Input
-                        placeholder="Search your decks..."
-                        value={myDecksSearchTerm}
-                        onChange={(e) => setMyDecksSearchTerm(e.target.value)}
-                        bg="white"
-                      />
-                    </InputGroup>
+                <TabPanels>
+                  {/* My Decks Tab */}
+                  <TabPanel px={0} py={4}>
+                    <VStack spacing={4} align="stretch">
+                      {/* Search Bar */}
+                      <InputGroup>
+                        <InputLeftElement pointerEvents="none">
+                          <SearchIcon color="gray.300" />
+                        </InputLeftElement>
+                        <Input
+                          placeholder="Search your decks..."
+                          value={myDecksSearchTerm}
+                          onChange={(e) => setMyDecksSearchTerm(e.target.value)}
+                        />
+                      </InputGroup>
 
-                    {/* Decks Grid */}
-                    <Box minH="200px" maxH="400px" overflow="auto">
-                      {loading ? (
-                        <Flex justify="center" py={8}>
-                          <Spinner size="lg" color="blue.500" />
-                        </Flex>
-                      ) : filteredMyDecks.length === 0 ? (
-                        <Flex
-                          direction="column"
-                          align="center"
-                          justify="center"
-                          py={12}
-                          textAlign="center"
-                        >
-                          <Icon as={FiFolder} fontSize="3xl" color="gray.400" mb={4} />
-                          <Text fontSize="lg" fontWeight="medium" color="gray.600" mb={2}>
-                            {myDecksSearchTerm ? 'No matching decks found' : 'No saved decks yet'}
-                          </Text>
-                          <Text fontSize="sm" color="gray.500">
-                            {myDecksSearchTerm
-                              ? 'Try adjusting your search terms'
-                              : 'Create and save your first deck to see it here'
-                            }
-                          </Text>
-                        </Flex>
-                      ) : (
-                        <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5, xl: 6 }} spacing={4}>
+                      {/* My Decks Grid */}
+                      {filteredMyDecks.length > 0 ? (
+                        <SimpleGrid columns={{ base: 2, md: 3, lg: 4, xl: 6 }} spacing={4}>
                           {filteredMyDecks.map((deck) => (
                             <DeckCard
                               key={deck.id}
                               deck={deck}
-                              onSelect={handleDeckSelect}
-                              onDelete={handleDeleteDeck}
-                              canDelete={canDeleteMyDeck(deck)}
                               isSelected={selectedDeckId === deck.id}
-                              type="saved"
+                              onSelect={handleDeckSelect}
                               context={context}
+                              onDelete={handleDeleteDeck}
+                              onLoadInMatchUp={handleLoadInMatchUp}
+                              onLoadInDeckBuilder={handleLoadInDeckBuilder}
+                              canDelete={canDeleteMyDeck(deck)}
+                              hoveredDeckId={hoveredDeckId}
+                              setHoveredDeckId={setHoveredDeckId}
                             />
                           ))}
                         </SimpleGrid>
-                      )}
-                    </Box>
-                  </VStack>
-                </TabPanel>
-
-                {/* Published Decks Tab */}
-                <TabPanel px={0}>
-                  <VStack spacing={4} align="stretch">
-                    {/* Search */}
-                    <InputGroup>
-                      <InputLeftElement pointerEvents="none">
-                        <SearchIcon color="gray.400" />
-                      </InputLeftElement>
-                      <Input
-                        placeholder="Search published decks..."
-                        value={publishedDecksSearchTerm}
-                        onChange={(e) => setPublishedDecksSearchTerm(e.target.value)}
-                        bg="white"
-                      />
-                    </InputGroup>
-
-                    {/* Decks Grid */}
-                    <Box minH="200px" maxH="400px" overflow="auto">
-                      {loading ? (
-                        <Flex justify="center" py={8}>
-                          <Spinner size="lg" color="green.500" />
-                        </Flex>
-                      ) : filteredPublishedDecks.length === 0 ? (
-                        <Flex
-                          direction="column"
-                          align="center"
-                          justify="center"
-                          py={12}
-                          textAlign="center"
-                        >
-                          <Icon as={FiDatabase} fontSize="3xl" color="gray.400" mb={4} />
-                          <Text fontSize="lg" fontWeight="medium" color="gray.600" mb={2}>
-                            {publishedDecksSearchTerm ? 'No matching published decks found' : 'No published decks available'}
+                      ) : user ? (
+                        <Box textAlign="center" py={8}>
+                          <Icon as={FiFolder} fontSize="3xl" color="gray.300" />
+                          <Text mt={2} color="gray.500">
+                            {myDecksSearchTerm ? 'No matching decks found' : 'No saved decks yet'}
                           </Text>
-                          <Text fontSize="sm" color="gray.500">
-                            {publishedDecksSearchTerm
-                              ? 'Try adjusting your search terms'
-                              : 'Published decks from the community will appear here'
-                            }
-                          </Text>
-                        </Flex>
+                          {!myDecksSearchTerm && (
+                            <Text fontSize="sm" color="gray.400">
+                              Save decks in the Deck Builder to see them here
+                            </Text>
+                          )}
+                        </Box>
                       ) : (
-                        <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5, xl: 6 }} spacing={4}>
+                        <Box textAlign="center" py={8}>
+                          <Icon as={FiUser} fontSize="3xl" color="gray.300" />
+                          <Text mt={2} color="gray.500">Please sign in to view your decks</Text>
+                        </Box>
+                      )}
+                    </VStack>
+                  </TabPanel>
+
+                  {/* Published Decks Tab */}
+                  <TabPanel px={0} py={4}>
+                    <VStack spacing={4} align="stretch">
+                      {/* Search Bar */}
+                      <InputGroup>
+                        <InputLeftElement pointerEvents="none">
+                          <SearchIcon color="gray.300" />
+                        </InputLeftElement>
+                        <Input
+                          placeholder="Search published decks..."
+                          value={publishedDecksSearchTerm}
+                          onChange={(e) => setPublishedDecksSearchTerm(e.target.value)}
+                        />
+                      </InputGroup>
+
+                      {/* Published Decks Grid */}
+                      {filteredPublishedDecks.length > 0 ? (
+                        <SimpleGrid columns={{ base: 2, md: 3, lg: 4, xl: 6 }} spacing={4}>
                           {filteredPublishedDecks.map((deck) => (
                             <DeckCard
                               key={deck.id}
                               deck={deck}
-                              onSelect={handleDeckSelect}
-                              onDelete={handleDeleteDeck}
-                              canDelete={canDeletePublishedDeck(deck)}
                               isSelected={selectedDeckId === deck.id}
-                              type="published"
+                              onSelect={handleDeckSelect}
                               context={context}
+                              onDelete={handleDeleteDeck}
+                              onLoadInMatchUp={handleLoadInMatchUp}
+                              onLoadInDeckBuilder={handleLoadInDeckBuilder}
+                              canDelete={canDeletePublishedDeck(deck)}
+                              hoveredDeckId={hoveredDeckId}
+                              setHoveredDeckId={setHoveredDeckId}
                             />
                           ))}
                         </SimpleGrid>
+                      ) : (
+                        <Box textAlign="center" py={8}>
+                          <Icon as={FiDatabase} fontSize="3xl" color="gray.300" />
+                          <Text mt={2} color="gray.500">
+                            {publishedDecksSearchTerm ? 'No matching published decks found' : 'No published decks available'}
+                          </Text>
+                        </Box>
                       )}
-                    </Box>
-                  </VStack>
-                </TabPanel>
-              </TabPanels>
-            </Tabs>
+                    </VStack>
+                  </TabPanel>
+                </TabPanels>
+              </Tabs>
+            )}
           </ModalBody>
-
-          <ModalFooter bg="gray.50" borderTop="1px solid" borderColor="gray.200">
-            <Flex
-              direction={{ base: selectedDeckId && context === 'navbar' ? 'column' : 'row', sm: 'row' }}
-              width="100%"
-              gap={3}
-              align="stretch"
-            >
-              <Button onClick={onClose} variant="outline" order={{ base: 3, sm: 1 }}>
-                Cancel
-              </Button>
-
-              {context === 'navbar' && selectedDeckId && (
-                <>
-                  <Button
-                    leftIcon={<FiPlay />}
-                    colorScheme="green"
-                    onClick={handleLoadInMatchUp}
-                    flex="1"
-                    order={{ base: 1, sm: 2 }}
-                    size="md"
-                    fontWeight="semibold"
-                    _hover={{ transform: 'translateY(-1px)', shadow: 'md' }}
-                  >
-                    To MatchUp
-                  </Button>
-                  <Button
-                    leftIcon={<FiEdit3 />}
-                    colorScheme="blue"
-                    onClick={handleLoadInDeckBuilder}
-                    flex="1"
-                    order={{ base: 2, sm: 3 }}
-                    size="md"
-                    fontWeight="semibold"
-                    _hover={{ transform: 'translateY(-1px)', shadow: 'md' }}
-                  >
-                    To Builder
-                  </Button>
-                </>
-              )}
-
-              {context !== 'navbar' && selectedDeckId && (
-                <Button
-                  colorScheme="blue"
-                  onClick={() => {
-                    const selectedFromMyDecks = filteredMyDecks.find(deck => deck.id === selectedDeckId);
-                    const selectedFromPublished = filteredPublishedDecks.find(deck => deck.id === selectedDeckId);
-                    const deck = selectedFromMyDecks || selectedFromPublished;
-                    if (deck) {
-                      handleDeckSelect(deck);
-                    }
-                  }}
-                  flex="1"
-                  fontWeight="semibold"
-                  _hover={{ transform: 'translateY(-1px)', shadow: 'md' }}
-                >
-                  {context === 'deckbuilder' ? 'Load in Deck Builder' : 'Select for Match Up'}
-                </Button>
-              )}
-            </Flex>
-          </ModalFooter>
         </ModalContent>
       </Modal>
 
