@@ -491,8 +491,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
         onSelect={(selectedDeck) => {
           // For navbar context, the deck selection just highlights the deck
           // The actual navigation happens via the "To MatchUp" and "To Builder" buttons
-          // So we don't need to do anything here except maybe log it
-          console.log('Deck selected in navbar:', selectedDeck.name || selectedDeck.deck_title);
         }}
         context="navbar"
         title="Deck Management"

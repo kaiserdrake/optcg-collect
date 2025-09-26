@@ -459,13 +459,10 @@ export const useDeckBuilder = () => {
       // Check if deckToLoad is already a complete deck object (published deck case)
       if (deckToLoad && typeof deckToLoad === 'object' && deckToLoad.cards && Array.isArray(deckToLoad.cards)) {
         // It's already a complete deck object (from UnifiedDeckModal published deck)
-        console.log('Loading complete deck object:', deckToLoad);
         loadedDeck = deckToLoad;
       } else {
         // It's a deck ID or deck object that needs to be fetched from API
         const deckId = deckToLoad.id || deckToLoad;
-        console.log('Fetching deck from API:', deckId);
-
         const response = await fetch(`${api}/api/decks/${deckId}`, {
           credentials: 'include',
         });
