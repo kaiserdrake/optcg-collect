@@ -252,12 +252,10 @@ export default function DeckBuilder() {
 
     // Check for temporary deck data from sessionStorage (for published decks from navbar)
     if (tempDeckParam === 'published') {
-      console.log('Loading temporary deck from sessionStorage');
       try {
         const tempDeckData = sessionStorage.getItem('tempDeckData');
         if (tempDeckData) {
           const deckData = JSON.parse(tempDeckData);
-          console.log('Loaded published deck from sessionStorage:', deckData.name);
           setDeck(deckData);
 
           // Clean up
@@ -281,7 +279,6 @@ export default function DeckBuilder() {
     }
     // Check for regular loadDeck parameter (for saved decks)
     else if (loadDeckId && deck?.id !== parseInt(loadDeckId)) {
-      console.log('Loading deck from URL param:', loadDeckId);
       handleLoadDeck(loadDeckId, () => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

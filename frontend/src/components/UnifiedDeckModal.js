@@ -45,7 +45,17 @@ import CardImage from './CardImage';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-// Function to get first card image URL from deck content (for published decks)
+// Function to get first card image URL from already parsed deck data (for published decks)
+const getFirstCardImageFromParsedDeck = (deck) => {
+  // For published decks, we already have parsedDeck.cards available
+  if (deck.parsedDeck && deck.parsedDeck.cards && deck.parsedDeck.cards.length > 0) {
+    const firstCard = deck.parsedDeck.cards[0];
+    return firstCard.card?.img_url || null;
+  }
+  return null;
+};
+
+// Function to get first card image URL from deck content (for published decks) - FALLBACK ONLY
 const getFirstCardImageUrl = async (deckContent) => {
   if (!deckContent || typeof deckContent !== 'string') {
     return null;
@@ -59,16 +69,16 @@ const getFirstCardImageUrl = async (deckContent) => {
     const match = firstEntry.match(/^(\d+)x(.+)$/);
     if (!match) return null;
 
-    const cardCode = match[2].trim();
+    const cardId = match[2].trim(); // This is the card ID, not card_code
 
     // Try authenticated search first, then fallback to public search
-    let response = await fetch(`${api}/api/cards/search?keyword=id:${cardCode}`, {
+    let response = await fetch(`${api}/api/cards/search?keyword=id:${cardId}`, {
       credentials: 'include'
     });
 
     // If authentication fails (401), try public API
     if (!response.ok && response.status === 401) {
-      response = await fetch(`${api}/api/public/cards/search?keyword=id:${cardCode}`);
+      response = await fetch(`${api}/api/public/cards/search?keyword=id:${cardId}`);
     }
 
     if (response.ok) {
@@ -76,10 +86,11 @@ const getFirstCardImageUrl = async (deckContent) => {
 
       // Handle both new paginated response format and legacy format
       const searchResults = Array.isArray(searchData) ?
-        searchData : (searchData.cards || []);
+        searchData : (searchData.results || searchData.cards || []);
 
       if (searchResults.length > 0) {
-        const card = searchResults.find(c => c.card_code === cardCode) || searchResults[0];
+        // Find the card with the exact ID, or fallback to first result
+        const card = searchResults.find(c => c.id == cardId) || searchResults[0]; // Use == for type coercion
         return card.img_url;
       }
     }
@@ -138,11 +149,23 @@ const DeckCard = ({
 
   useEffect(() => {
     const loadThumbnailImage = async () => {
-      if (isPublished && deck.deck_content && !thumbnailImage) {
-        // For published decks, always try to get first card image
+      if (isPublished && !thumbnailImage) {
+        // For published decks, try to get first card image from already parsed data first
         setImageLoading(true);
         try {
-          const imageUrl = await getFirstCardImageUrl(deck.deck_content);
+          let imageUrl = null;
+
+          // First try: use already parsed deck data (most efficient)
+          if (deck.parsedDeck && deck.parsedDeck.cards && deck.parsedDeck.cards.length > 0) {
+            const firstCard = deck.parsedDeck.cards[0];
+            imageUrl = firstCard.card?.img_url || null;
+          }
+
+          // Fallback: if no image from parsed data, try API call
+          if (!imageUrl && deck.deck_content) {
+            imageUrl = await getFirstCardImageUrl(deck.deck_content);
+          }
+
           setThumbnailImage(imageUrl);
         } catch (error) {
           console.error('Error loading thumbnail:', error);
