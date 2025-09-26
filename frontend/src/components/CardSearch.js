@@ -604,6 +604,10 @@ function CardSearch({
     if (!performSearch || !isClient) return;
 
     setCurrentPage(1); // Reset to first page when toggling collection
+    // Clear the lastSearchParamsRef when toggling collection state
+    // This ensures the search will run even if parameters appear identical
+    lastSearchParamsRef.current = '';
+
     if (inCollection) {
       performSearch(searchTerm.trim(), true, 1, itemsPerPage);
     } else {
