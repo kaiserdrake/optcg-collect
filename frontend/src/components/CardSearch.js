@@ -21,7 +21,7 @@ import ListViewCollect from './ListViewCollect';
 import ThumbViewCollect from './ThumbViewCollect';
 import ListViewBuilder from './ListViewBuilder';
 import ThumbViewBuilder from './ThumbViewBuilder';
-
+import CollectionStatistics from './CollectionStatistics';
 import TabletopCanvas from './TabletopCanvas';
 
 // Style helpers
@@ -604,6 +604,10 @@ function CardSearch({
     if (!performSearch || !isClient) return;
 
     setCurrentPage(1); // Reset to first page when toggling collection
+    // Clear the lastSearchParamsRef when toggling collection state
+    // This ensures the search will run even if parameters appear identical
+    lastSearchParamsRef.current = '';
+
     if (inCollection) {
       performSearch(searchTerm.trim(), true, 1, itemsPerPage);
     } else {
@@ -686,7 +690,8 @@ function CardSearch({
 
   return (
     <VStack spacing={4} align="stretch">
-
+      {/* Collection Statistics - Only show in collection mode */}
+      {mode === 'collection' && <CollectionStatistics />}
       {/* Tabletop Canvas - Only show in collection mode */}
       {mode === 'collection' && (
         <TabletopCanvas

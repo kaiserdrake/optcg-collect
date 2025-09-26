@@ -1,0 +1,47 @@
+/* Prevent layout shift caused by scrollbars appearing/disappearing */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Alternative fallback for older browsers that don't support scrollbar-gutter */
+@supports not (scrollbar-gutter: stable) {
+  html {
+    overflow-y: scroll;
+  }
+}
+
+/* Ensure consistent scrollbar behavior across the app */
+body {
+  /* Remove default margins that might affect layout */
+  margin: 0;
+  padding: 0;
+}
+
+/*
+ * Optional: Style the scrollbar to match your theme
+ * This applies to webkit-based browsers (Chrome, Safari, Edge)
+ */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f3f4;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/*
+ * For Firefox, use scrollbar-width and scrollbar-color
+ */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f3f4;
+}

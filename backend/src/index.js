@@ -2584,6 +2584,193 @@ app.post('/api/public/decks/parse', async (req, res) => {
   }
 });
 
+app.get('/api/collection/statistics', isAuthenticated, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Add created_at column if it doesn't exist
+    try {
+      await query(`
+        ALTER TABLE owned_cards
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+      `);
+    } catch (err) {
+      // Column might already exist, continue
+    }
+
+    // Get all owned cards with card details
+    const ownedCardsResult = await query(`
+      SELECT
+        oc.card_id,
+        c.name,
+        c.card_code,
+        c.color,
+        c.rarity,
+        c.block,
+        COUNT(*) as count,
+        MIN(oc.created_at) as first_added
+      FROM owned_cards oc
+      JOIN cards c ON oc.card_id = c.id
+      WHERE oc.user_id = $1 AND oc.is_proxy = false
+      GROUP BY oc.card_id, c.name, c.card_code, c.color, c.rarity, c.block
+      ORDER BY count DESC
+    `, [userId]);
+
+    // SAFE: Keep original pack distribution query that was working
+    const packDistributionResult = await query(`
+      SELECT
+        SUBSTRING(cpa.pack_code FROM '^[A-Z]+[0-9]+') as pack_prefix,
+        COUNT(DISTINCT oc.card_id) as count
+      FROM owned_cards oc
+      JOIN card_pack_appearances cpa ON oc.card_id = cpa.card_id
+      WHERE oc.user_id = $1 AND oc.is_proxy = false
+      GROUP BY pack_prefix
+      ORDER BY count DESC
+    `, [userId]);
+
+    // Get timeline data for the last 30 days
+    const timelineResult = await query(`
+      WITH date_series AS (
+        SELECT generate_series(
+          CURRENT_DATE - INTERVAL '29 days',
+          CURRENT_DATE,
+          INTERVAL '1 day'
+        )::date as date
+      ),
+      daily_additions AS (
+        SELECT
+          DATE(oc.created_at) as date,
+          COUNT(*) as cards_added
+        FROM owned_cards oc
+        WHERE oc.user_id = $1
+          AND oc.is_proxy = false
+          AND oc.created_at >= CURRENT_DATE - INTERVAL '29 days'
+        GROUP BY DATE(oc.created_at)
+      )
+      SELECT
+        ds.date,
+        COALESCE(da.cards_added, 0) as cards_added
+      FROM date_series ds
+      LEFT JOIN daily_additions da ON ds.date = da.date
+      ORDER BY ds.date ASC
+    `, [userId]);
+
+    // Get total available cards for completion rate
+    const totalCardsResult = await query('SELECT COUNT(DISTINCT id) as total FROM cards');
+
+    const ownedCards = ownedCardsResult.rows;
+    const totalAvailableCards = parseInt(totalCardsResult.rows[0].total);
+
+    // Calculate basic statistics
+    const uniqueCardCount = ownedCards.length;
+    const totalCardCount = ownedCards.reduce((sum, card) => sum + parseInt(card.count), 0);
+    const completionRate = totalAvailableCards > 0 ? (uniqueCardCount / totalAvailableCards) * 100 : 0;
+
+    // Color distribution
+    const colorDistribution = {};
+    ownedCards.forEach(card => {
+      const color = card.color || '';
+      colorDistribution[color] = (colorDistribution[color] || 0) + parseInt(card.count);
+    });
+
+    // Rarity distribution
+    const rarityDistribution = {};
+    ownedCards.forEach(card => {
+      const rarity = card.rarity || 'Unknown';
+      rarityDistribution[rarity] = (rarityDistribution[rarity] || 0) + parseInt(card.count);
+    });
+
+    // Block distribution
+    const blockDistribution = {};
+    ownedCards.forEach(card => {
+      const block = card.block ? card.block.toString() : 'Unknown';
+      blockDistribution[block] = (blockDistribution[block] || 0) + parseInt(card.count);
+    });
+
+    // Pack distribution - keep original working logic
+    const packDistribution = {};
+    packDistributionResult.rows.forEach(row => {
+      if (row.pack_prefix) {
+        packDistribution[row.pack_prefix] = parseInt(row.count);
+      }
+    });
+
+    // FALLBACK: If pack distribution is empty, try extracting from card codes
+    if (Object.keys(packDistribution).length === 0) {
+      console.log('Pack distribution empty, trying fallback method...');
+      ownedCards.forEach(card => {
+        if (card.card_code) {
+          // Extract pack prefix from card code (e.g., "ST01-001" -> "ST01")
+          const match = card.card_code.match(/^([A-Z]+[0-9]+)/);
+          if (match) {
+            const prefix = match[1];
+            packDistribution[prefix] = (packDistribution[prefix] || 0) + 1; // Count unique cards, not total count
+          }
+        }
+      });
+    }
+
+    // Timeline data for the chart
+    const timeline = timelineResult.rows.map(row => ({
+      date: row.date,
+      count: parseInt(row.cards_added)
+    }));
+
+    // Collection age (days since first card added)
+    let collectionAge = 0;
+    if (ownedCards.length > 0) {
+      const oldestCard = ownedCards.reduce((oldest, card) => {
+        const cardDate = new Date(card.first_added);
+        const oldestDate = oldest ? new Date(oldest.first_added) : null;
+        return (!oldestDate || cardDate < oldestDate) ? card : oldest;
+      }, null);
+
+      if (oldestCard && oldestCard.first_added) {
+        const firstAddedDate = new Date(oldestCard.first_added);
+        collectionAge = Math.floor((Date.now() - firstAddedDate.getTime()) / (24 * 60 * 60 * 1000));
+      }
+    }
+
+    // Additional statistics
+    const averageCardsPerUniqueCard = uniqueCardCount > 0 ? totalCardCount / uniqueCardCount : 0;
+
+    const mostCommonRarity = Object.entries(rarityDistribution)
+      .reduce((max, [rarity, count]) => count > max.count ? { rarity, count } : max,
+              { rarity: 'None', count: 0 });
+
+    const mostCommonColor = Object.entries(colorDistribution)
+      .reduce((max, [color, count]) => count > max.count ? { color, count } : max,
+              { color: 'None', count: 0 });
+
+    // Calculate total cards added in the last 30 days
+    const recentActivity = timeline.reduce((sum, day) => sum + day.count, 0);
+
+    res.json({
+      uniqueCardCount,
+      totalCardCount,
+      completionRate,
+      collectionAge,
+      colorDistribution,
+      rarityDistribution,
+      blockDistribution,
+      packDistribution,
+      timeline,
+      additionalStats: {
+        averageCardsPerUniqueCard: Math.round(averageCardsPerUniqueCard * 100) / 100,
+        mostCommonRarity: mostCommonRarity.rarity,
+        mostCommonColor: mostCommonColor.color || 'Colorless',
+        totalPacks: Object.keys(packDistribution).length,
+        totalBlocks: Object.keys(blockDistribution).length,
+        recentActivity: recentActivity
+      }
+    });
+
+  } catch (err) {
+    console.error('Error fetching collection statistics:', err);
+    res.status(500).json({ message: 'Server error while fetching statistics.' });
+  }
+});
+
 // Start the server
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
