@@ -742,74 +742,71 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                 <Text color="gray.600">Loading card locations...</Text>
               </VStack>
             ) : (
-              <VStack spacing={4} align="stretch">
-                {/* Modern Compact Controls */}
-                {filteredData.length > 0 && (
-                  <Box
-                    bg="white"
-                    border="1px"
-                    borderColor="gray.200"
-                    borderRadius="lg"
-                    p={4}
-                    shadow="sm"
-                  >
-                    <HStack spacing={6} align="center" justify="space-between" flexWrap="wrap">
-                      {/* Hide Complete Switch */}
-                      <FormControl display="flex" alignItems="center" w="auto">
-                        <FormLabel htmlFor="hide-complete" mb={0} mr={3} fontSize="sm" fontWeight="medium">
-                          Hide Complete
-                        </FormLabel>
-                        <Switch
-                          id="hide-complete"
-                          isChecked={hideComplete}
-                          onChange={(e) => setHideComplete(e.target.checked)}
-                          colorScheme="blue"
-                          size="md"
-                        />
-                      </FormControl>
+                <VStack spacing={4} align="stretch">
+                  {/* Modern Compact Controls */}
+                  {locateData.length > 0 && (
+                    <Box
+                      bg="white"
+                      border="1px"
+                      borderColor="gray.200"
+                      borderRadius="lg"
+                      p={4}
+                      shadow="sm"
+                    >
+                      <HStack spacing={6} align="center" justify="space-between" flexWrap="wrap">
+                        {/* Hide Complete Switch */}
+                        <FormControl display="flex" alignItems="center" w="auto">
+                          <FormLabel htmlFor="hide-complete" mb={0} mr={3} fontSize="sm" fontWeight="medium">
+                            Hide Complete
+                          </FormLabel>
+                          <Switch
+                            id="hide-complete"
+                            isChecked={hideComplete}
+                            onChange={(e) => setHideComplete(e.target.checked)}
+                            colorScheme="blue"
+                            size="md"
+                          />
+                        </FormControl>
 
-                      {/* Move All Controls */}
-                      <HStack spacing={3} flex="1" justify="flex-end" minW="280px">
-                        <Text fontSize="sm" color="gray.600" fontWeight="medium" whiteSpace="nowrap">
-                          Move all to:
-                        </Text>
-                        <Select
-                          placeholder="Choose location..."
-                          size="sm"
-                          maxW="180px"
-                          value={selectedMoveAllLocation}
-                          onChange={(e) => setSelectedMoveAllLocation(e.target.value)}
-                          bg="white"
-                          borderColor="gray.300"
-                          borderRadius="md"
-                          fontSize="sm"
-                          _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px blue.500" }}
-                        >
-                          {locations.map((location) => (
-                            <option key={location.id} value={location.id}>
-                              {location.name}
+                        {/* Move All Controls */}
+                        <HStack spacing={3} flex="1" justify="flex-end" minW="280px">
+                          <Text fontSize="sm" color="gray.600" fontWeight="medium" whiteSpace="nowrap">
+                            Move all to:
+                          </Text>
+                          <Select
+                            placeholder="Choose location..."
+                            size="sm"
+                            maxW="180px"
+                            value={selectedMoveAllLocation}
+                            onChange={(e) => setSelectedMoveAllLocation(e.target.value)}
+                            bg="white"
+                            borderColor="gray.300"
+                            borderRadius="md"
+                            fontSize="sm"
+                            _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px blue.500" }}
+                          >
+                            {locations.map((location) => (
+                              <option key={location.id} value={location.id}>
+                                {location.name}
+                              </option>
+                            ))}
+                            <option value="remove" style={{ color: 'red' }}>
+                              Remove Location
                             </option>
-                          ))}
-                          <option value="remove">🗑️ Remove All</option>
-                        </Select>
-                        <Button
-                          size="sm"
-                          colorScheme="blue"
-                          onClick={handleMoveAllClick}
-                          isDisabled={!selectedMoveAllLocation}
-                          isLoading={isMovingAll}
-                          borderRadius="md"
-                          fontWeight="medium"
-                          px={4}
-                          _hover={{ transform: "translateY(-1px)", shadow: "md" }}
-                          transition="all 0.2s"
-                        >
-                          Apply
-                        </Button>
+                          </Select>
+                          <Button
+                            size="sm"
+                            colorScheme="blue"
+                            onClick={handleMoveAllClick}
+                            isDisabled={!selectedMoveAllLocation}
+                            minW="80px"
+                          >
+                            Move All
+                          </Button>
+                        </HStack>
                       </HStack>
-                    </HStack>
-                  </Box>
-                )}
+                    </Box>
+                  )}
 
                 {/* Cards Display - Table for Desktop, Cards for Mobile */}
                 {isMobile ? (
