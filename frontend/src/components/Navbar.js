@@ -193,8 +193,9 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     onSyncOpen();
 
     try {
-      const response = await fetch(`${api}/api/admin/sync-cards`, {
-        method: 'POST',
+      // Use the correct endpoint that exists in the backend
+      const response = await fetch(`${api}/api/sync/stream`, {
+        method: 'GET', // Changed from POST to GET
         credentials: 'include',
       });
 
@@ -216,35 +217,23 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
 
         for (const line of lines) {
           if (line.trim()) {
-            try {
-              const data = JSON.parse(line);
-              if (data.type === 'log') {
-                setSyncLogs(prev => [...prev, data.message]);
-              } else if (data.type === 'complete') {
-                setSyncLogs(prev => [...prev, 'Sync completed successfully!']);
+            // The backend sends Server-Sent Events in format "data: <message>"
+            if (line.startsWith('data: ')) {
+              const logMessage = line.substring(6); // Remove "data: " prefix
+              setSyncLogs(prev => [...prev, logMessage]);
+
+              // Check for sync completion
+              if (logMessage.startsWith('SYNC_END:')) {
                 toast({
                   title: 'Sync Complete',
-                  description: `Updated ${data.stats.updated} cards, added ${data.stats.added} new cards.`,
+                  description: 'Card database sync completed successfully',
                   status: 'success',
                   duration: 5000,
                   isClosable: true,
                 });
                 setIsSyncing(false);
                 break;
-              } else if (data.type === 'error') {
-                setSyncLogs(prev => [...prev, `Error: ${data.message}`]);
-                toast({
-                  title: 'Sync Error',
-                  description: data.message,
-                  status: 'error',
-                  duration: 5000,
-                  isClosable: true,
-                });
-                setIsSyncing(false);
-                break;
               }
-            } catch (e) {
-              console.warn('Failed to parse SSE data:', line);
             }
           }
         }

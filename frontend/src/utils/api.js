@@ -203,6 +203,7 @@ export const api = {
       ownedCount,
       proxyCount
     }),
+    getStatistics: () => api.get('/api/collection/statistics'),
   },
 
 };

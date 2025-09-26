@@ -21,7 +21,7 @@ import ListViewCollect from './ListViewCollect';
 import ThumbViewCollect from './ThumbViewCollect';
 import ListViewBuilder from './ListViewBuilder';
 import ThumbViewBuilder from './ThumbViewBuilder';
-
+import CollectionStatistics from './CollectionStatistics';
 import TabletopCanvas from './TabletopCanvas';
 
 // Style helpers
@@ -690,7 +690,8 @@ function CardSearch({
 
   return (
     <VStack spacing={4} align="stretch">
-
+      {/* Collection Statistics - Only show in collection mode */}
+      {mode === 'collection' && <CollectionStatistics />}
       {/* Tabletop Canvas - Only show in collection mode */}
       {mode === 'collection' && (
         <TabletopCanvas

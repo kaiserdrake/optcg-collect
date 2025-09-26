@@ -694,11 +694,8 @@ const TabletopCanvas = ({
           </Text>
           <HStack spacing={2}>
             <Badge variant="solid" colorScheme={selectedCards.size > 0 ? 'blue' : 'gray'}>
-              {selectedCards.size} selected
+              {selectedCards.size}/{allDisplayCards.length} SELECTED
             </Badge>
-            <Text fontSize="sm" color={useColorModeValue('gray.500', 'gray.400')}>
-              {allDisplayCards.length} cards shown
-            </Text>
             <Text fontSize="xs" color={useColorModeValue('gray.500', 'gray.400')}>
               {isExpanded ? '▼' : '▶'}
             </Text>
