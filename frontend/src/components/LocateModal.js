@@ -22,25 +22,25 @@ import {
   Spinner,
   Select,
   useDisclosure,
-  AlertDialog,
-  AlertDialogOverlay,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogBody,
-  AlertDialogFooter,
   Tag,
   Tooltip,
   useBreakpointValue,
   Switch,
   FormControl,
-  FormLabel
+  FormLabel,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem
 } from '@chakra-ui/react';
 
-import { FiMapPin } from 'react-icons/fi';
+import { FiMapPin, FiTag, FiCopy } from 'react-icons/fi';
 import CardImage from './CardImage';
 import SetLocationModal from './SetLocationModal';
-import { CARD_EVENTS } from '@/utils/cardEvents';
+import CardTags from './CardTags';
+import { CARD_EVENTS, dispatchCardUpdate } from '@/utils/cardEvents';
 import { getTagStyles } from '@/utils/cardStyles';
+import { TAG_DEFINITIONS, getTagOptions } from '@/utils/tagDefinitions';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -48,6 +48,143 @@ const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const truncateText = (text, maxLength) => {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength) + '...';
+};
+
+// Helper function to ensure tags are arrays (fixes CardTags mapping error)
+const ensureTagsAreArrays = (card) => {
+  if (!card) return card;
+
+  const parsePostgreSQLArray = (pgArray) => {
+    if (Array.isArray(pgArray)) return pgArray;
+    if (!pgArray || pgArray === 'null' || pgArray === null || pgArray === undefined) return [];
+
+    // Parse PostgreSQL array format like "{favorite,want}" -> ["favorite", "want"]
+    if (typeof pgArray === 'string') {
+      if (pgArray === '{}') return [];
+      const cleaned = pgArray.replace(/[{}]/g, '');
+      return cleaned ? cleaned.split(',') : [];
+    }
+
+    return [];
+  };
+
+  const processedCard = {
+    ...card,
+    user_tags: parsePostgreSQLArray(card.user_tags),
+    global_tags: parsePostgreSQLArray(card.global_tags)
+  };
+
+  // Convert location_name/location_id to location object (same as CardDetailModal and CardSearch)
+  if (card.location_name !== null && card.location_id !== null) {
+    processedCard.location = {
+      id: card.location_id,
+      name: card.location_name,
+      marker: card.location_marker || 'gray'
+    };
+  } else if (card.location && typeof card.location === 'object') {
+    // Location is already an object, keep it as is
+    processedCard.location = card.location;
+  } else {
+    processedCard.location = null; // Explicitly set to null when no location
+  }
+
+  return processedCard;
+};
+
+// LocationSelector component similar to TabletopCanvas
+const LocationSelector = ({ selectedLocationId, onLocationSelect }) => {
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchLocations = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${api}/api/locations`, {
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLocations(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch locations:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLocations();
+  }, []);
+
+  if (loading) {
+    return <Text>Loading locations...</Text>;
+  }
+
+  const selectValue = selectedLocationId === null ? "REMOVE" :
+                     selectedLocationId === undefined ? "" :
+                     selectedLocationId.toString();
+
+  return (
+    <Select
+      placeholder="Select a location"
+      value={selectValue}
+      onChange={(e) => {
+        const value = e.target.value;
+        if (value === "REMOVE") {
+          onLocationSelect(null);
+        } else if (value === "") {
+          onLocationSelect(undefined);
+        } else {
+          onLocationSelect(parseInt(value));
+        }
+      }}
+    >
+      <option value="REMOVE">Remove from location</option>
+      {locations.map((location) => (
+        <option key={location.id} value={location.id}>
+          {location.name} ({location.type})
+        </option>
+      ))}
+    </Select>
+  );
+};
+
+// TagSelector component for bulk tag operations
+const TagSelector = ({ selectedTagType, selectedTagAction, onTagTypeSelect, onTagActionSelect }) => {
+  const tagOptions = getTagOptions();
+
+  return (
+    <VStack spacing={3} align="stretch">
+      <FormControl>
+        <FormLabel fontSize="sm">Tag Type</FormLabel>
+        <Select
+          placeholder="Select a tag"
+          value={selectedTagType}
+          onChange={(e) => onTagTypeSelect(e.target.value)}
+        >
+          {tagOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl>
+        <FormLabel fontSize="sm">Action</FormLabel>
+        <Select
+          placeholder="Select an action"
+          value={selectedTagAction}
+          onChange={(e) => onTagActionSelect(e.target.value)}
+          isDisabled={!selectedTagType}
+        >
+          <option value="add">Add Tag</option>
+          <option value="remove">Remove Tag</option>
+        </Select>
+      </FormControl>
+    </VStack>
+  );
 };
 
 // Interactive location badge component
@@ -58,7 +195,7 @@ const InteractiveLocationBadge = ({ card, onLocationChange }) => {
     }
   };
 
-  const hasLocation = card.location && card.location.name;
+  const hasLocation = card?.location?.name;
   const locationName = hasLocation ? card.location.name : 'Set Location';
   const marker = hasLocation ? card.location.marker || 'gray' : 'gray';
 
@@ -139,6 +276,17 @@ const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) =
             </HStack>
           </VStack>
 
+          {/* Tags Row */}
+          <HStack spacing={2}>
+            <CardTags
+              cardId={row.card.id}
+              card={row.card}
+              interactive={false}
+              size="sm"
+              showTooltips={false}
+            />
+          </HStack>
+
           {/* Counts Row */}
           <HStack spacing={4} justify="space-between" w="100%">
             <VStack align="center" spacing={0}>
@@ -186,9 +334,13 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
   const [locations, setLocations] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
-  const [selectedMoveAllLocation, setSelectedMoveAllLocation] = useState('');
-  const [isMovingAll, setIsMovingAll] = useState(false);
   const [hideComplete, setHideComplete] = useState(false);
+
+  // Bulk action states
+  const [bulkLocationId, setBulkLocationId] = useState(undefined);
+  const [bulkTagType, setBulkTagType] = useState('');
+  const [bulkTagAction, setBulkTagAction] = useState('');
+  const [isBulkActionOngoing, setIsBulkActionOngoing] = useState(false);
 
   const toast = useToast();
   const scrollContainerRef = useRef(null);
@@ -204,11 +356,17 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
     onClose: onLocationModalClose
   } = useDisclosure();
 
-  // Move All confirmation dialog
+  // Bulk Actions confirmation dialogs
   const {
-    isOpen: isMoveAllDialogOpen,
-    onOpen: onMoveAllDialogOpen,
-    onClose: onMoveAllDialogClose
+    isOpen: isBulkMoveModalOpen,
+    onOpen: onBulkMoveModalOpen,
+    onClose: onBulkMoveModalClose
+  } = useDisclosure();
+
+  const {
+    isOpen: isBulkTagModalOpen,
+    onOpen: onBulkTagModalOpen,
+    onClose: onBulkTagModalClose
   } = useDisclosure();
 
   const cancelRef = React.useRef();
@@ -252,71 +410,54 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
       locateData.forEach(row => {
         // Get the original deck card requirement info
         const baseKey = row.isAlternative ?
-          // For alternatives, we need to find the original deck requirement
           locateData.find(r => !r.isAlternative && r.card.card_code === row.card.card_code)?.cardId || row.card.card_code :
           row.cardId;
 
         if (!cardGroups[baseKey]) {
           cardGroups[baseKey] = {
-            deckCount: 0,
             totalOwned: 0,
+            deckCount: 0,
             rows: []
           };
         }
 
-        // For the original card, use its deck count
-        // For alternatives, their deckCount represents remaining needed
-        if (!row.isAlternative) {
-          cardGroups[baseKey].deckCount = row.deckCount;
-        }
-
         cardGroups[baseKey].totalOwned += (row.ownedCount || 0) + (row.proxyCount || 0);
+        cardGroups[baseKey].deckCount = Math.max(cardGroups[baseKey].deckCount, row.deckCount || 0);
         cardGroups[baseKey].rows.push(row);
       });
 
-      // Filter out complete groups and flatten back to individual rows
-      const filtered = [];
+      // Filter to show only incomplete groups
+      const incompleteRows = [];
       Object.values(cardGroups).forEach(group => {
-        const isComplete = group.totalOwned >= group.deckCount;
-        if (!isComplete) {
-          filtered.push(...group.rows);
+        if (group.totalOwned < group.deckCount) {
+          incompleteRows.push(...group.rows);
         }
       });
 
-      setFilteredData(filtered);
+      setFilteredData(incompleteRows);
     }
   }, [locateData, hideComplete]);
 
-  // Helper function to determine if a card group is incomplete
+  // Helper function to check if a card group is incomplete
   const isCardGroupIncomplete = useCallback((row) => {
-    // Group cards by their original deck card requirement (base card_code)
-    const cardGroups = {};
+    if (!row) return false;
 
+    // Build card groups like in the filter effect
+    const cardGroups = {};
     locateData.forEach(r => {
-      // Get the original deck card requirement info
       const baseKey = r.isAlternative ?
-        // For alternatives, we need to find the original deck requirement
-        locateData.find(orig => !orig.isAlternative && orig.card.card_code === r.card.card_code)?.cardId || r.card.card_code :
+        locateData.find(baseRow => !baseRow.isAlternative && baseRow.card.card_code === r.card.card_code)?.cardId || r.card.card_code :
         r.cardId;
 
       if (!cardGroups[baseKey]) {
-        cardGroups[baseKey] = {
-          deckCount: 0,
-          totalOwned: 0,
-          rows: []
-        };
-      }
-
-      // For the original card, use its deck count
-      if (!r.isAlternative) {
-        cardGroups[baseKey].deckCount = r.deckCount;
+        cardGroups[baseKey] = { totalOwned: 0, deckCount: 0 };
       }
 
       cardGroups[baseKey].totalOwned += (r.ownedCount || 0) + (r.proxyCount || 0);
-      cardGroups[baseKey].rows.push(r);
+      cardGroups[baseKey].deckCount = Math.max(cardGroups[baseKey].deckCount, r.deckCount || 0);
     });
 
-    // Find the group this row belongs to
+    // Check if current row's group is incomplete
     const currentRowBaseKey = row.isAlternative ?
       locateData.find(r => !r.isAlternative && r.card.card_code === row.card.card_code)?.cardId || row.card.card_code :
       row.cardId;
@@ -378,50 +519,58 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
             const exactResults = await exactResponse.json();
 
             // Handle both new paginated format and legacy format
-            const exactSearchResults = Array.isArray(exactResults) ? exactResults : exactResults.results || [];
+            const exactSearchResults = Array.isArray(exactResults) ?
+              exactResults : exactResults.results || [];
 
-            const exactCard = exactSearchResults.find(card => card.id === deckCardId);
+            if (exactSearchResults.length > 0) {
+              // Found exact match - use this data
+              const exactCard = ensureTagsAreArrays(exactSearchResults[0]);
 
-            if (exactCard) {
-              const exactOwnedCount = exactCard.owned_count || 0;
-              const exactProxyCount = exactCard.proxy_count || 0;
-              const totalOwnedExact = exactOwnedCount + exactProxyCount;
+              // Fix the location display issue - properly set location from card data
+              const ownedCount = exactCard.owned_count || 0;
+              const proxyCount = exactCard.proxy_count || 0;
 
-              // Add the exact match row
-              let exactLocation = 'Not Owned';
-              if (totalOwnedExact > 0) {
-                if (exactCard.location && exactCard.location.name) {
-                  exactLocation = exactCard.location.name;
+              let location = 'Not Owned';
+              if (ownedCount > 0 || proxyCount > 0) {
+                // Check for location data in the card
+                if (exactCard.location?.name || (exactCard.location_name && exactCard.location_id)) {
+                  const locationData = exactCard.location || {
+                    id: exactCard.location_id,
+                    name: exactCard.location_name,
+                    marker: exactCard.location_marker || 'gray'
+                  };
+                  location = locationData.name;
+                  exactCard.location = locationData; // Ensure location object is properly set
                 } else {
-                  exactLocation = 'Set Location';
+                  location = 'Set Location';
                 }
               }
 
-              finalRows.push({
+              const rowData = {
+                cardId: exactCard.id,
                 card: exactCard,
-                cardId: deckCardId,
-                displayCardId: deckCardId,
-                isAlternative: false,
                 deckCount,
-                ownedCount: exactOwnedCount,
-                proxyCount: exactProxyCount,
-                location: exactLocation
-              });
+                ownedCount,
+                proxyCount,
+                location,
+                isAlternative: false
+              };
 
-              // If exact match satisfies deck count, skip alternatives
-              if (totalOwnedExact >= deckCount) {
-                continue;
-              }
+              finalRows.push(rowData);
+
+              // Small delay between cards to prevent overwhelming the server
+              await new Promise(resolve => setTimeout(resolve, 100));
+              continue;
             }
           }
         } catch (error) {
           console.warn(`Failed to search for exact card ${deckCardId}:`, error);
         }
 
-        // Step 2: If exact match doesn't satisfy deck count, search for alternatives by card_code
+        // Step 2: If no exact match, search for alternatives using card_code
         try {
           const altSearchParams = new URLSearchParams({
-            keyword: `id:${deckCardCode}`, // Search by card code to find all variants
+            keyword: `id:${deckCardCode}`,
             ownedOnly: 'false',
             showProxies: 'true'
           });
@@ -434,59 +583,81 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
             const altResults = await altResponse.json();
 
             // Handle both new paginated format and legacy format
-            const altSearchResults = Array.isArray(altResults) ? altResults : altResults.results || [];
+            const altSearchResults = Array.isArray(altResults) ?
+              altResults : altResults.results || [];
 
-            // Find alternative cards with the same card_code but different ID
-            const alternatives = altSearchResults.filter(card =>
-              card.card_code === deckCardCode &&
-              card.id !== deckCardId &&
-              (card.owned_count > 0 || card.proxy_count > 0)
-            );
+            if (altSearchResults.length > 0) {
+              // Filter and prioritize alternatives
+              const alternatives = altSearchResults.filter(card =>
+                card.card_code === deckCardCode && card.id !== deckCardId
+              );
 
-            // Sort alternatives by owned count (descending) to prioritize higher counts
-            alternatives.sort((a, b) => {
-              const aTotal = (a.owned_count || 0) + (a.proxy_count || 0);
-              const bTotal = (b.owned_count || 0) + (b.proxy_count || 0);
-              return bTotal - aTotal;
-            });
+              if (alternatives.length > 0) {
+                const prioritizedCards = prioritizeAlternatives(alternatives);
 
-            // Add alternative cards until we have enough to satisfy deck count
-            let remainingNeeded = deckCount;
-            const exactCard = finalRows.find(row => row.cardId === deckCardId);
-            if (exactCard) {
-              remainingNeeded = deckCount - (exactCard.ownedCount + exactCard.proxyCount);
-            }
+                prioritizedCards.forEach(altCard => {
+                  // Fix the location display issue - properly set location from card data and ensure tags are arrays
+                  const processedAltCard = ensureTagsAreArrays(altCard);
+                  const ownedCount = processedAltCard.owned_count || 0;
+                  const proxyCount = processedAltCard.proxy_count || 0;
 
-            for (const altCard of alternatives) {
-              if (remainingNeeded <= 0) break;
-
-              const altOwnedCount = altCard.owned_count || 0;
-              const altProxyCount = altCard.proxy_count || 0;
-              const altTotalOwned = altOwnedCount + altProxyCount;
-
-              if (altTotalOwned > 0) {
-                let altLocation = 'Not Owned';
-                if (altTotalOwned > 0) {
-                  if (altCard.location && altCard.location.name) {
-                    altLocation = altCard.location.name;
-                  } else {
-                    altLocation = 'Set Location';
+                  let location = 'Not Owned';
+                  if (ownedCount > 0 || proxyCount > 0) {
+                    // Check for location data in the card
+                    if (processedAltCard.location?.name || (processedAltCard.location_name && processedAltCard.location_id)) {
+                      const locationData = processedAltCard.location || {
+                        id: processedAltCard.location_id,
+                        name: processedAltCard.location_name,
+                        marker: processedAltCard.location_marker || 'gray'
+                      };
+                      location = locationData.name;
+                      processedAltCard.location = locationData; // Ensure location object is properly set
+                    } else {
+                      location = 'Set Location';
+                    }
                   }
-                }
 
-                finalRows.push({
-                  card: altCard,
-                  cardId: altCard.id,
-                  displayCardId: `* ${altCard.id}`, // Prefix with * to indicate alternative
-                  isAlternative: true,
-                  deckCount: Math.min(remainingNeeded, altTotalOwned),
-                  ownedCount: altOwnedCount,
-                  proxyCount: altProxyCount,
-                  location: altLocation
+                  const rowData = {
+                    cardId: processedAltCard.id,
+                    card: processedAltCard,
+                    deckCount,
+                    ownedCount,
+                    proxyCount,
+                    location,
+                    isAlternative: true
+                  };
+
+                  finalRows.push(rowData);
                 });
+              } else {
+                // No alternatives found, create placeholder with original card data
+                const processedDeckCard = ensureTagsAreArrays(deckCardData);
+                const rowData = {
+                  cardId: deckCardId,
+                  card: processedDeckCard,
+                  deckCount,
+                  ownedCount: 0,
+                  proxyCount: 0,
+                  location: 'Not Owned',
+                  isAlternative: false
+                };
 
-                remainingNeeded -= altTotalOwned;
+                finalRows.push(rowData);
               }
+            } else {
+              // No search results, create placeholder
+              const processedDeckCard = ensureTagsAreArrays(deckCardData);
+              const rowData = {
+                cardId: deckCardId,
+                card: processedDeckCard,
+                deckCount,
+                ownedCount: 0,
+                proxyCount: 0,
+                location: 'Not Owned',
+                isAlternative: false
+              };
+
+              finalRows.push(rowData);
             }
           }
         } catch (error) {
@@ -519,8 +690,39 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
     onLocationModalOpen();
   };
 
-  // Handle location update
+  // Handle location update with global dispatch
   const handleLocationUpdate = async (updatedCard) => {
+    // If no updatedCard is provided, fetch it from the API
+    if (!updatedCard && selectedCard) {
+      try {
+        const searchParams = new URLSearchParams({
+          keyword: `id:${selectedCard.id}`,
+          ownedOnly: 'false',
+          showProxies: 'true'
+        });
+
+        const response = await fetch(`${api}/api/cards/search?${searchParams.toString()}`, {
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          const searchData = await response.json();
+          const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
+
+          if (searchResults.length > 0) {
+            updatedCard = ensureTagsAreArrays(searchResults[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching updated card data:', error);
+      }
+    }
+
+    if (!updatedCard) {
+      console.error('No updated card data available');
+      return;
+    }
+
     // Update the locate data with the new location information
     setLocateData(prevData => {
       return prevData.map(row => {
@@ -539,6 +741,9 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
       });
     });
 
+    // Dispatch global update event for other components
+    dispatchCardUpdate(CARD_EVENTS.LOCATION_UPDATED, updatedCard.id, { card: updatedCard });
+
     toast({
       title: 'Location Updated',
       description: `Card location updated successfully`,
@@ -550,9 +755,9 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
     onLocationModalClose();
   };
 
-  // Handle move all cards to a location
-  const handleMoveAllClick = () => {
-    if (!selectedMoveAllLocation) {
+  // Handle bulk move location
+  const handleBulkMove = async () => {
+    if (bulkLocationId === undefined) {
       toast({
         title: 'No Location Selected',
         description: 'Please select a location first',
@@ -562,13 +767,8 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
       });
       return;
     }
-    onMoveAllDialogOpen();
-  };
 
-  const handleMoveAllConfirm = async () => {
-    if (!selectedMoveAllLocation) return;
-
-    setIsMovingAll(true);
+    setIsBulkActionOngoing(true);
     try {
       const ownedCards = filteredData.filter(row => {
         const totalOwned = (row.ownedCount || 0) + (row.proxyCount || 0);
@@ -587,7 +787,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
       }
 
       const movePromises = ownedCards.map(async (row) => {
-        const locationId = selectedMoveAllLocation === 'remove' ? null : parseInt(selectedMoveAllLocation);
+        const locationId = bulkLocationId === null ? null : bulkLocationId;
 
         const response = await fetch(`${api}/api/collection/location`, {
           method: 'PUT',
@@ -610,29 +810,47 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
 
       await Promise.all(movePromises);
 
-      // Update locate data with new locations
+      // Find the selected location data for proper formatting
+      const selectedLocationData = bulkLocationId === null ? null :
+        locations.find(loc => loc.id === bulkLocationId);
+
+      // Update locate data with new locations and dispatch global events
       setLocateData(prevData => {
         return prevData.map(row => {
           const isAffectedCard = ownedCards.some(ownedRow => ownedRow.cardId === row.cardId);
           if (isAffectedCard) {
             let newLocation;
-            if (selectedMoveAllLocation === 'remove') {
+            let newLocationData;
+
+            if (bulkLocationId === null) {
               newLocation = 'Set Location';
+              newLocationData = null;
             } else {
-              const selectedLocation = locations.find(loc => loc.id === parseInt(selectedMoveAllLocation));
-              newLocation = selectedLocation ? selectedLocation.name : 'Set Location';
+              newLocation = selectedLocationData ? selectedLocationData.name : 'Set Location';
+              newLocationData = selectedLocationData ? {
+                id: bulkLocationId,
+                name: selectedLocationData.name,
+                marker: selectedLocationData.marker || 'gray'
+              } : null;
             }
+
+            // Create properly formatted updated card data
+            const updatedCard = {
+              ...row.card,
+              location: newLocationData,
+              // Include all the fields that search API returns for location
+              location_id: newLocationData?.id || null,
+              location_name: newLocationData?.name || null,
+              location_marker: newLocationData?.marker || null
+            };
+
+            // Dispatch global update for each affected card with complete card data
+            dispatchCardUpdate(CARD_EVENTS.LOCATION_UPDATED, row.cardId, { card: updatedCard });
 
             return {
               ...row,
               location: newLocation,
-              card: {
-                ...row.card,
-                location: selectedMoveAllLocation === 'remove' ? null : {
-                  id: parseInt(selectedMoveAllLocation),
-                  name: newLocation
-                }
-              }
+              card: updatedCard
             };
           }
           return row;
@@ -647,6 +865,9 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
         isClosable: true,
       });
 
+      setBulkLocationId(undefined);
+      onBulkMoveModalClose();
+
     } catch (error) {
       console.error('Error moving cards:', error);
       toast({
@@ -657,11 +878,184 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
         isClosable: true,
       });
     } finally {
-      setIsMovingAll(false);
-      setSelectedMoveAllLocation('');
-      onMoveAllDialogClose();
+      setIsBulkActionOngoing(false);
     }
   };
+
+  // Handle bulk tag operations
+  const handleBulkTag = async () => {
+    if (!bulkTagType || !bulkTagAction) {
+      toast({
+        title: 'Tag Selection Required',
+        description: 'Please select both a tag type and action',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    setIsBulkActionOngoing(true);
+    try {
+      // Allow tagging for all cards in filtered data, not just owned cards
+      const cardsToTag = filteredData;
+
+      if (cardsToTag.length === 0) {
+        toast({
+          title: 'No Cards to Tag',
+          description: 'No cards found to update tags for',
+          status: 'info',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      const tagPromises = cardsToTag.map(async (row) => {
+        const response = await fetch(`${api}/api/cards/${encodeURIComponent(row.cardId)}/tags`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            tagType: bulkTagType,
+            action: bulkTagAction
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update tag for card ${row.cardId}`);
+        }
+
+        return { cardId: row.cardId };
+      });
+
+      await Promise.all(tagPromises);
+
+      // Update locate data and dispatch global updates
+      setLocateData(prevData => {
+        return prevData.map(row => {
+          const isAffectedCard = cardsToTag.some(cardRow => cardRow.cardId === row.cardId);
+          if (isAffectedCard) {
+            // Update the card's tags properly
+            const currentUserTags = Array.isArray(row.card.user_tags) ? row.card.user_tags : [];
+            let newUserTags;
+
+            if (bulkTagAction === 'add') {
+              if (!currentUserTags.includes(bulkTagType)) {
+                newUserTags = [...currentUserTags, bulkTagType];
+              } else {
+                newUserTags = currentUserTags;
+              }
+            } else {
+              newUserTags = currentUserTags.filter(tag => tag !== bulkTagType);
+            }
+
+            // Create properly formatted updated card data
+            const updatedCard = {
+              ...row.card,
+              user_tags: newUserTags,
+              // Also update the string format that the API might return
+              user_tags_string: newUserTags.length > 0 ? `{${newUserTags.join(',')}}` : '{}'
+            };
+
+            // Dispatch global update for each affected card with complete card data
+            dispatchCardUpdate(CARD_EVENTS.TAG_UPDATED, row.cardId, { card: updatedCard });
+
+            return {
+              ...row,
+              card: updatedCard
+            };
+          }
+          return row;
+        });
+      });
+
+      const actionText = bulkTagAction === 'add' ? 'Added' : 'Removed';
+      const tagLabel = TAG_DEFINITIONS[bulkTagType]?.label || bulkTagType;
+
+      toast({
+        title: 'Tags Updated',
+        description: `${actionText} "${tagLabel}" tag for ${cardsToTag.length} cards`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+
+      setBulkTagType('');
+      setBulkTagAction('');
+      onBulkTagModalClose();
+
+    } catch (error) {
+      console.error('Error updating tags:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update card tags. Please try again.',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setIsBulkActionOngoing(false);
+    }
+  };
+
+  // Handle copy card list (similar to TabletopCanvas)
+  const handleCopyCardList = useCallback(() => {
+    if (filteredData.length === 0) {
+      toast({
+        title: 'No cards to copy',
+        description: 'No cards found to copy to clipboard',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    // Sort by card_code for consistent ordering
+    const sortedCards = [...filteredData].sort((a, b) =>
+      (a.card.card_code || '').localeCompare(b.card.card_code || '')
+    );
+
+    // Generate card list in format: "4xOP10-001" (using deckCount)
+    const cardTexts = sortedCards
+      .filter(row => row.card.card_code) // Only include cards with valid card codes
+      .map(row => `${row.deckCount}x${row.card.card_code}`);
+
+    if (cardTexts.length === 0) {
+      toast({
+        title: 'No valid cards',
+        description: 'No cards with valid card codes found',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    const fullText = cardTexts.join('\n');
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(fullText).then(() => {
+      toast({
+        title: 'Card list copied!',
+        description: `Copied ${cardTexts.length} cards to clipboard`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
+    }).catch(() => {
+      toast({
+        title: 'Failed to copy',
+        description: 'Could not copy card list to clipboard',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    });
+  }, [filteredData, toast]);
 
   // Initialize data and locations when modal opens
   useEffect(() => {
@@ -726,96 +1120,50 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
         <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent maxH="90vh">
           <ModalHeader>
-            <VStack align="start" spacing={2}>
-              <Text>Locate Deck Cards</Text>
-              <Text fontSize="sm" color="gray.600">
-                Track your physical cards and their locations
-              </Text>
-            </VStack>
+            <HStack justify="space-between" align="center" w="100%">
+              <VStack align="start" spacing={2}>
+                <Text>Locate Deck Cards</Text>
+                <Text fontSize="sm" color="gray.600">
+                  Track your physical cards and their locations
+                </Text>
+              </VStack>
+
+              {/* Bulk Actions Menu in Header */}
+              <Menu>
+                <MenuButton as={Button} size="sm" colorScheme="blue" variant="outline" isDisabled={isBulkActionOngoing}>
+                  Bulk Actions
+                </MenuButton>
+                <MenuList>
+                  <MenuItem icon={<FiMapPin />} onClick={onBulkMoveModalOpen}>
+                    Move to Location
+                  </MenuItem>
+                  <MenuItem icon={<FiTag />} onClick={onBulkTagModalOpen}>
+                    Set Tag
+                  </MenuItem>
+                  <MenuItem icon={<FiCopy />} onClick={handleCopyCardList}>
+                    Copy Card List
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+            </HStack>
           </ModalHeader>
           <ModalCloseButton />
 
           <ModalBody>
             {isLoading && locateData.length === 0 ? (
-              <VStack spacing={4} py={8}>
-                <Spinner size="lg" color="blue.500" />
-                <Text color="gray.600">Loading card locations...</Text>
+              <VStack py={8}>
+                <Spinner size="xl" />
+                <Text>Loading card location data...</Text>
               </VStack>
             ) : (
-                <VStack spacing={4} align="stretch">
-                  {/* Modern Compact Controls */}
-                  {locateData.length > 0 && (
-                    <Box
-                      bg="white"
-                      border="1px"
-                      borderColor="gray.200"
-                      borderRadius="lg"
-                      p={4}
-                      shadow="sm"
-                    >
-                      <HStack spacing={6} align="center" justify="space-between" flexWrap="wrap">
-                        {/* Hide Complete Switch */}
-                        <FormControl display="flex" alignItems="center" w="auto">
-                          <FormLabel htmlFor="hide-complete" mb={0} mr={3} fontSize="sm" fontWeight="medium">
-                            Hide Complete
-                          </FormLabel>
-                          <Switch
-                            id="hide-complete"
-                            isChecked={hideComplete}
-                            onChange={(e) => setHideComplete(e.target.checked)}
-                            colorScheme="blue"
-                            size="md"
-                          />
-                        </FormControl>
-
-                        {/* Move All Controls */}
-                        <HStack spacing={3} flex="1" justify="flex-end" minW="280px">
-                          <Text fontSize="sm" color="gray.600" fontWeight="medium" whiteSpace="nowrap">
-                            Move all to:
-                          </Text>
-                          <Select
-                            placeholder="Choose location..."
-                            size="sm"
-                            maxW="180px"
-                            value={selectedMoveAllLocation}
-                            onChange={(e) => setSelectedMoveAllLocation(e.target.value)}
-                            bg="white"
-                            borderColor="gray.300"
-                            borderRadius="md"
-                            fontSize="sm"
-                            _focus={{ borderColor: "blue.500", boxShadow: "0 0 0 1px blue.500" }}
-                          >
-                            {locations.map((location) => (
-                              <option key={location.id} value={location.id}>
-                                {location.name}
-                              </option>
-                            ))}
-                            <option value="remove" style={{ color: 'red' }}>
-                              Remove Location
-                            </option>
-                          </Select>
-                          <Button
-                            size="sm"
-                            colorScheme="blue"
-                            onClick={handleMoveAllClick}
-                            isDisabled={!selectedMoveAllLocation}
-                            minW="80px"
-                          >
-                            Move All
-                          </Button>
-                        </HStack>
-                      </HStack>
-                    </Box>
-                  )}
-
-                {/* Cards Display - Table for Desktop, Cards for Mobile */}
-                {isMobile ? (
+              <VStack spacing={4} align="stretch">
+                {filteredData.length === 0 ? (
+                  <Text textAlign="center" color="gray.500" py={8}>
+                    {locateData.length === 0 ? 'No cards found in deck' : 'All cards are complete'}
+                  </Text>
+                ) : isMobile ? (
                   // Mobile View - Card Layout
-                  <Box
-                    ref={scrollContainerRef}
-                    maxH="500px"
-                    overflowY="auto"
-                  >
+                  <Box>
                     {filteredData.map((row, index) => {
                       const totalOwnedCards = (row.ownedCount || 0) + (row.proxyCount || 0);
                       const deckCount = row.deckCount || 0;
@@ -836,18 +1184,17 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                 ) : (
                   // Desktop View - Table Layout
                   <Box
-                    ref={scrollContainerRef}
-                    maxH="500px"
-                    overflowY="auto"
                     border="1px"
                     borderColor="gray.200"
                     borderRadius="md"
+                    overflow="hidden"
                   >
                     <Table size="sm" variant="simple">
                       <Thead position="sticky" top={0} bg="gray.50" zIndex={1}>
                         <Tr>
                           <Th width="80px">Card</Th>
                           <Th>Name</Th>
+                          <Th width="80px">Tags</Th>
                           <Th width="60px">Deck</Th>
                           <Th width="60px">Own</Th>
                           <Th width="60px">Proxy</Th>
@@ -864,57 +1211,79 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
 
                           return (
                             <Tr key={`${row.cardId}-${index}`} bg={isIncomplete ? 'red.50' : (row.isAlternative ? 'yellow.50' : 'white')}>
+                              {/* Card Image */}
                               <Td p={2}>
                                 <CardImage
                                   card={row.card}
                                   src={row.card.img_url}
                                   alt={row.card.name}
-                                  width="40px"
-                                  height="56px"
+                                  width="50px"
+                                  height="70px"
                                   objectFit="cover"
                                   fallbackSrc="/placeholder.png"
                                 />
                               </Td>
-                              <Td p={2}>
+
+                              {/* Card Name */}
+                              <Td>
                                 <VStack align="start" spacing={1}>
-                                  <Text fontSize="sm" fontWeight="medium" noOfLines={2}>
-                                    {row.card.name}
-                                  </Text>
                                   <HStack spacing={2}>
                                     <Tag
                                       size="sm"
                                       {...getTagStyles(row.card.color)}
                                       fontWeight="bold"
-                                      fontSize="sm"
-                                      px={3}
+                                      fontSize="xs"
+                                      px={2}
                                       py={1}
                                     >
                                       {row.card.card_code}
                                     </Tag>
                                     {row.isAlternative && (
                                       <Text fontSize="xs" color="orange.600" fontStyle="italic">
-                                        Alt: {row.displayCardId}
+                                        Alt
                                       </Text>
                                     )}
                                   </HStack>
+                                  <Text fontSize="sm" fontWeight="medium" noOfLines={2}>
+                                    {row.card.name}
+                                  </Text>
                                 </VStack>
                               </Td>
-                              <Td p={2} textAlign="center">
-                                <Text fontSize="sm" fontWeight="bold" color={isIncomplete ? "red.600" : "black"}>
+
+                              {/* User Tags Column */}
+                              <Td>
+                                <CardTags
+                                  cardId={row.card.id}
+                                  card={row.card}
+                                  interactive={false}
+                                  size="sm"
+                                  showTooltips={false}
+                                />
+                              </Td>
+
+                              {/* Deck Count */}
+                              <Td textAlign="center">
+                                <Text fontWeight="bold" color={isIncomplete ? "red.600" : "black"}>
                                   {row.deckCount}
                                 </Text>
                               </Td>
-                              <Td p={2} textAlign="center">
-                                <Text fontSize="sm" fontWeight={needMoreCards ? "bold" : "normal"} color={needMoreCards ? "black" : "green.600"}>
+
+                              {/* Owned Count */}
+                              <Td textAlign="center">
+                                <Text fontWeight={needMoreCards ? "bold" : "normal"} color={needMoreCards ? "black" : "green.600"}>
                                   {row.ownedCount}
                                 </Text>
                               </Td>
-                              <Td p={2} textAlign="center">
-                                <Text fontSize="sm" fontWeight={row.proxyCount > 0 ? "bold" : "normal"} color={needMoreCards ? "black" : "green.600"}>
+
+                              {/* Proxy Count */}
+                              <Td textAlign="center">
+                                <Text fontWeight={row.proxyCount > 0 ? "bold" : "normal"} color={needMoreCards ? "black" : "green.600"}>
                                   {row.proxyCount}
                                 </Text>
                               </Td>
-                              <Td p={2}>
+
+                              {/* Location */}
+                              <Td>
                                 {typeof row.location === 'string' && (row.location === 'Loading...' || row.location === 'Not Owned') ? (
                                   <Text fontSize="xs" color="gray.500">
                                     {row.location}
@@ -933,57 +1302,147 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                     </Table>
                   </Box>
                 )}
-
-                {filteredData.length === 0 && !isLoading && (
-                  <Text textAlign="center" color="gray.500" py={8}>
-                    {hideComplete ? 'No incomplete cards to display' : 'No cards to display'}
-                  </Text>
-                )}
               </VStack>
             )}
           </ModalBody>
 
           <ModalFooter>
-            <Button onClick={onClose}>Close</Button>
+            <HStack justify="space-between" align="center" w="100%">
+              {/* Hide Complete Switch in Footer */}
+              <FormControl display="flex" alignItems="center" width="auto">
+                <FormLabel htmlFor="hide-complete" mb="0" fontSize="sm">
+                  Hide Complete
+                </FormLabel>
+                <Switch
+                  id="hide-complete"
+                  isChecked={hideComplete}
+                  onChange={(e) => setHideComplete(e.target.checked)}
+                />
+              </FormControl>
+
+              <Button onClick={onClose}>Close</Button>
+            </HStack>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
       {/* Set Location Modal */}
-      <SetLocationModal
-        isOpen={isLocationModalOpen}
-        onClose={onLocationModalClose}
-        card={selectedCard}
-        onLocationSet={handleLocationUpdate}
-      />
+      {selectedCard && (
+        <SetLocationModal
+          isOpen={isLocationModalOpen}
+          onClose={onLocationModalClose}
+          card={selectedCard}
+          onLocationSet={handleLocationUpdate}
+        />
+      )}
 
-      {/* Move All Confirmation Dialog */}
-      <AlertDialog
-        isOpen={isMoveAllDialogOpen}
-        leastDestructiveRef={cancelRef}
-        onClose={onMoveAllDialogClose}
-      >
-        <AlertDialogOverlay>
-          <AlertDialogContent>
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Move All Cards
-            </AlertDialogHeader>
-
-            <AlertDialogBody>
-              Are you sure you want to move all owned cards to the selected location? This action cannot be undone.
-            </AlertDialogBody>
-
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onMoveAllDialogClose}>
+      {/* Bulk Move Modal */}
+      <Modal isOpen={isBulkMoveModalOpen} onClose={onBulkMoveModalClose} size="lg" closeOnOverlayClick={!isBulkActionOngoing}>
+        <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
+        <ModalContent>
+          <ModalHeader>
+            <HStack spacing={3}>
+              <FiMapPin />
+              <Text>Move Cards to Location</Text>
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton isDisabled={isBulkActionOngoing} />
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              <Text fontSize="sm" color="gray.600">
+                Move all owned cards to a new location. Only cards you own will be moved.
+              </Text>
+              {isBulkActionOngoing && (
+                <VStack spacing={2}>
+                  <Spinner size="md" color="blue.500" />
+                  <Text fontSize="sm" color="blue.600">
+                    Moving cards, please wait...
+                  </Text>
+                </VStack>
+              )}
+              <LocationSelector
+                selectedLocationId={bulkLocationId}
+                onLocationSelect={setBulkLocationId}
+              />
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <HStack spacing={3}>
+              <Button
+                variant="ghost"
+                onClick={onBulkMoveModalClose}
+                isDisabled={isBulkActionOngoing}
+              >
                 Cancel
               </Button>
-              <Button colorScheme="blue" onClick={handleMoveAllConfirm} ml={3} isLoading={isMovingAll}>
-                Move All Cards
+              <Button
+                colorScheme="blue"
+                onClick={handleBulkMove}
+                isDisabled={bulkLocationId === undefined || isBulkActionOngoing}
+                isLoading={isBulkActionOngoing}
+                loadingText="Moving..."
+              >
+                {bulkLocationId === null ? 'Remove from Location' : 'Move Cards'}
               </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Bulk Tag Modal */}
+      <Modal isOpen={isBulkTagModalOpen} onClose={onBulkTagModalClose} size="lg" closeOnOverlayClick={!isBulkActionOngoing}>
+        <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
+        <ModalContent>
+          <ModalHeader>
+            <HStack spacing={3}>
+              <FiTag />
+              <Text>Set Tags for Cards</Text>
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton isDisabled={isBulkActionOngoing} />
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              <Text fontSize="sm" color="gray.600">
+                Add or remove tags for all cards shown. Tags can be applied to any card, even if not in your collection.
+              </Text>
+              {isBulkActionOngoing && (
+                <VStack spacing={2}>
+                  <Spinner size="md" color="blue.500" />
+                  <Text fontSize="sm" color="blue.600">
+                    Updating tags, please wait...
+                  </Text>
+                </VStack>
+              )}
+              <TagSelector
+                selectedTagType={bulkTagType}
+                selectedTagAction={bulkTagAction}
+                onTagTypeSelect={setBulkTagType}
+                onTagActionSelect={setBulkTagAction}
+              />
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <HStack spacing={3}>
+              <Button
+                variant="ghost"
+                onClick={onBulkTagModalClose}
+                isDisabled={isBulkActionOngoing}
+              >
+                Cancel
+              </Button>
+              <Button
+                colorScheme="blue"
+                onClick={handleBulkTag}
+                isDisabled={!bulkTagType || !bulkTagAction || isBulkActionOngoing}
+                isLoading={isBulkActionOngoing}
+                loadingText="Updating..."
+              >
+                {bulkTagAction === 'add' ? 'Add Tags' : 'Remove Tags'}
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </>
   );
 };
