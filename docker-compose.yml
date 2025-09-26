@@ -50,9 +50,6 @@ services:
     networks:
       - opcc-network
 
-volumes:
-  opcc-dbvolume:
-
 networks:
   opcc-network:
     driver: bridge
