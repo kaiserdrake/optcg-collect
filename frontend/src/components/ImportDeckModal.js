@@ -95,7 +95,11 @@ export default function ImportDeckModal({ isOpen, onClose, onImport }) {
       });
 
       if (response.ok) {
-        const searchResults = await response.json();
+        const searchData = await response.json();
+
+        // Handle both new paginated format and legacy format
+        const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
+
         return searchResults.length > 0 ? searchResults[0] : null;
       }
       return null;
@@ -261,7 +265,7 @@ export default function ImportDeckModal({ isOpen, onClose, onImport }) {
               <Textarea
                 value={importData}
                 onChange={(e) => setImportData(e.target.value)}
-                placeholder="1xOP11-040&#10;4xST18-001&#10;4xOP05-067&#10;4xEB01-061"
+                placeholder={"1xOP11-040\n4xST18-001\n4xOP05-067\n4xEB01-061"}
                 rows={15}
                 fontFamily="monospace"
                 fontSize="sm"
