@@ -19,7 +19,12 @@ import {
   Flex,
   Progress,
   IconButton,
+  Grid,
+  GridItem,
+  Wrap,
+  WrapItem,
 } from '@chakra-ui/react';
+import CardImage from './CardImage';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -268,11 +273,69 @@ const ModernTimelineChart = ({ data, title }) => {
   );
 };
 
-const CollectionStatistics = () => {
-  const { isOpen, onToggle } = useDisclosure({ defaultIsOpen: false });
-  const [loading, setLoading] = useState(true);
+// Target Cards Component
+const TargetCardsSection = ({ targetCards, onCardClick }) => {
+  if (!targetCards || targetCards.length === 0) {
+    return (
+      <Box>
+        <Heading size="sm" mb={3} color="gray.700" fontWeight="normal">Target Cards</Heading>
+        <Text fontSize="sm" color="gray.500" textAlign="center" py={4}>
+          No cards marked as "Want" yet. Tag cards you're looking for to see them here!
+        </Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <Heading size="sm" mb={3} color="gray.700" fontWeight="normal">
+        Target Cards
+        <Badge ml={2} colorScheme="red" variant="outline">
+          {targetCards.length} cards
+        </Badge>
+      </Heading>
+      <Box overflowX="auto" pb={2}>
+        <HStack spacing={2} align="start" minW="max-content">
+          {targetCards.map((card) => (
+            <Box
+              key={card.id}
+              position="relative"
+              cursor="pointer"
+              onClick={() => onCardClick && onCardClick(card)}
+              _hover={{
+                transform: 'scale(1.05)',
+                transition: 'transform 0.2s',
+                zIndex: 1
+              }}
+              transition="transform 0.2s"
+              flexShrink={0}
+            >
+              <CardImage
+                card={card}
+                src={card.img_url}
+                alt={card.name}
+                width="60px"
+                height="84px"
+                objectFit="cover"
+                borderRadius="md"
+                fallbackSrc="/placeholder.png"
+                boxShadow="sm"
+              />
+            </Box>
+          ))}
+        </HStack>
+      </Box>
+    </Box>
+  );
+};
+
+const CollectionStatistics = ({ onCardClick }) => {
+  const { isOpen, onToggle } = useDisclosure();
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
+  const [targetCards, setTargetCards] = useState([]);
+  const [targetCardsLoading, setTargetCardsLoading] = useState(false);
 
   const bgColor = useColorModeValue('gray.50', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -280,6 +343,9 @@ const CollectionStatistics = () => {
   useEffect(() => {
     if (isOpen && !stats) {
       fetchCollectionStats();
+    }
+    if (isOpen && targetCards.length === 0) {
+      fetchTargetCards();
     }
   }, [isOpen]);
 
@@ -306,21 +372,76 @@ const CollectionStatistics = () => {
     }
   };
 
+  const fetchTargetCards = async () => {
+    setTargetCardsLoading(true);
+
+    try {
+      const response = await fetch(`${api}/api/cards/search?keyword=tag:want&limit=100&ownedOnly=false&showProxies=true`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch target cards');
+      }
+
+      const data = await response.json();
+      // Handle both paginated and legacy response formats
+      const cards = Array.isArray(data.results) ? data.results : Array.isArray(data) ? data : [];
+
+      console.log('Target cards fetched:', cards.length); // Debug log
+      setTargetCards(cards);
+    } catch (err) {
+      console.error('Error fetching target cards:', err);
+      // Don't show error for target cards, just log it
+    } finally {
+      setTargetCardsLoading(false);
+    }
+  };
+
   const handleRefresh = () => {
     setStats(null);
+    setTargetCards([]);
     fetchCollectionStats();
+    fetchTargetCards();
   };
 
   const renderColorPieChart = () => {
     if (!stats?.colorDistribution) return null;
 
-    const colorData = Object.entries(stats.colorDistribution)
-      .filter(([, count]) => count > 0)
+    // Merge colorless and multicolored cards
+    const mergedColorData = {};
+
+    Object.entries(stats.colorDistribution).forEach(([color, count]) => {
+      if (count > 0) {
+        // Group empty string, null, undefined as "Colorless"
+        if (!color || color === '' || color === 'null') {
+          mergedColorData['Colorless'] = (mergedColorData['Colorless'] || 0) + count;
+        }
+        // Group cards with "/" (like "Blue/Purple", "Green/Blue") as "Multicolored"
+        else if (color.includes('/') || color.toLowerCase().includes('multi') || color === 'Multi') {
+          mergedColorData['Multicolored'] = (mergedColorData['Multicolored'] || 0) + count;
+        }
+        // Keep other colors as-is
+        else {
+          mergedColorData[color] = (mergedColorData[color] || 0) + count;
+        }
+      }
+    });
+
+    // Convert to array and sort to put Multicolored last
+    const colorData = Object.entries(mergedColorData)
       .map(([color, count]) => ({
-        name: colorMappings[color]?.name || color || 'Colorless',
+        name: color === 'Multicolored' ? 'Multicolored' : (colorMappings[color]?.name || color),
         value: count,
-        color: colorMappings[color]?.hex || '#6b7280'
-      }));
+        color: color === 'Multicolored' ? '#f97316' : (colorMappings[color]?.hex || '#6b7280')
+      }))
+      .sort((a, b) => {
+        // Put Multicolored last
+        if (a.name === 'Multicolored') return 1;
+        if (b.name === 'Multicolored') return -1;
+        return 0;
+      });
 
     return <ModernPieChart data={colorData} title="Color Distribution" />;
   };
@@ -451,7 +572,7 @@ const CollectionStatistics = () => {
           {stats && (
             <VStack spacing={6} align="stretch">
               {/* Summary Statistics */}
-              <SimpleGrid columns={{ base: 2, md: 5 }} spacing={3}>
+              <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
                 <StatBox
                   label="Unique Cards"
                   number={stats.uniqueCardCount}
@@ -468,16 +589,62 @@ const CollectionStatistics = () => {
                   helpText="Of available"
                 />
                 <StatBox
-                  label="Collection Age"
-                  number={`${stats.collectionAge}d`}
-                  helpText="Days collecting"
-                />
-                <StatBox
                   label="Avg Copies"
                   number={stats.additionalStats?.averageCardsPerUniqueCard?.toFixed(1) || '0'}
                   helpText="Per unique card"
                 />
               </SimpleGrid>
+
+              {/* Target Cards Section */}
+              <Box>
+                <Heading size="sm" mb={3} color="gray.700">
+                  Target Cards
+                  {!targetCardsLoading && targetCards.length > 0 && (
+                    <Badge ml={2} colorScheme="red" variant="outline">
+                      {targetCards.length} cards
+                    </Badge>
+                  )}
+                </Heading>
+                {targetCardsLoading ? (
+                  <Flex justify="center" py={6}>
+                    <Spinner size="md" color="gray.500" />
+                  </Flex>
+                ) : targetCards.length === 0 ? (
+                  <Text fontSize="sm" color="gray.500" textAlign="center" py={4}>
+                    No cards marked as "Want" yet. Tag cards you're looking for to see them here!
+                  </Text>
+                ) : (
+                  <Box overflowX="auto" pb={2}>
+                    <HStack spacing={3} align="start" minW="max-content">
+                      {targetCards.map((card) => (
+                        <Box
+                          key={card.id}
+                          cursor="pointer"
+                          onClick={() => onCardClick && onCardClick(card)}
+                          _hover={{
+                            transform: 'scale(1.05)',
+                            transition: 'transform 0.2s',
+                          }}
+                          transition="transform 0.2s"
+                          flexShrink={0}
+                        >
+                          <CardImage
+                            card={card}
+                            src={card.img_url}
+                            alt={card.name}
+                            width="80px"
+                            height="112px"
+                            objectFit="cover"
+                            borderRadius="md"
+                            fallbackSrc="/placeholder.png"
+                            boxShadow="sm"
+                          />
+                        </Box>
+                      ))}
+                    </HStack>
+                  </Box>
+                )}
+              </Box>
 
               {/* Charts Grid */}
               <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
