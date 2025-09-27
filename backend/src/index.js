@@ -1343,7 +1343,7 @@ app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req,
 
     if (criteria.tags && criteria.tags.length > 0) {
       const tagConditions = criteria.tags.map(tag => {
-        const condition = `(ut.tag_type ILIKE $${paramIndex} OR gt.tag_type ILIKE $${paramIndex})`;
+        const condition = `(ut.tag_type = $${paramIndex} OR gt.tag_type = $${paramIndex})`;
         params.push(tag);
         paramIndex++;
         return condition;
