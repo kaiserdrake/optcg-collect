@@ -1124,32 +1124,12 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
         <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent maxH="90vh">
           <ModalHeader>
-            <HStack justify="space-between" align="center" w="100%">
-              <VStack align="start" spacing={2}>
-                <Text>Locate Deck Cards</Text>
-                <Text fontSize="sm" color="gray.600">
-                  Track your physical cards and their locations
-                </Text>
-              </VStack>
-
-              {/* Bulk Actions Menu in Header */}
-              <Menu>
-                <MenuButton as={Button} size="sm" colorScheme="blue" variant="outline" isDisabled={isBulkActionOngoing}>
-                  Bulk Actions
-                </MenuButton>
-                <MenuList>
-                  <MenuItem icon={<FiMapPin />} onClick={onBulkMoveModalOpen}>
-                    Move to Location
-                  </MenuItem>
-                  <MenuItem icon={<FiTag />} onClick={onBulkTagModalOpen}>
-                    Set Tag
-                  </MenuItem>
-                  <MenuItem icon={<FiCopy />} onClick={handleCopyCardList}>
-                    Copy Card List
-                  </MenuItem>
-                </MenuList>
-              </Menu>
-            </HStack>
+            <VStack align="start" spacing={2}>
+              <Text>Locate Deck Cards</Text>
+              <Text fontSize="sm" color="gray.600">
+                Track your physical cards and their locations
+              </Text>
+            </VStack>
           </ModalHeader>
           <ModalCloseButton />
 
@@ -1309,10 +1289,9 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
               </VStack>
             )}
           </ModalBody>
-
           <ModalFooter>
             <HStack justify="space-between" align="center" w="100%">
-              {/* Hide Complete Switch in Footer */}
+              {/* Left side - Hide Complete Switch */}
               <FormControl display="flex" alignItems="center" width="auto">
                 <FormLabel htmlFor="hide-complete" mb="0" fontSize="sm">
                   Hide Complete
@@ -1324,7 +1303,34 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                 />
               </FormControl>
 
-              <Button onClick={onClose}>Close</Button>
+              {/* Right side - Bulk Actions and Close */}
+              <HStack spacing={3}>
+                {/* Bulk Actions Menu - moved from header */}
+                <Menu>
+                  <MenuButton
+                    as={Button}
+                    size="sm"
+                    colorScheme="blue"
+                    variant="outline"
+                    isDisabled={isBulkActionOngoing}
+                  >
+                    Bulk Actions
+                  </MenuButton>
+                  <MenuList>
+                    <MenuItem icon={<FiMapPin />} onClick={onBulkMoveModalOpen}>
+                      Move to Location
+                    </MenuItem>
+                    <MenuItem icon={<FiTag />} onClick={onBulkTagModalOpen}>
+                      Set Tag
+                    </MenuItem>
+                    <MenuItem icon={<FiCopy />} onClick={handleCopyCardList}>
+                      Copy Card List
+                    </MenuItem>
+                  </MenuList>
+                </Menu>
+
+                <Button onClick={onClose}>Close</Button>
+              </HStack>
             </HStack>
           </ModalFooter>
         </ModalContent>
