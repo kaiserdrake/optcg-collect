@@ -504,6 +504,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
         const deckCount = deckItem.count || 1;
 
         // Step 1: Search for exact card ID match
+        let exactCard = null;
         try {
           const exactSearchParams = new URLSearchParams({
             keyword: `id:${deckCardId}`,
@@ -517,151 +518,154 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
 
           if (exactResponse.ok) {
             const exactResults = await exactResponse.json();
-
-            // Handle both new paginated format and legacy format
             const exactSearchResults = Array.isArray(exactResults) ?
               exactResults : exactResults.results || [];
 
             if (exactSearchResults.length > 0) {
-              // Found exact match - use this data
-              const exactCard = ensureTagsAreArrays(exactSearchResults[0]);
-
-              // Fix the location display issue - properly set location from card data
-              const ownedCount = exactCard.owned_count || 0;
-              const proxyCount = exactCard.proxy_count || 0;
-
-              let location = 'Not Owned';
-              if (ownedCount > 0 || proxyCount > 0) {
-                // Check for location data in the card
-                if (exactCard.location?.name || (exactCard.location_name && exactCard.location_id)) {
-                  const locationData = exactCard.location || {
-                    id: exactCard.location_id,
-                    name: exactCard.location_name,
-                    marker: exactCard.location_marker || 'gray'
-                  };
-                  location = locationData.name;
-                  exactCard.location = locationData; // Ensure location object is properly set
-                } else {
-                  location = 'Set Location';
-                }
-              }
-
-              const rowData = {
-                cardId: exactCard.id,
-                card: exactCard,
-                deckCount,
-                ownedCount,
-                proxyCount,
-                location,
-                isAlternative: false
-              };
-
-              finalRows.push(rowData);
-
-              // Small delay between cards to prevent overwhelming the server
-              await new Promise(resolve => setTimeout(resolve, 100));
-              continue;
+              exactCard = ensureTagsAreArrays(exactSearchResults[0]);
             }
           }
         } catch (error) {
           console.warn(`Failed to search for exact card ${deckCardId}:`, error);
         }
 
-        // Step 2: If no exact match, search for alternatives using card_code
-        try {
-          const altSearchParams = new URLSearchParams({
-            keyword: `id:${deckCardCode}`,
-            ownedOnly: 'false',
-            showProxies: 'true'
-          });
+        // Step 2: Check if exact match has enough cards
+        const exactOwnedCount = exactCard?.owned_count || 0;
+        const exactProxyCount = exactCard?.proxy_count || 0;
+        const exactTotalOwned = exactOwnedCount + exactProxyCount;
 
-          const altResponse = await fetch(`${api}/api/cards/search?${altSearchParams.toString()}`, {
-            credentials: 'include',
-          });
-
-          if (altResponse.ok) {
-            const altResults = await altResponse.json();
-
-            // Handle both new paginated format and legacy format
-            const altSearchResults = Array.isArray(altResults) ?
-              altResults : altResults.results || [];
-
-            if (altSearchResults.length > 0) {
-              // Filter and prioritize alternatives
-              const alternatives = altSearchResults.filter(card =>
-                card.card_code === deckCardCode && card.id !== deckCardId
-              );
-
-              if (alternatives.length > 0) {
-                const prioritizedCards = prioritizeAlternatives(alternatives);
-
-                prioritizedCards.forEach(altCard => {
-                  // Fix the location display issue - properly set location from card data and ensure tags are arrays
-                  const processedAltCard = ensureTagsAreArrays(altCard);
-                  const ownedCount = processedAltCard.owned_count || 0;
-                  const proxyCount = processedAltCard.proxy_count || 0;
-
-                  let location = 'Not Owned';
-                  if (ownedCount > 0 || proxyCount > 0) {
-                    // Check for location data in the card
-                    if (processedAltCard.location?.name || (processedAltCard.location_name && processedAltCard.location_id)) {
-                      const locationData = processedAltCard.location || {
-                        id: processedAltCard.location_id,
-                        name: processedAltCard.location_name,
-                        marker: processedAltCard.location_marker || 'gray'
-                      };
-                      location = locationData.name;
-                      processedAltCard.location = locationData; // Ensure location object is properly set
-                    } else {
-                      location = 'Set Location';
-                    }
-                  }
-
-                  const rowData = {
-                    cardId: processedAltCard.id,
-                    card: processedAltCard,
-                    deckCount,
-                    ownedCount,
-                    proxyCount,
-                    location,
-                    isAlternative: true
-                  };
-
-                  finalRows.push(rowData);
-                });
-              } else {
-                // No alternatives found, create placeholder with original card data
-                const processedDeckCard = ensureTagsAreArrays(deckCardData);
-                const rowData = {
-                  cardId: deckCardId,
-                  card: processedDeckCard,
-                  deckCount,
-                  ownedCount: 0,
-                  proxyCount: 0,
-                  location: 'Not Owned',
-                  isAlternative: false
-                };
-
-                finalRows.push(rowData);
-              }
-            } else {
-              // No search results, create placeholder
-              const processedDeckCard = ensureTagsAreArrays(deckCardData);
-              const rowData = {
-                cardId: deckCardId,
-                card: processedDeckCard,
-                deckCount,
-                ownedCount: 0,
-                proxyCount: 0,
-                location: 'Not Owned',
-                isAlternative: false
+        // Add exact match row (always show it)
+        if (exactCard) {
+          let location = 'Not Owned';
+          if (exactTotalOwned > 0) {
+            if (exactCard.location?.name || (exactCard.location_name && exactCard.location_id)) {
+              const locationData = exactCard.location || {
+                id: exactCard.location_id,
+                name: exactCard.location_name,
+                marker: exactCard.location_marker || 'gray'
               };
-
-              finalRows.push(rowData);
+              location = locationData.name;
+              exactCard.location = locationData;
+            } else {
+              location = 'Set Location';
             }
           }
-        } catch (error) {
-          console.warn(`Failed to search for alternatives of card ${deckCardCode}:`, error);
+
+          const exactRowData = {
+            cardId: exactCard.id,
+            card: exactCard,
+            deckCount,
+            ownedCount: exactOwnedCount,
+            proxyCount: exactProxyCount,
+            location,
+            isAlternative: false,
+            displayCardId: exactCard.id // Normal display for exact match
+          };
+
+          finalRows.push(exactRowData);
+        } else {
+          // No exact card found, create placeholder
+          const processedDeckCard = ensureTagsAreArrays(deckCardData);
+          const placeholderRowData = {
+            cardId: deckCardId,
+            card: processedDeckCard,
+            deckCount,
+            ownedCount: 0,
+            proxyCount: 0,
+            location: 'Not Owned',
+            isAlternative: false,
+            displayCardId: deckCardId
+          };
+
+          finalRows.push(placeholderRowData);
+        }
+
+        // Step 3: If exact match doesn't have enough cards, search for alternatives
+        if (exactTotalOwned < deckCount) {
+          try {
+            const altSearchParams = new URLSearchParams({
+              keyword: deckCardCode,
+              ownedOnly: 'false',
+              showProxies: 'true'
+            });
+
+            const altResponse = await fetch(`${api}/api/cards/search?${altSearchParams.toString()}`, {
+              credentials: 'include',
+            });
+
+            if (altResponse.ok) {
+              const altResults = await altResponse.json();
+              const altSearchResults = Array.isArray(altResults) ?
+                altResults : altResults.results || [];
+
+              if (altSearchResults.length > 0) {
+                // Filter for alternatives with same card_code but different card_id
+                const alternatives = altSearchResults.filter(card =>
+                  card.card_code === deckCardCode &&
+                    card.id !== deckCardId &&
+                    ((card.owned_count || 0) > 0 || (card.proxy_count || 0) > 0)
+                );
+
+                if (alternatives.length > 0) {
+                  // Sort alternatives by total owned count (highest first)
+                  const sortedAlternatives = alternatives.sort((a, b) => {
+                    const aTotalOwned = (a.owned_count || 0) + (a.proxy_count || 0);
+                    const bTotalOwned = (b.owned_count || 0) + (b.proxy_count || 0);
+                    return bTotalOwned - aTotalOwned;
+                  });
+
+                  // Calculate how many more cards we need
+                  const remainingNeeded = deckCount - exactTotalOwned;
+                  let remainingToAdd = remainingNeeded;
+
+                  // Add alternatives until we have enough or run out
+                  for (const altCard of sortedAlternatives) {
+                    if (remainingToAdd <= 0) break;
+
+                    const processedAltCard = ensureTagsAreArrays(altCard);
+                    const altOwnedCount = processedAltCard.owned_count || 0;
+                    const altProxyCount = processedAltCard.proxy_count || 0;
+                    const altTotalOwned = altOwnedCount + altProxyCount;
+
+                    if (altTotalOwned > 0) {
+                      let location = 'Not Owned';
+                      if (altTotalOwned > 0) {
+                        if (processedAltCard.location?.name || (processedAltCard.location_name && processedAltCard.location_id)) {
+                          const locationData = processedAltCard.location || {
+                            id: processedAltCard.location_id,
+                            name: processedAltCard.location_name,
+                            marker: processedAltCard.location_marker || 'gray'
+                          };
+                          location = locationData.name;
+                          processedAltCard.location = locationData;
+                        } else {
+                          location = 'Set Location';
+                        }
+                      }
+
+                      const altRowData = {
+                        cardId: processedAltCard.id,
+                        card: processedAltCard,
+                        deckCount: Math.min(remainingToAdd, altTotalOwned), // Show how many we can use from this alternative
+                        ownedCount: altOwnedCount,
+                        proxyCount: altProxyCount,
+                        location,
+                        isAlternative: true,
+                        displayCardId: `*${processedAltCard.id}` // Add * prefix for alternatives
+                      };
+
+                      finalRows.push(altRowData);
+
+                      // Reduce the remaining needed count
+                      remainingToAdd -= Math.min(remainingToAdd, altTotalOwned);
+                    }
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.warn(`Failed to search for alternatives of card ${deckCardCode}:`, error);
+          }
         }
 
         // Small delay between cards to prevent overwhelming the server
