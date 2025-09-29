@@ -25,6 +25,7 @@ import {
   WrapItem,
 } from '@chakra-ui/react';
 import CardImage from './CardImage';
+import CardDetailModal from './CardDetailModal';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -331,6 +332,8 @@ const TargetCardsSection = ({ targetCards, onCardClick }) => {
 
 const CollectionStatistics = ({ onCardClick }) => {
   const { isOpen, onToggle } = useDisclosure();
+  const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
+  const [selectedCard, setSelectedCard] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
@@ -406,6 +409,11 @@ const CollectionStatistics = ({ onCardClick }) => {
     fetchTargetCards();
   };
 
+  const handleTargetCardClick = (card) => {
+    setSelectedCard(card);
+    onDetailOpen();
+  };
+
   const renderColorPieChart = () => {
     if (!stats?.colorDistribution) return null;
 
@@ -478,7 +486,7 @@ const CollectionStatistics = ({ onCardClick }) => {
       .sort((a, b) => {
         const aNum = a.name.includes('Block') ? parseInt(a.name.replace('Block ', '')) : 999;
         const bNum = b.name.includes('Block') ? parseInt(b.name.replace('Block ', '')) : 999;
-        return aNum - bNum;
+        return bNum - aNum;
       });
 
     return <ModernBarChart
@@ -620,7 +628,7 @@ const CollectionStatistics = ({ onCardClick }) => {
                         <Box
                           key={card.id}
                           cursor="pointer"
-                          onClick={() => onCardClick && onCardClick(card)}
+                          onClick={() => handleTargetCardClick(card)}
                           _hover={{
                             transform: 'scale(1.05)',
                             transition: 'transform 0.2s',
@@ -645,6 +653,17 @@ const CollectionStatistics = ({ onCardClick }) => {
                   </Box>
                 )}
               </Box>
+
+              {/* Card Detail Modal */}
+              {selectedCard && (
+                <CardDetailModal
+                  isOpen={isDetailOpen}
+                  onClose={onDetailClose}
+                  selectedCard={selectedCard}
+                  showProxies={false}
+                  interactive={false}
+                />
+              )}
 
               {/* Charts Grid */}
               <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
