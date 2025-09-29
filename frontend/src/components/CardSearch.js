@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
-  Box, Text, VStack, HStack, Spinner, Button,
+  Box, Text, VStack, HStack, Spinner, Button, Icon,
   useDisclosure, IconButton, FormControl, FormLabel, Switch,
   Tooltip, Slider, SliderTrack, SliderFilledTrack, SliderThumb,
   Menu, MenuButton, MenuList, MenuItem, useBreakpointValue
@@ -167,60 +167,16 @@ const IsolatedResultsComponent = React.memo(({
   results,
   viewMode,
   mode,
-  sortMode,
-  sortReverse,
+  sortMode,      // Keep these props for potential future use
+  sortReverse,   // Keep these props for potential future use
   onCardClick,
   onCountUpdate,
   showProxies,
   thumbnailSize,
   loading
 }) => {
-  // Sort results within this isolated component (server already limits results)
-  const sortedResults = useMemo(() => {
-    if (!Array.isArray(results) || results.length === 0) {
-      return [];
-    }
 
-    const sorted = [...results].sort((a, b) => {
-      let comparison = 0;
-
-      switch (sortMode) {
-        case 'rarity':
-          const rarityOrder = { 'C': 1, 'UC': 2, 'R': 3, 'SR': 4, 'SEC': 5, 'L': 6, 'SP': 7 };
-          const aRarity = rarityOrder[a.rarity] || 0;
-          const bRarity = rarityOrder[b.rarity] || 0;
-          comparison = aRarity - bRarity;
-          if (comparison === 0) comparison = a.name.localeCompare(b.name);
-          break;
-
-        case 'card_code':
-          comparison = (a.card_code || '').localeCompare(b.card_code || '');
-          if (comparison === 0) comparison = a.name.localeCompare(b.name);
-          break;
-
-        case 'tags':
-          const getTagCount = (card) => {
-            const userTags = Array.isArray(card.user_tags) ? card.user_tags.length : 0;
-            const globalTags = Array.isArray(card.global_tags) ? card.global_tags.length : 0;
-            return userTags + globalTags;
-          };
-          const aTagCount = getTagCount(a);
-          const bTagCount = getTagCount(b);
-          comparison = aTagCount - bTagCount;
-          if (comparison === 0) comparison = a.name.localeCompare(b.name);
-          break;
-
-        default:
-          comparison = a.name.localeCompare(b.name);
-      }
-
-      return sortReverse ? -comparison : comparison;
-    });
-
-    return sorted;
-  }, [results, sortMode, sortReverse]);
-
-  if (loading || !sortedResults.length) {
+  if (loading || !results || results.length === 0) {
     return null;
   }
 
@@ -228,21 +184,21 @@ const IsolatedResultsComponent = React.memo(({
   if (viewMode === 'list') {
     return mode === 'collection' ? (
       <ListViewCollect
-        cards={sortedResults}
+        cards={results}
         onCardClick={onCardClick}
         onCountUpdate={onCountUpdate}
         showProxies={showProxies}
       />
     ) : (
       <ListViewBuilder
-        cards={sortedResults}
+        cards={results}
         onCardClick={onCardClick}
       />
     );
   } else {
     return mode === 'collection' ? (
       <ThumbViewCollect
-        cards={sortedResults}
+        cards={results}
         onCardClick={onCardClick}
         onCountUpdate={onCountUpdate}
         showProxies={showProxies}
@@ -250,7 +206,7 @@ const IsolatedResultsComponent = React.memo(({
       />
     ) : (
       <ThumbViewBuilder
-        cards={sortedResults}
+        cards={results}
         onCardClick={onCardClick}
         thumbnailSize={thumbnailSize}
       />
@@ -377,7 +333,7 @@ function CardSearch({
   }, []);
 
   // Search function with proper error handling
-  const performSearch = useCallback(async (keyword, ownedOnly = false, page = 1, limitPerPage = 25) => {
+  const performSearch = useCallback(async (keyword, ownedOnly = false, page = 1, limitPerPage = 25, sortBy = sortMode, sortOrder = sortReverse) => {
     const validation = validateSearchInput(keyword, ownedOnly);
     if (!validation.isValid && keyword.trim() && !ownedOnly) {
       setResults([]);
@@ -401,7 +357,9 @@ function CardSearch({
       ownedOnly: ownedOnly.toString(),
       showProxies: 'true',
       limit: limitPerPage.toString(),
-      offset: ((page - 1) * limitPerPage).toString()
+      offset: ((page - 1) * limitPerPage).toString(),
+      sortBy: sortBy,
+      sortOrder: sortOrder ? 'desc' : 'asc'
     };
 
     const paramsString = JSON.stringify(searchParams);
@@ -463,20 +421,33 @@ function CardSearch({
     } finally {
       setLoading(false);
     }
-  }, [apiUrl]);
+  }, [apiUrl, sortMode, sortReverse, ensureTagsAreArrays]);
 
   const handlePageChange = useCallback((newPage) => {
     if (newPage < 1) return;
     setCurrentPage(newPage);
-    performSearch(searchTerm.trim(), inCollection, newPage, itemsPerPage);
-  }, [searchTerm, inCollection, itemsPerPage, performSearch]);
+    performSearch(searchTerm.trim(), inCollection, newPage, itemsPerPage, sortMode, sortReverse); // ADD sortMode and sortReverse
+  }, [searchTerm, inCollection, itemsPerPage, sortMode, sortReverse, performSearch]);
 
   const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
     if (newItemsPerPage <= 0) return;
     setItemsPerPage(newItemsPerPage);
     setCurrentPage(1);
-    performSearch(searchTerm.trim(), inCollection, 1, newItemsPerPage);
-  }, [searchTerm, inCollection, performSearch]);
+    performSearch(searchTerm.trim(), inCollection, 1, newItemsPerPage, sortMode, sortReverse);
+  }, [searchTerm, inCollection, sortMode, sortReverse, performSearch]);
+
+  const handleSortModeChange = useCallback((newSortMode) => {
+    setSortMode(newSortMode);
+    setCurrentPage(1); // Reset to first page
+    performSearch(searchTerm.trim(), inCollection, 1, itemsPerPage, newSortMode, sortReverse);
+  }, [searchTerm, inCollection, itemsPerPage, sortReverse, performSearch]);
+
+  const handleSortReverseChange = useCallback(() => {
+    const newReverse = !sortReverse;
+    setSortReverse(newReverse);
+    setCurrentPage(1); // Reset to first page
+    performSearch(searchTerm.trim(), inCollection, 1, itemsPerPage, sortMode, newReverse);
+  }, [searchTerm, inCollection, itemsPerPage, sortMode, sortReverse, performSearch]);
 
   // Manual search trigger
   const handleManualSearch = useCallback(() => {
@@ -620,7 +591,7 @@ function CardSearch({
         });
       }
     }
-  }, [inCollection, isClient]);
+  }, [inCollection, isClient, sortMode, sortReverse]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -772,32 +743,38 @@ function CardSearch({
                   </Tooltip>
 
                   <Menu>
-                    <MenuButton as={IconButton} icon={<SortIcon />} size="sm" variant="outline" />
+                    <MenuButton
+                      as={Button}
+                      rightIcon={<ChevronDownIcon />}
+                      leftIcon={<Icon as={getSortIcon(sortMode)} />}
+                      variant="outline"
+                      size="sm"
+                    >
+                    Sort
+                    </MenuButton>
                     <MenuList>
-                      <MenuItem onClick={() => setSortMode('name')}>
-                        <HStack><FiSearch /><Text>Name</Text></HStack>
+                      <MenuItem icon={<FiSearch />} onClick={() => handleSortModeChange('name')}>
+                      Name
                       </MenuItem>
-                      <MenuItem onClick={() => setSortMode('rarity')}>
-                        <HStack><FiHash /><Text>Rarity</Text></HStack>
+                      <MenuItem icon={<FiHash />} onClick={() => handleSortModeChange('rarity')}>
+                      Rarity
                       </MenuItem>
-                      <MenuItem onClick={() => setSortMode('card_code')}>
-                        <HStack><FiType /><Text>Card Code</Text></HStack>
+                      <MenuItem icon={<FiType />} onClick={() => handleSortModeChange('card_code')}>
+                      Card Code
                       </MenuItem>
-                      <MenuItem onClick={() => setSortMode('tags')}>
-                        <HStack><FiTag /><Text>Tags</Text></HStack>
+                      <MenuItem icon={<FiTag />} onClick={() => handleSortModeChange('tags')}>
+                      Tags
                       </MenuItem>
                     </MenuList>
                   </Menu>
 
-                  <Tooltip label={`Sort ${sortReverse ? 'ascending' : 'descending'}`}>
-                    <IconButton
-                      icon={sortReverse ? <BsSortUp /> : <BsSortDown />}
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSortReverse(!sortReverse)}
-                      aria-label={`Sort ${sortReverse ? 'ascending' : 'descending'}`}
-                    />
-                  </Tooltip>
+                  <IconButton
+                    icon={sortReverse ? <BsSortDown /> : <BsSortUp />}
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSortReverseChange}  // CHANGED: use new handler
+                    aria-label="Toggle sort direction"
+                  />
                 </HStack>
 
                 {/* Second row: Collection switches */}
