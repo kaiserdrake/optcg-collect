@@ -1140,9 +1140,9 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} size={modalSize} scrollBehavior="inside">
+      <Modal isOpen={isOpen && !isCardDetailModalOpen} onClose={onClose} size={modalSize} scrollBehavior="inside">
         <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
-        <ModalContent maxH="90vh">
+        <ModalContent>
           <ModalHeader>
             <VStack align="start" spacing={2}>
               <Text>Locate Deck Cards</Text>
