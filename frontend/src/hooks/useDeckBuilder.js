@@ -232,22 +232,52 @@ export const useDeckBuilder = () => {
         sortedNonLeaderCards = nonLeaderCards.sort((a, b) => {
           const aData = getCardData(a);
           const bData = getCardData(b);
+
+          // Define category order: CHARACTER, STAGE, EVENT
+          const categoryOrder = { 'CHARACTER': 1, 'STAGE': 2, 'EVENT': 3 };
+          const aCategory = categoryOrder[aData?.category] || 999;
+          const bCategory = categoryOrder[bData?.category] || 999;
+
+          // First, sort by category
+          const categoryCompare = aCategory - bCategory;
+          if (categoryCompare !== 0) {
+            return sortReverse ? -categoryCompare : categoryCompare;
+          }
+
+          // Then, sort by cost within the same category
           const costCompare = (aData?.cost || 0) - (bData?.cost || 0);
           if (costCompare !== 0) {
             return sortReverse ? -costCompare : costCompare;
           }
+
+          // Finally, sort by name if cost is the same
           const nameCompare = (aData?.name || '').localeCompare(bData?.name || '');
           return sortReverse ? -nameCompare : nameCompare;
         });
         break;
+
       case 'name':
         sortedNonLeaderCards = nonLeaderCards.sort((a, b) => {
           const aData = getCardData(a);
           const bData = getCardData(b);
+
+          // Define category order: CHARACTER, STAGE, EVENT
+          const categoryOrder = { 'CHARACTER': 1, 'STAGE': 2, 'EVENT': 3 };
+          const aCategory = categoryOrder[aData?.category] || 999;
+          const bCategory = categoryOrder[bData?.category] || 999;
+
+          // First, sort by category
+          const categoryCompare = aCategory - bCategory;
+          if (categoryCompare !== 0) {
+            return sortReverse ? -categoryCompare : categoryCompare;
+          }
+
+          // Then, sort by name within the same category
           const nameCompare = (aData?.name || '').localeCompare(bData?.name || '');
           return sortReverse ? -nameCompare : nameCompare;
         });
         break;
+
       case 'type':
         sortedNonLeaderCards = nonLeaderCards.sort((a, b) => {
           const aData = getCardData(a);
@@ -260,6 +290,7 @@ export const useDeckBuilder = () => {
           return sortReverse ? -nameCompare : nameCompare;
         });
         break;
+
       default:
         sortedNonLeaderCards = nonLeaderCards;
     }
