@@ -1193,12 +1193,27 @@ app.get('/api/public/cards/search', validateSearchKeyword, async (req, res) => {
 
 // Enhanced search
 app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req, res) => {
-  const { keyword, ownedOnly, showProxies, limit = 50, offset = 0 } = req.query;
+  const {
+    keyword,
+    ownedOnly,
+    showProxies,
+    limit = 50,
+    offset = 0,
+    sortBy = 'name',
+    sortOrder = 'asc'
+  } = req.query;
   const userId = req.user.id;
 
   // Convert limit and offset to integers
   const limitInt = Math.min(parseInt(limit) || 50, 100); // Cap at 100 per page
   const offsetInt = parseInt(offset) || 0;
+
+  // Validate sort parameters
+  const validSortFields = ['name', 'rarity', 'card_code', 'tags', 'cost', 'power'];
+  const validSortOrders = ['asc', 'desc'];
+
+  const sortByField = validSortFields.includes(sortBy) ? sortBy : 'name';
+  const sortOrderDir = validSortOrders.includes(sortOrder.toLowerCase()) ? sortOrder.toLowerCase() : 'asc';
 
   // Allow empty keyword ONLY if ownedOnly or showProxies is true
   const allowEmptyKeyword = ownedOnly === 'true' || showProxies === 'true';
@@ -1423,7 +1438,55 @@ app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req,
       }
     }
 
-    orderClauses.push('c.name ASC');
+    // Add user-selected sorting
+    switch (sortByField) {
+      case 'rarity':
+        // Define rarity order in SQL
+        orderClauses.push(`
+          CASE c.rarity
+          WHEN 'C' THEN 1
+          WHEN 'UC' THEN 2
+          WHEN 'R' THEN 3
+          WHEN 'SR' THEN 4
+          WHEN 'SEC' THEN 5
+          WHEN 'L' THEN 6
+          WHEN 'SP' THEN 7
+          ELSE 0
+          END ${sortOrderDir.toUpperCase()}
+        `);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'card_code':
+        orderClauses.push(`c.card_code ${sortOrderDir.toUpperCase()}`);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'tags':
+        // Count total tags (user_tags + global_tags)
+        orderClauses.push(`
+          (COALESCE(array_length(ARRAY_AGG(DISTINCT ut.tag_type) FILTER (WHERE ut.tag_type IS NOT NULL), 1), 0) +
+          COALESCE(array_length(ARRAY_AGG(DISTINCT gt.tag_type) FILTER (WHERE gt.tag_type IS NOT NULL), 1), 0))
+${sortOrderDir.toUpperCase()}
+`);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'cost':
+        orderClauses.push(`c.cost ${sortOrderDir.toUpperCase()} NULLS LAST`);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'power':
+        orderClauses.push(`c.power ${sortOrderDir.toUpperCase()} NULLS LAST`);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'name':
+      default:
+        orderClauses.push(`c.name ${sortOrderDir.toUpperCase()}`);
+        break;
+    }
 
     if (orderClauses.length > 0) {
       baseQuery += ' ORDER BY ' + orderClauses.join(', ');
