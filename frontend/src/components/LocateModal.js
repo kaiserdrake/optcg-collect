@@ -37,6 +37,7 @@ import {
 import { FiMapPin, FiTag, FiCopy } from 'react-icons/fi';
 import CardImage from './CardImage';
 import SetLocationModal from './SetLocationModal';
+import CardDetailModal from './CardDetailModal';
 import CardTags from './CardTags';
 import { CARD_EVENTS, dispatchCardUpdate } from '@/utils/cardEvents';
 import { getTagStyles } from '@/utils/cardStyles';
@@ -235,6 +236,13 @@ const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) =
       p={3}
       mb={2}
       boxShadow="sm"
+      cursor="pointer"
+      onClick={() => onCardClick(row.card)}
+      _hover={{
+        boxShadow: 'md',
+        transform: 'translateY(-1px)'
+      }}
+      transition="all 0.2s"
     >
       <HStack spacing={3} align="start">
         {/* Card Image */}
@@ -310,7 +318,7 @@ const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) =
           </HStack>
 
           {/* Location */}
-          <Box mt={2}>
+          <Box mt={2} onClick={(e) => e.stopPropagation()}>
             {typeof row.location === 'string' && (row.location === 'Loading...' || row.location === 'Not Owned') ? (
               <Text fontSize="xs" color="gray.500">
                 {row.location}
@@ -343,7 +351,6 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
   const [isBulkActionOngoing, setIsBulkActionOngoing] = useState(false);
 
   const toast = useToast();
-  const scrollContainerRef = useRef(null);
 
   // Responsive breakpoints
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -368,6 +375,19 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
     onOpen: onBulkTagModalOpen,
     onClose: onBulkTagModalClose
   } = useDisclosure();
+
+  // CardDetailModal controls
+  const {
+    isOpen: isCardDetailModalOpen,
+    onOpen: onCardDetailModalOpen,
+    onClose: onCardDetailModalClose
+  } = useDisclosure();
+
+  // Handle card click to open CardDetailModal
+  const handleCardClick = useCallback((card) => {
+    setSelectedCard(ensureTagsAreArrays(card));
+    onCardDetailModalOpen();
+  }, [onCardDetailModalOpen]);
 
   const cancelRef = React.useRef();
 
@@ -1133,7 +1153,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           </ModalHeader>
           <ModalCloseButton />
 
-          <ModalBody>
+          <ModalBody p={0} maxH="60vh" overflowY="auto">
             {isLoading && locateData.length === 0 ? (
               <VStack py={8}>
                 <Spinner size="xl" />
@@ -1161,6 +1181,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                           needMoreCards={needMoreCards}
                           isIncomplete={isIncomplete}
                           onLocationChange={handleLocationChange}
+                          onCardClick={handleCardClick}
                         />
                       );
                     })}
@@ -1194,7 +1215,16 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                           const isIncomplete = isCardGroupIncomplete(row);
 
                           return (
-                            <Tr key={`${row.cardId}-${index}`} bg={isIncomplete ? 'red.50' : (row.isAlternative ? 'yellow.50' : 'white')}>
+                            <Tr
+                              key={`${row.cardId}-${index}`}
+                              bg={isIncomplete ? 'red.50' : (row.isAlternative ? 'yellow.50' : 'white')}
+                              cursor="pointer"
+                              onClick={() => handleCardClick(row.card)}
+                              _hover={{
+                                bg: isIncomplete ? 'red.100' : (row.isAlternative ? 'yellow.100' : 'gray.50')
+                              }}
+                              transition="all 0.2s"
+                            >
                               {/* Card Image */}
                               <Td p={2}>
                                 <CardImage
@@ -1267,7 +1297,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                               </Td>
 
                               {/* Location */}
-                              <Td>
+                              <Td onClick={(e) => e.stopPropagation()}>
                                 {typeof row.location === 'string' && (row.location === 'Loading...' || row.location === 'Not Owned') ? (
                                   <Text fontSize="xs" color="gray.500">
                                     {row.location}
@@ -1453,6 +1483,14 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      <CardDetailModal
+        isOpen={isCardDetailModalOpen}
+        onClose={onCardDetailModalClose}
+        selectedCard={selectedCard}
+        showProxies={true}
+        interactive={false}
+      />
     </>
   );
 };
