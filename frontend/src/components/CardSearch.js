@@ -342,14 +342,13 @@ function CardSearch({
     }
   }, [mode, onSearchKeywordChange, transformCardIdPattern]);
 
-  const ensureTagsAreArrays = (card) => {
+  const ensureTagsAreArrays = useCallback((card) => {
     if (!card) return card;
 
     const parsePostgreSQLArray = (pgArray) => {
       if (Array.isArray(pgArray)) return pgArray;
       if (!pgArray || pgArray === 'null') return [];
 
-      // Parse PostgreSQL array format like "{favorite,want}" -> ["favorite", "want"]
       if (typeof pgArray === 'string') {
         if (pgArray === '{}') return [];
         const cleaned = pgArray.replace(/[{}]/g, '');
@@ -365,18 +364,17 @@ function CardSearch({
       global_tags: parsePostgreSQLArray(card.global_tags)
     };
 
-    // Convert location_name/location_id to location object
     if (card.location_name !== null && card.location_id !== null) {
       processedCard.location = {
         id: card.location_id,
         name: card.location_name
       };
     } else {
-      processedCard.location = null; // Explicitly set to null when no location
+      processedCard.location = null;
     }
 
     return processedCard;
-  };
+  }, []);
 
   // Search function with proper error handling
   const performSearch = useCallback(async (keyword, ownedOnly = false, page = 1, limitPerPage = 25) => {
