@@ -44,6 +44,17 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate, onLoc
     return card.category === 'LEADER' ? 'Life' : 'Cost';
   };
 
+  const handleLocationClick = (e, card) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.stopImmediatePropagation) {
+      e.stopImmediatePropagation();
+    }
+    if (onLocationBadgeClick && card) {
+      onLocationBadgeClick(card);
+    }
+  };
+
   const ListCard = ({ card }) => {
     if (!card) return null;
 
@@ -136,14 +147,17 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate, onLoc
                 </HStack>
 
                 {/* Row 4: Location */}
-                <HStack width="100%">
+                <Box
+                  width="100%"
+                  onClick={(e) => handleLocationClick(e, card)}
+                  cursor={hasLocation ? "pointer" : "default"}
+                >
                   {hasLocation && (
                     <LocationDisplayBadge
                       card={card}
-                      onClick={onLocationBadgeClick}
                     />
                   )}
-                </HStack>
+                </Box>
               </VStack>
             </Flex>
 
@@ -190,14 +204,15 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate, onLoc
           suppressHydrationWarning={true}
           position="relative"
         >
-          {/* Top right - CardTags and LocationDisplay (read-only), cascaded */}
+          {/* Top right - CardTags and LocationDisplay, cascaded */}
           {(hasTags || hasLocation) && (
             <HStack position="absolute" top={2} right={2} zIndex={2} spacing={2}>
               {hasLocation && (
-                <LocationDisplayBadge
-                  card={card}
-                  onClick={onLocationBadgeClick}
-                />
+                <Box onClick={(e) => handleLocationClick(e, card)}>
+                  <LocationDisplayBadge
+                    card={card}
+                  />
+                </Box>
               )}
               {hasTags && (
                 <CardTags card={card} interactive={false} size="md" showTooltips={true} />
