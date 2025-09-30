@@ -534,7 +534,7 @@ const CardDetailModal = ({
       {interactive && (
         <SetCardInstanceLocationsModal
           isOpen={isLocationModalOpen}
-          onClose={onLocationModalClose}
+          onClose={handleLocationModalClose}
           card={locationModalCard}
           onLocationUpdated={handleLocationUpdated}
           onModalStateChange={setIsInstanceModalOpen}

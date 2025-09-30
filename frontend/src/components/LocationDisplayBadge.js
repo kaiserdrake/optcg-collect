@@ -27,25 +27,6 @@ const LocationDisplayBadge = ({ card, onClick }) => {
     }
   }, [card.id, hasCard]);
 
-  // Listen for location updates
-  useEffect(() => {
-    if (!card?.id) return;
-
-    const handleLocationUpdate = (event) => {
-      const { cardId } = event.detail;
-      // If this card was updated, refetch location summary
-      if (cardId === card.id) {
-        fetchLocationSummary();
-      }
-    };
-
-    window.addEventListener('card:location_updated', handleLocationUpdate);
-
-    return () => {
-      window.removeEventListener('card:location_updated', handleLocationUpdate);
-    };
-  }, [card?.id]);
-
   const fetchLocationSummary = async () => {
     setIsLoading(true);
     try {
@@ -124,20 +105,20 @@ const LocationDisplayBadge = ({ card, onClick }) => {
 
   const unlocatedCount = locationSummary['No Location']?.count || 0;
 
-  // If no locations set at all, show "Set Location" button
+  // If no locations set at all
   if (locationEntries.length === 0 && unlocatedCount > 0) {
     return (
       <Tag
         size="sm"
-        bg="gray.500"
-        color="white"
+        bg="gray.50"
+        color="gray.500"
         cursor="pointer"
         onClick={handleBadgeClick}
-        _hover={{ opacity: 0.8 }}
+        _hover={{ bg: 'gray.300' }}
       >
         <HStack spacing={1}>
           <FiMapPin />
-          <Text fontSize="xs" fontWeight="bold">Set Location</Text>
+          <Text fontSize="xs">Set Location</Text>
         </HStack>
       </Tag>
     );

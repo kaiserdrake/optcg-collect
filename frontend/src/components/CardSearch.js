@@ -15,8 +15,7 @@ import AdvancedSearchInput, { validateSearchInput } from './AdvancedSearchInput'
 import CardDetailModal from './CardDetailModal';
 import SearchHelpModal from './SearchHelpModal';
 import { CARD_EVENTS } from '@/utils/cardEvents';
-
-// Import the view components
+import SetCardInstanceLocationsModal from './SetCardInstanceLocationsModal';
 import ListViewCollect from './ListViewCollect';
 import ThumbViewCollect from './ThumbViewCollect';
 import ListViewBuilder from './ListViewBuilder';
@@ -173,7 +172,8 @@ const IsolatedResultsComponent = React.memo(({
   onCountUpdate,
   showProxies,
   thumbnailSize,
-  loading
+  loading,
+  onLocationBadgeClick
 }) => {
 
   if (loading || !results || results.length === 0) {
@@ -188,6 +188,7 @@ const IsolatedResultsComponent = React.memo(({
         onCardClick={onCardClick}
         onCountUpdate={onCountUpdate}
         showProxies={showProxies}
+        onLocationBadgeClick={onLocationBadgeClick}
       />
     ) : (
       <ListViewBuilder
@@ -203,6 +204,7 @@ const IsolatedResultsComponent = React.memo(({
         onCountUpdate={onCountUpdate}
         showProxies={showProxies}
         thumbnailSize={thumbnailSize}
+        onLocationBadgeClick={onLocationBadgeClick}
       />
     ) : (
       <ThumbViewBuilder
@@ -245,6 +247,15 @@ function CardSearch({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [totalResults, setTotalResults] = useState(0);
+
+  const [locationModalCard, setLocationModalCard] = useState(null);
+  const [isInstanceModalOpen, setIsInstanceModalOpen] = useState(false);
+
+  const {
+    isOpen: isLocationModalOpen,
+    onOpen: onLocationModalOpen,
+    onClose: onLocationModalClose
+  } = useDisclosure();
 
   // Modal states
   const [selectedCard, setSelectedCard] = useState(null);
@@ -467,6 +478,23 @@ function CardSearch({
       onDetailOpen();
     }
   }, [mode, onCardClick, onDetailOpen]);
+
+  const handleLocationBadgeClick = useCallback((card) => {
+    setLocationModalCard(card);
+    onLocationModalOpen();
+  }, [onLocationModalOpen]);
+
+  const handleLocationModalClose = useCallback(() => {
+    setLocationModalCard(null);
+    onLocationModalClose();
+  }, [onLocationModalClose]);
+
+  const handleLocationUpdated = useCallback(async () => {
+    // Refresh search results after location update
+    if (performSearch && searchTerm) {
+      await performSearch(searchTerm, inCollection, currentPage, itemsPerPage);
+    }
+  }, [performSearch, searchTerm, inCollection, currentPage, itemsPerPage]);
 
   // Count update handler using correct API endpoints
   const handleCountUpdate = useCallback(async (cardId, updateData) => {
@@ -958,6 +986,7 @@ function CardSearch({
         showProxies={showProxies}
         thumbnailSize={thumbnailSize}
         loading={loading}
+        onLocationBadgeClick={handleLocationBadgeClick}
       />
 
       {/* Modals */}

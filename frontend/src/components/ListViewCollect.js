@@ -9,40 +9,10 @@ import CardVariantIndicator from './CardVariantIndicator';
 import CardTags from './CardTags';
 import StyledTextRenderer from './StyledTextRenderer';
 import CardImage from './CardImage';
+import LocationDisplayBadge from './LocationDisplayBadge';
 import { FiMapPin } from 'react-icons/fi';
 import { getTagStyles, stripHtml } from '@/utils/cardStyles';
 import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
-
-// Simple LocationDisplay component for Collection mode
-const LocationDisplay = ({ card }) => {
-  if (!card) return null;
-
-  const owned = card.owned_count || 0;
-  const proxy = card.proxy_count || 0;
-  const hasCard = owned > 0 || proxy > 0;
-
-  if (!hasCard) return null;
-
-  const location = card.location;
-  if (!location?.name) return null;
-
-  const markerColor = location.marker || 'gray';
-  const chakraColor = markerColor === 'gray' ? 'gray.500' : `${markerColor}.500`;
-
-  // Limit location name to 24 characters with ellipsis
-  const locationName = location.name.length > 24
-    ? location.name.substring(0, 24) + '...'
-    : location.name;
-
-  return (
-    <Tag size="sm" variant="subtle" bg="gray.100" color={chakraColor} border="none" boxShadow="none">
-      <HStack spacing={1}>
-        <FiMapPin color={chakraColor} />
-        <Text fontSize="xs" color={chakraColor}>{locationName}</Text>
-      </HStack>
-    </Tag>
-  );
-};
 
 const extractStyledKeywords = (effect, triggerEffect) => {
   const combinedText = `${effect || ''} ${triggerEffect || ''}`;
@@ -66,7 +36,7 @@ const extractStyledKeywords = (effect, triggerEffect) => {
   return keywordArray;
 };
 
-const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => {
+const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate, onLocationBadgeClick }) => {
   // Check if we should use mobile layout
   const isMobile = useBreakpointValue({ base: true, md: false });
 
@@ -168,7 +138,10 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => 
                 {/* Row 4: Location */}
                 <HStack width="100%">
                   {hasLocation && (
-                    <LocationDisplay card={card} />
+                    <LocationDisplayBadge
+                      card={card}
+                      onClick={onLocationBadgeClick}
+                    />
                   )}
                 </HStack>
               </VStack>
@@ -221,7 +194,10 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate }) => 
           {(hasTags || hasLocation) && (
             <HStack position="absolute" top={2} right={2} zIndex={2} spacing={2}>
               {hasLocation && (
-                <LocationDisplay card={card} />
+                <LocationDisplayBadge
+                  card={card}
+                  onClick={onLocationBadgeClick}
+                />
               )}
               {hasTags && (
                 <CardTags card={card} interactive={false} size="md" showTooltips={true} />
