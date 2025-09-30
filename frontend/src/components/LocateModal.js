@@ -290,7 +290,7 @@ const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) =
             ) : (
               <LocationDisplayBadge
                 card={row.card}
-                onClick={handleLocationChange}
+                onClick={onLocationChange}
               />
             )}
           </Box>
