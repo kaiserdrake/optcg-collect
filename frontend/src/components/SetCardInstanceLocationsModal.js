@@ -210,9 +210,14 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
               <FiMapPin />
               <Text>Set Card Locations</Text>
             </HStack>
-            <Text fontSize="sm" fontWeight="normal" color="gray.600">
-              {card?.name || card?.card_code}
-            </Text>
+            <VStack align="start" spacing={0}>
+              <Text fontSize="sm" fontWeight="bold" color="gray.800">
+                {card?.name}
+              </Text>
+              <Text fontSize="xs" color="gray.600">
+                {card?.card_code}
+              </Text>
+            </VStack>
           </VStack>
         </ModalHeader>
         <ModalCloseButton />

@@ -27,6 +27,25 @@ const LocationDisplayBadge = ({ card, onClick }) => {
     }
   }, [card.id, hasCard]);
 
+  // Listen for location updates
+  useEffect(() => {
+    if (!card?.id) return;
+
+    const handleLocationUpdate = (event) => {
+      const { cardId } = event.detail;
+      // If this card was updated, refetch location summary
+      if (cardId === card.id) {
+        fetchLocationSummary();
+      }
+    };
+
+    window.addEventListener('card:location_updated', handleLocationUpdate);
+
+    return () => {
+      window.removeEventListener('card:location_updated', handleLocationUpdate);
+    };
+  }, [card?.id]);
+
   const fetchLocationSummary = async () => {
     setIsLoading(true);
     try {
@@ -105,7 +124,7 @@ const LocationDisplayBadge = ({ card, onClick }) => {
 
   const unlocatedCount = locationSummary['No Location']?.count || 0;
 
-  // If no locations set at all
+  // If no locations set at all, show "Set Location" button
   if (locationEntries.length === 0 && unlocatedCount > 0) {
     return (
       <Tag
@@ -124,7 +143,12 @@ const LocationDisplayBadge = ({ card, onClick }) => {
     );
   }
 
-  // Render multiple location badges
+  // If there are no location entries at all (all unlocated), don't show anything
+  if (locationEntries.length === 0) {
+    return null;
+  }
+
+  // Render only location badges (no "No Location" badge)
   return (
     <HStack spacing={1} flexWrap="wrap" onClick={handleBadgeClick} cursor="pointer">
       {locationEntries.map((location, index) => (
@@ -141,21 +165,6 @@ const LocationDisplayBadge = ({ card, onClick }) => {
           </Text>
         </Tag>
       ))}
-
-      {/* Show unlocated count if any */}
-      {unlocatedCount > 0 && (
-        <Tag
-          size="sm"
-          bg="gray.400"
-          color="white"
-          fontWeight="bold"
-          _hover={{ opacity: 0.8 }}
-        >
-          <Text fontSize="xs">
-            {unlocatedCount}×No Location
-          </Text>
-        </Tag>
-      )}
     </HStack>
   );
 };
