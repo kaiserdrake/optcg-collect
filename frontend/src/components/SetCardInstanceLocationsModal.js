@@ -96,7 +96,13 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
 
       if (response.ok) {
         const data = await response.json();
-        setInstances(data.instances || []);
+        const instancesData = data.instances || [];
+        setInstances(instancesData);
+
+        // Auto-select all instances by default
+        if (instancesData.length > 0) {
+          setSelectedInstances(instancesData.map(inst => inst.instance_id));
+        }
       }
     } catch (error) {
       console.error('Failed to fetch card instances:', error);
@@ -165,14 +171,6 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
       );
 
       if (response.ok) {
-        toast({
-          title: 'Locations Updated',
-          description: `Successfully updated ${selectedInstances.length} card(s)`,
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
-
         // Refresh instances to show updated locations
         await fetchInstances();
 
@@ -213,7 +211,7 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
           console.warn('Failed to fetch updated card data for event dispatch:', error);
         }
 
-        // Notify parent component
+        // Notify parent component (parent will show the toast)
         if (onLocationUpdated) {
           onLocationUpdated();
         }

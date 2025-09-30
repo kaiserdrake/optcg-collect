@@ -190,7 +190,7 @@ const TagSelector = ({ selectedTagType, selectedTagAction, onTagTypeSelect, onTa
 };
 
 // Mobile card component for small screens
-const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) => {
+const MobileCardRow = ({ row, needMoreCards, onLocationChange, onCardClick, isIncomplete }) => {
   return (
     <Box
       bg={isIncomplete ? 'red.50' : (row.isAlternative ? 'yellow.50' : 'white')}
