@@ -36,7 +36,8 @@ import {
 
 import { FiMapPin, FiTag, FiCopy } from 'react-icons/fi';
 import CardImage from './CardImage';
-import SetLocationModal from './SetLocationModal';
+import SetCardInstanceLocationsModal from './SetCardInstanceLocationsModal';
+import LocationDisplayBadge from './LocationDisplayBadge';
 import CardDetailModal from './CardDetailModal';
 import CardTags from './CardTags';
 import { CARD_EVENTS, dispatchCardUpdate } from '@/utils/cardEvents';
@@ -188,43 +189,6 @@ const TagSelector = ({ selectedTagType, selectedTagAction, onTagTypeSelect, onTa
   );
 };
 
-// Interactive location badge component
-const InteractiveLocationBadge = ({ card, onLocationChange }) => {
-  const handleClick = () => {
-    if (onLocationChange) {
-      onLocationChange(card);
-    }
-  };
-
-  const hasLocation = card?.location?.name;
-  const locationName = hasLocation ? card.location.name : 'Set Location';
-  const marker = hasLocation ? card.location.marker || 'gray' : 'gray';
-
-  return (
-    <Tooltip label={hasLocation ? `Location: ${locationName}` : 'Click to set location'} placement="top">
-      <Tag
-        size="sm"
-        variant="subtle"
-        colorScheme={marker}
-        cursor="pointer"
-        onClick={handleClick}
-        _hover={{
-          transform: 'scale(1.05)',
-          boxShadow: 'sm'
-        }}
-        transition="all 0.2s"
-      >
-        <HStack spacing={1}>
-          <FiMapPin size="12" />
-          <Text fontSize="xs" fontWeight="medium">
-            {truncateText(locationName, 12)}
-          </Text>
-        </HStack>
-      </Tag>
-    </Tooltip>
-  );
-};
-
 // Mobile card component for small screens
 const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) => {
   return (
@@ -324,9 +288,9 @@ const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) =
                 {row.location}
               </Text>
             ) : (
-              <InteractiveLocationBadge
+              <LocationDisplayBadge
                 card={row.card}
-                onLocationChange={onLocationChange}
+                onClick={handleLocationChange}
               />
             )}
           </Box>
@@ -349,6 +313,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
   const [bulkTagType, setBulkTagType] = useState('');
   const [bulkTagAction, setBulkTagAction] = useState('');
   const [isBulkActionOngoing, setIsBulkActionOngoing] = useState(false);
+  const [bulkMoveErrors, setBulkMoveErrors] = useState([]);
 
   const toast = useToast();
 
@@ -382,6 +347,18 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
     onOpen: onCardDetailModalOpen,
     onClose: onCardDetailModalClose
   } = useDisclosure();
+
+  const {
+    isOpen: isBulkMoveErrorOpen,
+    onOpen: onBulkMoveErrorOpen,
+    onClose: onBulkMoveErrorClose
+  } = useDisclosure();
+
+  const handleOpenLocationModal = (card) => {
+    setSelectedCard(card);
+    // Don't close error dialog - keep it open so user can process all cards
+    onLocationModalOpen();
+  };
 
   // Handle card click to open CardDetailModal
   const handleCardClick = useCallback((card) => {
@@ -441,7 +418,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           };
         }
 
-        cardGroups[baseKey].totalOwned += (row.ownedCount || 0) + (row.proxyCount || 0);
+        cardGroups[baseKey].totalOwned += (parseInt(row.ownedCount, 10) || 0) + (parseInt(row.proxyCount, 10) || 0);
         cardGroups[baseKey].deckCount = Math.max(cardGroups[baseKey].deckCount, row.deckCount || 0);
         cardGroups[baseKey].rows.push(row);
       });
@@ -473,7 +450,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
         cardGroups[baseKey] = { totalOwned: 0, deckCount: 0 };
       }
 
-      cardGroups[baseKey].totalOwned += (r.ownedCount || 0) + (r.proxyCount || 0);
+      cardGroups[baseKey].totalOwned += (parseInt(r.ownedCount, 10) || 0) + (parseInt(r.proxyCount, 10) || 0);
       cardGroups[baseKey].deckCount = Math.max(cardGroups[baseKey].deckCount, r.deckCount || 0);
     });
 
@@ -715,68 +692,80 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
   };
 
   // Handle location update with global dispatch
-  const handleLocationUpdate = async (updatedCard) => {
-    // If no updatedCard is provided, fetch it from the API
-    if (!updatedCard && selectedCard) {
-      try {
-        const searchParams = new URLSearchParams({
-          keyword: `id:${selectedCard.id}`,
-          ownedOnly: 'false',
-          showProxies: 'true'
-        });
-
-        const response = await fetch(`${api}/api/cards/search?${searchParams.toString()}`, {
-          credentials: 'include',
-        });
-
-        if (response.ok) {
-          const searchData = await response.json();
-          const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
-
-          if (searchResults.length > 0) {
-            updatedCard = ensureTagsAreArrays(searchResults[0]);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching updated card data:', error);
-      }
-    }
-
-    if (!updatedCard) {
-      console.error('No updated card data available');
+  const handleLocationUpdate = async () => {
+    if (!selectedCard) {
+      onLocationModalClose();
       return;
     }
 
-    // Update the locate data with the new location information
-    setLocateData(prevData => {
-      return prevData.map(row => {
-        if (row.cardId === updatedCard.id) {
-          const updatedLocation = updatedCard.location && updatedCard.location.name
-            ? updatedCard.location.name
-            : 'Set Location';
-
-          return {
-            ...row,
-            card: updatedCard,
-            location: updatedLocation
-          };
-        }
-        return row;
+    try {
+      // Fetch only the updated card's data
+      const searchParams = new URLSearchParams({
+        keyword: `id:${selectedCard.id}`,
+        ownedOnly: 'false',
+        showProxies: 'true'
       });
-    });
 
-    // Dispatch global update event for other components
-    dispatchCardUpdate(CARD_EVENTS.LOCATION_UPDATED, updatedCard.id, { card: updatedCard });
+      const response = await fetch(`${api}/api/cards/search?${searchParams.toString()}`, {
+        credentials: 'include',
+      });
 
-    toast({
-      title: 'Location Updated',
-      description: `Card location updated successfully`,
-      status: 'success',
-      duration: 2000,
-      isClosable: true,
-    });
+      if (response.ok) {
+        const searchData = await response.json();
+        const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
 
-    onLocationModalClose();
+        if (searchResults.length > 0) {
+          const updatedCard = ensureTagsAreArrays(searchResults[0]);
+
+          // Update the locate data for this specific card
+          setLocateData(prevData => {
+            return prevData.map(row => {
+              if (row.cardId === updatedCard.id) {
+                return {
+                  ...row,
+                  card: updatedCard,
+                  ownedCount: updatedCard.owned_count || 0,
+                  proxyCount: updatedCard.proxy_count || 0
+                };
+              }
+              return row;
+            });
+          });
+
+          // Dispatch global update event for other components
+          dispatchCardUpdate(CARD_EVENTS.LOCATION_UPDATED, updatedCard.id, { card: updatedCard });
+
+          toast({
+            title: 'Location Updated',
+            description: `Card locations updated successfully`,
+            status: 'success',
+            duration: 2000,
+            isClosable: true,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching updated card data:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to refresh card data',
+        status: 'error',
+        duration: 2000,
+        isClosable: true,
+      });
+    }
+    // Don't close the modal - let the user close it manually
+  };
+
+  const handleLocationUpdateAndReopenErrors = async () => {
+    await handleLocationUpdate();
+    // If there were bulk move errors, reopen the dialog after location modal closes
+    if (bulkMoveErrors.length > 0) {
+      // Small delay to ensure location modal is closed first
+      setTimeout(() => {
+        onBulkMoveErrorOpen();
+      }, 100);
+    }
   };
 
   // Handle bulk move location
@@ -793,6 +782,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
     }
 
     setIsBulkActionOngoing(true);
+
     try {
       const ownedCards = filteredData.filter(row => {
         const totalOwned = (row.ownedCount || 0) + (row.proxyCount || 0);
@@ -807,96 +797,212 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           duration: 3000,
           isClosable: true,
         });
+        setIsBulkActionOngoing(false);
         return;
       }
 
-      const movePromises = ownedCards.map(async (row) => {
-        const locationId = bulkLocationId === null ? null : bulkLocationId;
+      const errorList = [];
+      const successList = [];
 
-        const response = await fetch(`${api}/api/collection/location`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            cardId: row.cardId,
-            locationId: locationId
-          }),
-        });
+      // Process each card
+      for (const row of ownedCards) {
+        try {
+          const cardId = row.cardId;
+          const deckCount = row.deckCount || 1;
+          const totalOwned = (row.ownedCount || 0) + (row.proxyCount || 0);
 
-        if (!response.ok) {
-          throw new Error(`Failed to update location for card ${row.cardId}`);
-        }
+          // Determine the number of cards to move
+          // For incomplete cards (totalOwned < deckCount), use totalOwned (max owned)
+          // For complete cards (totalOwned >= deckCount), use deckCount
+          const cardsToMove = totalOwned < deckCount ? totalOwned : deckCount;
 
-        return { cardId: row.cardId, locationId };
-      });
+          // Fetch instances for this card
+          const instancesResponse = await fetch(`${api}/api/cards/${cardId}/instances`, {
+            credentials: 'include'
+          });
 
-      await Promise.all(movePromises);
+          if (!instancesResponse.ok) {
+            throw new Error('Failed to fetch card instances');
+          }
 
-      // Find the selected location data for proper formatting
-      const selectedLocationData = bulkLocationId === null ? null :
-        locations.find(loc => loc.id === bulkLocationId);
+          const instancesData = await instancesResponse.json();
+          const instances = instancesData.instances || [];
 
-      // Update locate data with new locations and dispatch global events
-      setLocateData(prevData => {
-        return prevData.map(row => {
-          const isAffectedCard = ownedCards.some(ownedRow => ownedRow.cardId === row.cardId);
-          if (isAffectedCard) {
-            let newLocation;
-            let newLocationData;
+          // Condition 1: If cardsToMove matches total owned (move all available cards)
+          // This handles:
+          // - Complete cards where cardsToMove === instances (deck needs 4, own 4)
+          // - Incomplete cards where cardsToMove === instances (deck needs 4, own 2)
+          if (cardsToMove === instances.length) {
+            const updates = instances.map(inst => ({
+              instance_id: inst.instance_id,
+              location_id: bulkLocationId
+            }));
 
-            if (bulkLocationId === null) {
-              newLocation = 'Set Location';
-              newLocationData = null;
-            } else {
-              newLocation = selectedLocationData ? selectedLocationData.name : 'Set Location';
-              newLocationData = selectedLocationData ? {
-                id: bulkLocationId,
-                name: selectedLocationData.name,
-                marker: selectedLocationData.marker || 'gray'
-              } : null;
+            const updateResponse = await fetch(`${api}/api/cards/${cardId}/instances/locations`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ updates })
+            });
+
+            if (!updateResponse.ok) {
+              throw new Error('Failed to update locations');
             }
 
-            // Create properly formatted updated card data
-            const updatedCard = {
-              ...row.card,
-              location: newLocationData,
-              // Include all the fields that search API returns for location
-              location_id: newLocationData?.id || null,
-              location_name: newLocationData?.name || null,
-              location_marker: newLocationData?.marker || null
-            };
-
-            // Dispatch global update for each affected card with complete card data
-            dispatchCardUpdate(CARD_EVENTS.LOCATION_UPDATED, row.cardId, { card: updatedCard });
-
-            return {
-              ...row,
-              location: newLocation,
-              card: updatedCard
-            };
+            successList.push({
+              cardName: row.card.name,
+              cardCode: row.card.card_code,
+              movedCount: instances.length
+            });
           }
-          return row;
-        });
-      });
+          // Condition 2: If cardsToMove < total owned, prioritize unlocated cards
+          else if (cardsToMove < instances.length) {
+            // Separate unlocated and located instances
+            const unlocatedInstances = instances.filter(inst => !inst.location_id);
+            const locatedInstances = instances.filter(inst => inst.location_id);
 
-      toast({
-        title: 'Locations Updated',
-        description: `Updated locations for ${ownedCards.length} cards`,
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
+            // Count instances already in target location
+            const alreadyInTargetLocation = instances.filter(inst =>
+              inst.location_id === bulkLocationId
+            );
+
+            // Condition 3a: Check if already satisfied (skip if cards are already in target location)
+            if (cardsToMove > unlocatedInstances.length &&
+              alreadyInTargetLocation.length === cardsToMove) {
+              // Already have exact number needed in target location - skip
+              successList.push({
+                cardName: row.card.name,
+                cardCode: row.card.card_code,
+                movedCount: 0,
+                skipped: true
+              });
+              continue;
+            }
+
+            // Condition 3b: If cardsToMove > unlocated count and not already satisfied, error
+            if (cardsToMove > unlocatedInstances.length) {
+              errorList.push({
+                cardName: row.card.name,
+                cardCode: row.card.card_code,
+                cardId: row.cardId,
+                card: row.card,
+                cardsToMove: cardsToMove,
+                deckCount: deckCount,
+                totalOwned: totalOwned,
+                unlocatedCount: unlocatedInstances.length,
+                locatedCount: locatedInstances.length,
+                reason: `Need ${cardsToMove} but only ${unlocatedInstances.length} unlocated (${locatedInstances.length} already located)`
+              });
+              continue;
+            }
+
+            // Take only the needed number of unlocated instances
+            const instancesToMove = unlocatedInstances.slice(0, cardsToMove);
+            const updates = instancesToMove.map(inst => ({
+              instance_id: inst.instance_id,
+              location_id: bulkLocationId
+            }));
+
+            const updateResponse = await fetch(`${api}/api/cards/${cardId}/instances/locations`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ updates })
+            });
+
+            if (!updateResponse.ok) {
+              throw new Error('Failed to update locations');
+            }
+
+            successList.push({
+              cardName: row.card.name,
+              cardCode: row.card.card_code,
+              movedCount: instancesToMove.length
+            });
+          }
+          // Condition 3: If cardsToMove === total owned (but less than instances.length somehow - shouldn't happen but handle it)
+          else {
+            // This case handles edge scenarios - move all instances up to cardsToMove
+            const instancesToMove = instances.slice(0, cardsToMove);
+            const updates = instancesToMove.map(inst => ({
+              instance_id: inst.instance_id,
+              location_id: bulkLocationId
+            }));
+
+            const updateResponse = await fetch(`${api}/api/cards/${cardId}/instances/locations`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ updates })
+            });
+
+            if (!updateResponse.ok) {
+              throw new Error('Failed to update locations');
+            }
+
+            successList.push({
+              cardName: row.card.name,
+              cardCode: row.card.card_code,
+              movedCount: instancesToMove.length
+            });
+          }
+
+        } catch (error) {
+          console.error(`Error processing card ${row.cardId}:`, error);
+          errorList.push({
+            cardName: row.card.name,
+            cardCode: row.card.card_code,
+            cardId: row.cardId,
+            card: row.card,
+            reason: error.message || 'Update failed'
+          });
+        }
+      }
+
+      // Show results
+      if (successList.length > 0) {
+        // Refresh the locate data to show updated locations
+        await generateLocateData();
+
+        const selectedLocationData = bulkLocationId === null ? null :
+          locations.find(loc => loc.id === bulkLocationId);
+        const locationName = selectedLocationData?.name || 'removed from location';
+
+        const movedCount = successList.filter(s => !s.skipped).length;
+        const skippedCount = successList.filter(s => s.skipped).length;
+
+        let description = '';
+        if (movedCount > 0 && skippedCount > 0) {
+          description = `Moved ${movedCount} card(s) to ${locationName}, ${skippedCount} card(s) already in location`;
+        } else if (movedCount > 0) {
+          description = `Successfully moved ${movedCount} card(s) to ${locationName}`;
+        } else {
+          description = `${skippedCount} card(s) already in ${locationName}`;
+        }
+
+        toast({
+          title: 'Bulk Move Complete',
+          description,
+          status: 'success',
+          duration: 4000,
+          isClosable: true,
+        });
+      }
+
+      if (errorList.length > 0) {
+        // Store error list in state to show in dialog
+        setBulkMoveErrors(errorList);
+        onBulkMoveErrorOpen();
+      }
 
       setBulkLocationId(undefined);
       onBulkMoveModalClose();
 
     } catch (error) {
-      console.error('Error moving cards:', error);
+      console.error('Critical error in bulk move:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update card locations. Please try again.',
+        description: 'Failed to complete bulk move operation',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -1303,9 +1409,9 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                                     {row.location}
                                   </Text>
                                 ) : (
-                                  <InteractiveLocationBadge
+                                  <LocationDisplayBadge
                                     card={row.card}
-                                    onLocationChange={handleLocationChange}
+                                    onClick={handleLocationChange}
                                   />
                                 )}
                               </Td>
@@ -1368,11 +1474,11 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
 
       {/* Set Location Modal */}
       {selectedCard && (
-        <SetLocationModal
+        <SetCardInstanceLocationsModal
           isOpen={isLocationModalOpen}
           onClose={onLocationModalClose}
           card={selectedCard}
-          onLocationSet={handleLocationUpdate}
+          onLocationUpdated={bulkMoveErrors.length > 0 ? handleLocationUpdateAndReopenErrors : handleLocationUpdate}
         />
       )}
 
@@ -1480,6 +1586,96 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
                 {bulkTagAction === 'add' ? 'Add Tags' : 'Remove Tags'}
               </Button>
             </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Bulk Move Error Dialog */}
+      <Modal
+        isOpen={isBulkMoveErrorOpen}
+        onClose={onBulkMoveErrorClose}
+        size="xl"
+        scrollBehavior="inside"
+        closeOnOverlayClick={false}
+      >
+        <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
+        <ModalContent>
+          <ModalHeader>
+            <VStack align="start" spacing={2}>
+              <HStack spacing={2}>
+                <FiMapPin />
+                <Text>Cards Skipped During Bulk Move</Text>
+              </HStack>
+              <Text fontSize="sm" fontWeight="normal" color="gray.600">
+                {bulkMoveErrors.length} card(s) could not be moved automatically
+              </Text>
+            </VStack>
+          </ModalHeader>
+          <ModalCloseButton />
+
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              <Box p={3} bg="orange.50" borderRadius="md" borderLeft="4px" borderColor="orange.400">
+                <Text fontSize="sm" color="orange.800">
+                  <strong>Suggestion:</strong> These cards have instances in multiple locations.
+                  You need to manually select which specific instances to move. Click the "Set Location" button
+                  for each card to manage their locations individually. This dialog will stay open until you close it.
+                </Text>
+              </Box>
+
+              <VStack spacing={2} align="stretch">
+                {bulkMoveErrors.map((error, index) => (
+                  <Box
+                    key={index}
+                    p={3}
+                    bg="white"
+                    borderRadius="md"
+                    border="1px"
+                    borderColor="gray.200"
+                    _hover={{ bg: 'gray.50' }}
+                  >
+                    <HStack justify="space-between" align="start">
+                      <VStack align="start" spacing={1} flex={1}>
+                        <HStack spacing={2}>
+                          <Text fontWeight="bold" fontSize="sm">
+                            {error.cardName}
+                          </Text>
+                          <Tag size="sm" colorScheme="gray">
+                            {error.cardCode}
+                          </Tag>
+                        </HStack>
+                        <Text fontSize="xs" color="gray.600">
+                          {error.reason}
+                        </Text>
+                        {error.cardsToMove && (
+                          <HStack spacing={3} fontSize="xs" color="gray.500" mt={1}>
+                            <Text>Need: {error.cardsToMove}</Text>
+                            {error.unlocatedCount !== undefined && (
+                              <Text>Unlocated: {error.unlocatedCount}</Text>
+                            )}
+                            {error.locatedCount !== undefined && (
+                              <Text>Located: {error.locatedCount}</Text>
+                            )}
+                          </HStack>
+                        )}
+                      </VStack>
+                      <Button
+                        size="sm"
+                        colorScheme="blue"
+                        leftIcon={<FiMapPin />}
+                        onClick={() => handleOpenLocationModal(error.card)}
+                      >
+                        Set Location
+                      </Button>
+                    </HStack>
+                  </Box>
+                ))}
+              </VStack>
+            </VStack>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button onClick={onBulkMoveErrorClose}>Close</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

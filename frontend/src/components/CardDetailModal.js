@@ -10,7 +10,7 @@ import CardVariantIndicator from './CardVariantIndicator';
 import StyledTextRenderer from './StyledTextRenderer';
 import CardImage from './CardImage';
 import LocationDisplayBadge from './LocationDisplayBadge';
-import SetLocationModal from './SetLocationModal';
+import SetCardInstanceLocationsModal from './SetCardInstanceLocationsModal';
 import LocationManagementModal from './LocationManagementModal';
 import CardTags from './CardTags';
 import { getTagStyles } from '@/utils/cardStyles';
@@ -28,7 +28,7 @@ const CardDetailModal = ({
 }) => {
   const [cardData, setCardData] = useState(selectedCard);
   const [locationModalCard, setLocationModalCard] = useState(null);
-
+  const [isInstanceModalOpen, setIsInstanceModalOpen] = useState(false);
   const [isManageLocationsOpen, setIsManageLocationsOpen] = useState(false);
 
   const { isOpen: isLocationModalOpen, onOpen: onLocationModalOpen, onClose: onLocationModalClose } = useDisclosure();
@@ -127,46 +127,42 @@ const CardDetailModal = ({
   };
 
   // Handle location update callback
-  const handleLocationUpdate = async () => {
-    if (!cardData?.id) return;
+  const handleLocationUpdated = async () => {
+    // Refresh the card data after location update
+    if (selectedCard && selectedCard.id) {
+      try {
+        const searchParams = new URLSearchParams({
+          keyword: `id:${selectedCard.id}`,
+          ownedOnly: 'false',
+          showProxies: 'true'
+        });
 
-    try {
-      const searchParams = new URLSearchParams({
-        keyword: `id:${cardData.id}`,
-        ownedOnly: 'false',
-        showProxies: 'true'
-      });
+        const response = await fetch(
+          `${api}/api/cards/search?${searchParams.toString()}`,
+          { credentials: 'include' }
+        );
 
-      const res = await fetch(`${api}/api/cards/search?${searchParams.toString()}`, {
-        credentials: 'include',
-      });
+        if (response.ok) {
+          const searchData = await response.json();
+          const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
 
-      if (res.ok) {
-        const searchData = await res.json();
+          if (searchResults.length > 0) {
+            const updatedCard = ensureTagsAreArrays(searchResults[0]);
+            setCardData(updatedCard);
 
-        // Handle both new paginated format and legacy format
-        const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
+            // Notify parent component if callback exists
+            if (onCountUpdate) {
+              onCountUpdate();
+            }
 
-        if (searchResults.length > 0) {
-          const updatedCard = ensureTagsAreArrays(searchResults[0]);
-          setCardData(updatedCard);
-
-          if (onCountUpdate) {
-            onCountUpdate(updatedCard.id, 'location_updated');
+            // Dispatch global event
+            dispatchCardUpdate(CARD_EVENTS.LOCATION_UPDATED, updatedCard.id, { card: updatedCard });
           }
-
-          dispatchCardUpdate(CARD_EVENTS.LOCATION_UPDATED, updatedCard.id, { card: updatedCard });
         }
+      } catch (error) {
+        console.error('Error refreshing card data:', error);
       }
-    } catch (error) {
-      console.warn('Failed to refresh card data after location change:', error);
     }
-
-    // Keep existing custom event for backward compatibility
-    const event = new CustomEvent('locationChanged', {
-      detail: { action: 'update', locationData: cardData }
-    });
-    window.dispatchEvent(event);
   };
 
   // Handle tag update callback
@@ -266,7 +262,7 @@ const CardDetailModal = ({
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} size="3xl" isCentered>
+      <Modal isOpen={isOpen && !isInstanceModalOpen} onClose={onClose} size="3xl" isCentered>
         <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent bg="white" borderRadius="xl" overflow="hidden">
           {/* Header with card id, rarity, and type */}
@@ -536,15 +532,12 @@ const CardDetailModal = ({
 
       {/* SetLocationModal - only render if interactive */}
       {interactive && (
-        <SetLocationModal
+        <SetCardInstanceLocationsModal
           isOpen={isLocationModalOpen}
           onClose={handleLocationModalClose}
           card={locationModalCard}
-          onLocationSet={handleLocationUpdate}
-          onManageLocations={() => {
-            handleLocationModalClose();
-            setIsManageLocationsOpen(true);
-          }}
+          onLocationUpdated={handleLocationUpdated}
+          onModalStateChange={setIsInstanceModalOpen}
         />
       )}
 
