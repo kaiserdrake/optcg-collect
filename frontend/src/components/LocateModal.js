@@ -290,7 +290,7 @@ const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) =
             ) : (
               <LocationDisplayBadge
                 card={row.card}
-                onClick={handleLocationChange}
+                onClick={onLocationChange}
               />
             )}
           </Box>
@@ -985,6 +985,15 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           description,
           status: 'success',
           duration: 4000,
+          isClosable: true,
+        });
+      } else if (errorList.length === 0) {
+        // No successes and no errors means no cards to move
+        toast({
+          title: 'No Cards to Move',
+          description: 'No cards in the selection could be moved',
+          status: 'info',
+          duration: 3000,
           isClosable: true,
         });
       }
