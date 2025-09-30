@@ -36,7 +36,7 @@ import {
 
 import { FiMapPin, FiTag, FiCopy } from 'react-icons/fi';
 import CardImage from './CardImage';
-import SetLocationModal from './SetLocationModal';
+import SetCardInstanceLocationsModal from './SetCardInstanceLocationsModal';
 import CardDetailModal from './CardDetailModal';
 import CardTags from './CardTags';
 import { CARD_EVENTS, dispatchCardUpdate } from '@/utils/cardEvents';
@@ -1368,11 +1368,11 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
 
       {/* Set Location Modal */}
       {selectedCard && (
-        <SetLocationModal
+        <SetCardInstanceLocationsModal
           isOpen={isLocationModalOpen}
           onClose={onLocationModalClose}
           card={selectedCard}
-          onLocationSet={handleLocationUpdate}
+          onLocationUpdated={handleLocationUpdate}
         />
       )}
 

@@ -1,54 +1,64 @@
 'use client';
 
-import { Tag, HStack, Text, Tooltip, Box } from '@chakra-ui/react';
+import { Tag, HStack, Text } from '@chakra-ui/react';
 import { FiMapPin } from 'react-icons/fi';
+import { useState, useEffect } from 'react';
+import { getLocationMarkerBg } from '@/utils/cardStyles';
 
-// Helper: Chakra color for marker
-const markerColorToColor = (marker) => {
-  switch (marker) {
-    case 'red': return 'red.500';
-    case 'orange': return 'orange.500';
-    case 'yellow': return 'yellow.400';
-    case 'green': return 'green.500';
-    case 'blue': return 'blue.500';
-    case 'purple': return 'purple.500';
-    case 'pink': return 'pink.400';
-    case 'gray': return 'gray.500';
-    default: return 'blue.500';
-  }
-};
-
-// Truncate a string to maxLen, adding ellipsis if needed
-const truncate = (str, maxLen = 80) => {
-  if (!str) return '';
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen - 1) + '…';
-};
+const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const LocationDisplayBadge = ({ card, onClick }) => {
+  const [locationSummary, setLocationSummary] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
   // Early return if card is not provided or invalid
   if (!card) return null;
 
   const owned = card.owned_count || 0;
   const proxy = card.proxy_count || 0;
-
   const hasCard = owned > 0 || proxy > 0;
+
   if (!hasCard) return null;
 
-  const location = card.location;
-  let text, marker;
+  // Fetch location summary when component mounts or card changes
+  useEffect(() => {
+    if (hasCard && card.id) {
+      fetchLocationSummary();
+    }
+  }, [card.id, hasCard]);
 
-  if (owned > 0 || proxy > 0) {
-    text = location?.name ? location.name : 'Set Location';
-    marker = location?.marker || 'gray';
-  } else {
-    return null;
-  }
+  const fetchLocationSummary = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${api}/api/cards/${card.id}/instances`, {
+        credentials: 'include'
+      });
 
-  // Ensure we have a valid marker
-  if (!marker) marker = 'gray';
+      if (response.ok) {
+        const data = await response.json();
+        const instances = data.instances || [];
 
-  const color = markerColorToColor(marker);
+        // Build location summary with marker info
+        const summary = {};
+        instances.forEach(instance => {
+          const locationKey = instance.location?.name || 'No Location';
+          if (!summary[locationKey]) {
+            summary[locationKey] = {
+              count: 0,
+              marker: instance.location?.marker || 'gray'
+            };
+          }
+          summary[locationKey].count++;
+        });
+
+        setLocationSummary(summary);
+      }
+    } catch (error) {
+      console.error('Error fetching location summary:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleBadgeClick = (e) => {
     // Stop both propagation and default behavior
@@ -66,88 +76,87 @@ const LocationDisplayBadge = ({ card, onClick }) => {
     }
   };
 
-  // Ensure we have required data before rendering
-  if (!text || !color) return null;
-
-  // Tooltip content
-  const tooltipContent = location?.name ? (
-    <Box>
-      <Text fontWeight="bold" fontSize="sm">
-        Location: {location.name}
-      </Text>
-      <Text fontSize="xs" color="gray.600">
-        Type: {location.type || '-'}
-      </Text>
-      {location.description && (
-        <Text fontSize="xs" color="gray.500" mt={1}>
-          {truncate(location.description, 80)}
-        </Text>
-      )}
-      <Text fontSize="xs" color="gray.400" mt={1}>
-        Click to change location
-      </Text>
-    </Box>
-  ) : (
-    <Box>
-      <Text fontWeight="bold" fontSize="sm">
-        Assign a location to this card
-      </Text>
-      <Text fontSize="xs" color="gray.400" mt={1}>
-        Click to set location
-      </Text>
-    </Box>
-  );
-
-  // Always transparent fill, font color matches marker
-  const badgeStyles = {
-    border: 'none',
-    background: 'transparent',
-    color: color,
-    px: 2,
-    py: 1,
-    fontWeight: 'medium'
-  };
-
-  // Additional safety check
-  if (!badgeStyles.color) {
-    badgeStyles.color = 'gray.500';
+  // If loading or no summary yet
+  if (isLoading || !locationSummary) {
+    return (
+      <Tag
+        size="sm"
+        bg="gray.500"
+        color="white"
+        cursor="pointer"
+        onClick={handleBadgeClick}
+      >
+        <HStack spacing={1}>
+          <FiMapPin />
+          <Text fontSize="xs">Loading...</Text>
+        </HStack>
+      </Tag>
+    );
   }
 
-  return (
-    <Tooltip label={tooltipContent} hasArrow placement="top" maxW="320px" p={2} bg="white" color="black" boxShadow="md">
-      <Box
-        as="span"
-        display="inline-block"
+  // Build location entries (exclude "No Location")
+  const locationEntries = Object.entries(locationSummary)
+    .filter(([name]) => name !== 'No Location')
+    .map(([name, data]) => ({
+      name,
+      count: data.count,
+      marker: data.marker
+    }));
+
+  const unlocatedCount = locationSummary['No Location']?.count || 0;
+
+  // If no locations set at all
+  if (locationEntries.length === 0 && unlocatedCount > 0) {
+    return (
+      <Tag
+        size="sm"
+        bg="gray.500"
+        color="white"
+        cursor="pointer"
         onClick={handleBadgeClick}
-        onMouseDown={(e) => e.stopPropagation()} // Prevent mousedown from bubbling
-        onMouseUp={(e) => e.stopPropagation()}   // Prevent mouseup from bubbling
+        _hover={{ opacity: 0.8 }}
       >
+        <HStack spacing={1}>
+          <FiMapPin />
+          <Text fontSize="xs" fontWeight="bold">Set Location</Text>
+        </HStack>
+      </Tag>
+    );
+  }
+
+  // Render multiple location badges
+  return (
+    <HStack spacing={1} flexWrap="wrap" onClick={handleBadgeClick} cursor="pointer">
+      {locationEntries.map((location, index) => (
+        <Tag
+          key={`${location.name}-${index}`}
+          size="sm"
+          bg={getLocationMarkerBg(location.marker)}
+          color="white"
+          fontWeight="bold"
+          _hover={{ opacity: 0.8 }}
+        >
+          <Text fontSize="xs">
+            {location.count}×{location.name}
+          </Text>
+        </Tag>
+      ))}
+
+      {/* Show unlocated count if any */}
+      {unlocatedCount > 0 && (
         <Tag
           size="sm"
-          cursor="pointer"
-          borderRadius="md"
-          {...badgeStyles}
-          _hover={{
-            opacity: 0.85,
-            boxShadow: 'md',
-            bg: 'transparent'
-          }}
-          tabIndex={0}
-          role="button"
-          onKeyDown={(e) => {
-            // Handle keyboard accessibility
-            if (e.key === 'Enter' || e.key === ' ') {
-              handleBadgeClick(e);
-            }
-          }}
+          bg="gray.400"
+          color="white"
+          fontWeight="bold"
+          _hover={{ opacity: 0.8 }}
         >
-          <HStack spacing={1}>
-            <FiMapPin />
-            <Text fontSize="xs" color={badgeStyles.color}>{text}</Text>
-          </HStack>
+          <Text fontSize="xs">
+            {unlocatedCount}×No Location
+          </Text>
         </Tag>
-      </Box>
-    </Tooltip>
+      )}
+    </HStack>
   );
 };
 

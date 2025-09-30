@@ -1652,6 +1652,139 @@ app.delete('/api/locations/:id', isAuthenticated, async (req, res) => {
   }
 });
 
+
+// Get all instances of a specific card for the authenticated user
+app.get('/api/cards/:cardId/instances', isAuthenticated, async (req, res) => {
+  const { cardId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const result = await query(`
+      SELECT
+        oc.instance_id,
+        oc.is_proxy,
+        oc.location_id,
+        oc.created_at,
+        l.name as location_name,
+        l.marker as location_marker,
+        l.type as location_type
+      FROM owned_cards oc
+      LEFT JOIN locations l ON oc.location_id = l.id
+      WHERE oc.user_id = $1 AND oc.card_id = $2
+      ORDER BY oc.is_proxy ASC, oc.instance_id ASC
+    `, [userId, cardId]);
+
+    const instances = result.rows.map(row => ({
+      instance_id: row.instance_id,
+      is_proxy: row.is_proxy,
+      location_id: row.location_id,
+      location: row.location_name ? {
+        id: row.location_id,
+        name: row.location_name,
+        marker: row.location_marker || 'gray',
+        type: row.location_type
+      } : null,
+      created_at: row.created_at
+    }));
+
+    res.json({
+      cardId,
+      instances
+    });
+  } catch (err) {
+    console.error('Error fetching card instances:', err);
+    res.status(500).json({ message: 'Server error while fetching card instances.' });
+  }
+});
+
+// Update locations for multiple card instances (batch update)
+app.put('/api/cards/:cardId/instances/locations', isAuthenticated, async (req, res) => {
+  const { cardId } = req.params;
+  const { updates } = req.body;
+  const userId = req.user.id;
+
+  if (!Array.isArray(updates) || updates.length === 0) {
+    return res.status(400).json({ message: 'Updates array is required and must not be empty.' });
+  }
+
+  // Validate updates structure
+  for (const update of updates) {
+    if (!update.instance_id || typeof update.instance_id !== 'number') {
+      return res.status(400).json({
+        message: 'Each update must have a valid instance_id.'
+      });
+    }
+    if (update.location_id !== null && typeof update.location_id !== 'number') {
+      return res.status(400).json({
+        message: 'location_id must be a number or null.'
+      });
+    }
+  }
+
+  try {
+    await query('BEGIN');
+
+    // Verify all instances belong to this user and card
+    const instanceIds = updates.map(u => u.instance_id);
+    const verifyResult = await query(`
+      SELECT instance_id
+      FROM owned_cards
+      WHERE user_id = $1 AND card_id = $2 AND instance_id = ANY($3)
+    `, [userId, cardId, instanceIds]);
+
+    if (verifyResult.rows.length !== instanceIds.length) {
+      await query('ROLLBACK');
+      return res.status(403).json({
+        message: 'Some instances do not belong to you or this card.'
+      });
+    }
+
+    // Validate all location_ids if not null
+    const locationIds = updates
+      .filter(u => u.location_id !== null)
+      .map(u => u.location_id);
+
+    if (locationIds.length > 0) {
+      // Remove duplicates
+      const uniqueLocationIds = [...new Set(locationIds)];
+
+      const locResult = await query(`
+        SELECT id FROM locations
+        WHERE user_id = $1 AND id = ANY($2)
+      `, [userId, uniqueLocationIds]);
+
+      if (locResult.rows.length !== uniqueLocationIds.length) {
+        await query('ROLLBACK');
+        return res.status(404).json({
+          message: 'Some locations not found or do not belong to you.'
+        });
+      }
+    }
+
+    // Perform updates
+    for (const update of updates) {
+      await query(`
+        UPDATE owned_cards
+        SET location_id = $1
+        WHERE instance_id = $2 AND user_id = $3
+      `, [update.location_id || null, update.instance_id, userId]);
+    }
+
+    await query('COMMIT');
+
+    res.json({
+      message: 'Instance locations updated successfully.',
+      updatedCount: updates.length
+    });
+  } catch (err) {
+    await query('ROLLBACK');
+    console.error('Error updating instance locations:', err);
+    res.status(500).json({
+      message: 'Server error while updating instance locations.'
+    });
+  }
+});
+
 // --- CARD TAGS ROUTES ---
 
 // Get tags for a specific card
