@@ -441,7 +441,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           };
         }
 
-        cardGroups[baseKey].totalOwned += (row.ownedCount || 0) + (row.proxyCount || 0);
+        cardGroups[baseKey].totalOwned += (parseInt(row.ownedCount, 10) || 0) + (parseInt(row.proxyCount, 10) || 0);
         cardGroups[baseKey].deckCount = Math.max(cardGroups[baseKey].deckCount, row.deckCount || 0);
         cardGroups[baseKey].rows.push(row);
       });
@@ -473,7 +473,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
         cardGroups[baseKey] = { totalOwned: 0, deckCount: 0 };
       }
 
-      cardGroups[baseKey].totalOwned += (r.ownedCount || 0) + (r.proxyCount || 0);
+      cardGroups[baseKey].totalOwned += (parseInt(r.ownedCount, 10) || 0) + (parseInt(r.proxyCount, 10) || 0);
       cardGroups[baseKey].deckCount = Math.max(cardGroups[baseKey].deckCount, r.deckCount || 0);
     });
 
