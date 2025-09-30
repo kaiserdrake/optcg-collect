@@ -987,6 +987,15 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           duration: 4000,
           isClosable: true,
         });
+      } else if (errorList.length === 0) {
+        // No successes and no errors means no cards to move
+        toast({
+          title: 'No Cards to Move',
+          description: 'No cards in the selection could be moved',
+          status: 'info',
+          duration: 3000,
+          isClosable: true,
+        });
       }
 
       if (errorList.length > 0) {

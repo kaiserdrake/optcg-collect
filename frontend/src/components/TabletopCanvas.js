@@ -59,7 +59,6 @@ const LocationSelector = ({ selectedLocationId, onLocationSelect }) => {
 
   useEffect(() => {
     const fetchLocations = async () => {
-      setLoading(true);
       try {
         const res = await fetch(`${api}/api/locations`, {
           credentials: 'include',
@@ -70,8 +69,6 @@ const LocationSelector = ({ selectedLocationId, onLocationSelect }) => {
         }
       } catch (error) {
         console.error('Failed to fetch locations:', error);
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -127,6 +124,8 @@ const TabletopCanvas = ({
   const [sortReverse, setSortReverse] = useState(false);
   const [thumbnailSize, setThumbnailSize] = useState(80);
   const [isActionOngoing, setIsActionOngoing] = useState(false);
+  const [bulkMoveErrors, setBulkMoveErrors] = useState([]);
+  const [locations, setLocations] = useState([]);
 
   const {
     isOpen: isCardDetailOpen,
@@ -159,6 +158,12 @@ const TabletopCanvas = ({
     isOpen: isFailedMoveOpen,
     onOpen: onFailedMoveOpen,
     onClose: onFailedMoveClose
+  } = useDisclosure();
+
+  const {
+    isOpen: isBulkMoveErrorOpen,
+    onOpen: onBulkMoveErrorOpen,
+    onClose: onBulkMoveErrorClose
   } = useDisclosure();
 
   const [bulkLocationId, setBulkLocationId] = useState(null);
@@ -289,6 +294,11 @@ const TabletopCanvas = ({
     }
   }, [selectedCard, onCountUpdate]);
 
+  const handleOpenLocationModalFromError = (card) => {
+    setSelectedCard(card);
+    onCardDetailOpen();
+  };
+
   const handleBulkMove = useCallback(async () => {
     if (selectedCards.size === 0) {
       toast({
@@ -302,8 +312,8 @@ const TabletopCanvas = ({
     }
 
     setIsActionOngoing(true);
-    const failed = [];
-    const succeeded = [];
+    const errorList = [];
+    const successList = [];
 
     try {
       for (const cardId of selectedCards) {
@@ -314,57 +324,195 @@ const TabletopCanvas = ({
         }
 
         try {
-          if (onLocationUpdate) {
-            await onLocationUpdate(cardId, bulkLocationId);
-            succeeded.push(cardId);
-          } else {
-            console.error('onLocationUpdate is not defined');
-            failed.push({
+          const totalOwned = (card.owned_count || 0) + (card.proxy_count || 0);
+
+          // Skip if card is not owned
+          if (totalOwned === 0) {
+            errorList.push({
               cardName: card.name,
               cardCode: card.card_code,
-              reason: 'onLocationUpdate not available'
+              cardId: card.id,
+              card: card,
+              reason: 'Not in collection'
+            });
+            continue;
+          }
+
+          // For TabletopCanvas, we want to move ALL owned cards (use totalOwned)
+          const cardsToMove = totalOwned;
+
+          // Fetch instances for this card
+          const instancesResponse = await fetch(`${api}/api/cards/${cardId}/instances`, {
+            credentials: 'include'
+          });
+
+          if (!instancesResponse.ok) {
+            throw new Error('Failed to fetch card instances');
+          }
+
+          const instancesData = await instancesResponse.json();
+          const instances = instancesData.instances || [];
+
+          // Condition 1: If cardsToMove matches total instances, move all cards
+          if (cardsToMove === instances.length) {
+            const updates = instances.map(inst => ({
+              instance_id: inst.instance_id,
+              location_id: bulkLocationId
+            }));
+
+            const updateResponse = await fetch(`${api}/api/cards/${cardId}/instances/locations`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ updates })
+            });
+
+            if (!updateResponse.ok) {
+              throw new Error('Failed to update locations');
+            }
+
+            successList.push({
+              cardName: card.name,
+              cardCode: card.card_code,
+              movedCount: instances.length
             });
           }
-        } catch (error) {
-          console.error(`Error updating ${cardId}:`, error);
+          // Condition 2: If cardsToMove < total instances, prioritize unlocated cards
+          else if (cardsToMove < instances.length) {
+            const unlocatedInstances = instances.filter(inst => !inst.location_id);
+            const locatedInstances = instances.filter(inst => inst.location_id);
 
-          // Provide user-friendly error message for collection validation
-          let reason = error.message || 'Update failed';
-          if (error.message && error.message.includes('HTTP 404') &&
-            error.message.includes('No owned cards found to update location for')) {
-            reason = 'Not in collection';
+            // Count instances already in target location
+            const alreadyInTargetLocation = instances.filter(inst =>
+              inst.location_id === bulkLocationId
+            );
+
+            // Condition 3a: Skip if already satisfied
+            if (cardsToMove > unlocatedInstances.length &&
+              alreadyInTargetLocation.length === cardsToMove) {
+              successList.push({
+                cardName: card.name,
+                cardCode: card.card_code,
+                movedCount: 0,
+                skipped: true
+              });
+              continue;
+            }
+
+            // Condition 3b: Error if not enough unlocated cards
+            if (cardsToMove > unlocatedInstances.length) {
+              errorList.push({
+                cardName: card.name,
+                cardCode: card.card_code,
+                cardId: card.id,
+                card: card,
+                cardsToMove: cardsToMove,
+                unlocatedCount: unlocatedInstances.length,
+                locatedCount: locatedInstances.length,
+                reason: `Need ${cardsToMove} but only ${unlocatedInstances.length} unlocated (${locatedInstances.length} already located)`
+              });
+              continue;
+            }
+
+            // Move the needed number of unlocated instances
+            const instancesToMove = unlocatedInstances.slice(0, cardsToMove);
+            const updates = instancesToMove.map(inst => ({
+              instance_id: inst.instance_id,
+              location_id: bulkLocationId
+            }));
+
+            const updateResponse = await fetch(`${api}/api/cards/${cardId}/instances/locations`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ updates })
+            });
+
+            if (!updateResponse.ok) {
+              throw new Error('Failed to update locations');
+            }
+
+            successList.push({
+              cardName: card.name,
+              cardCode: card.card_code,
+              movedCount: instancesToMove.length
+            });
           }
 
-          failed.push({
+        } catch (error) {
+          console.error(`Error processing card ${cardId}:`, error);
+          errorList.push({
             cardName: card.name,
             cardCode: card.card_code,
-            reason: reason
+            cardId: card.id,
+            card: card,
+            reason: error.message || 'Update failed'
           });
         }
       }
 
-      if (succeeded.length > 0) {
+      // Show results
+      if (successList.length > 0) {
+        // Trigger refresh by calling onLocationUpdate for each card
+        for (const success of successList) {
+          const card = allDisplayCards.find(c => c.name === success.cardName);
+          if (card && onLocationUpdate) {
+            try {
+              // This will refresh the card display
+              await onLocationUpdate(card.id, bulkLocationId);
+            } catch (error) {
+              console.warn('Error refreshing card after move:', error);
+            }
+          }
+        }
+
+        const selectedLocationData = bulkLocationId === null ? null :
+          locations.find(loc => loc.id === bulkLocationId);
+        const locationName = selectedLocationData?.name || 'removed from location';
+
+        const movedCount = successList.filter(s => !s.skipped).length;
+        const skippedCount = successList.filter(s => s.skipped).length;
+
+        let description = '';
+        if (movedCount > 0 && skippedCount > 0) {
+          description = `Moved ${movedCount} card(s) to ${locationName}, ${skippedCount} card(s) already in location`;
+        } else if (movedCount > 0) {
+          description = `Successfully moved ${movedCount} card(s) to ${locationName}`;
+        } else {
+          description = `${skippedCount} card(s) already in ${locationName}`;
+        }
+
         toast({
-          title: 'Location updated',
-          description: `Successfully moved ${succeeded.length} cards`,
+          title: 'Bulk Move Complete',
+          description,
           status: 'success',
+          duration: 4000,
+          isClosable: true,
+        });
+      } else if (errorList.length === 0) {
+        // No successes and no errors means no cards to move
+        toast({
+          title: 'No Cards to Move',
+          description: 'No cards in the selection could be moved',
+          status: 'info',
           duration: 3000,
           isClosable: true,
         });
       }
 
-      if (failed.length > 0) {
-        setFailedMoves(failed);
-        onFailedMoveOpen();
+      if (errorList.length > 0) {
+        setBulkMoveErrors(errorList);
+        onBulkMoveErrorOpen();
       }
 
       setBulkLocationId(null);
       onBulkMoveClose();
+
     } catch (error) {
       console.error('Critical error in bulk move:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update locations',
+        description: 'Failed to complete bulk move operation',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -372,7 +520,7 @@ const TabletopCanvas = ({
     } finally {
       setIsActionOngoing(false);
     }
-  }, [selectedCards, bulkLocationId, allDisplayCards, onLocationUpdate, toast, onBulkMoveClose, onFailedMoveOpen]);
+  }, [selectedCards, bulkLocationId, allDisplayCards, onLocationUpdate, toast, onBulkMoveClose, api, locations]);
 
   const handleBulkSetCount = useCallback(async () => {
     if (selectedCards.size === 0) {
