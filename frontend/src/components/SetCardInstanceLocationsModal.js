@@ -306,8 +306,12 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
                   p={3}
                 >
                   <VStack align="stretch" spacing={2}>
+                    {/* Owned Instances Section */}
                     {ownedInstances.length > 0 && (
                       <>
+                        <Text fontSize="sm" fontWeight="bold" color="gray.700">
+                          Owned Cards
+                        </Text>
                         {ownedInstances.map((instance, index) => (
                           <Checkbox
                             key={instance.instance_id}
@@ -316,6 +320,46 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
                           >
                             <HStack spacing={3} w="full">
                               <Text fontWeight="medium">Card #{index + 1}</Text>
+                              {instance.location ? (
+                                <Tag
+                                  size="sm"
+                                  bg={getLocationMarkerBg(instance.location.marker)}
+                                  color="white"
+                                  fontWeight="bold"
+                                >
+                                  {instance.location.name}
+                                </Tag>
+                              ) : (
+                                <Tag
+                                  size="sm"
+                                  bg="gray.400"
+                                  color="white"
+                                  fontWeight="bold"
+                                >
+                                  No Location
+                                </Tag>
+                              )}
+                            </HStack>
+                          </Checkbox>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Proxy Instances Section */}
+                    {proxyInstances.length > 0 && (
+                      <>
+                        {ownedInstances.length > 0 && <Divider my={2} />}
+                        <Text fontSize="sm" fontWeight="bold" color="gray.700">
+                          Proxy Cards
+                        </Text>
+                        {proxyInstances.map((instance, index) => (
+                          <Checkbox
+                            key={instance.instance_id}
+                            isChecked={selectedInstances.includes(instance.instance_id)}
+                            onChange={(e) => handleToggleInstance(instance.instance_id, e.target.checked)}
+                          >
+                            <HStack spacing={3} w="full">
+                              <Text fontWeight="medium">Proxy #{index + 1}</Text>
                               {instance.location ? (
                                 <Tag
                                   size="sm"
