@@ -227,32 +227,48 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
       }
     });
 
-    // Sort non-leader cards
+    // Sort non-leader cards with category priority: CHARACTER -> STAGE -> EVENT
     nonLeaderCards.sort((a, b) => {
       const cardA = getCardData(a);
       const cardB = getCardData(b);
 
       if (!cardA || !cardB) return 0;
 
+      // Define category order: CHARACTER -> STAGE -> EVENT
+      const categoryOrder = { 'CHARACTER': 1, 'STAGE': 2, 'EVENT': 3 };
+      const categoryA = categoryOrder[cardA.category] || 999;
+      const categoryB = categoryOrder[cardB.category] || 999;
+
+      // First level: sort by category
+      const categoryComparison = categoryA - categoryB;
+      if (categoryComparison !== 0) {
+        return sortReverse ? -categoryComparison : categoryComparison;
+      }
+
+      // Second level: sort by cost or name based on sortMode
       let comparison = 0;
 
       switch (sortMode) {
         case 'cost':
           comparison = (cardA.cost || 0) - (cardB.cost || 0);
+          // If costs are equal, sort by name as tiebreaker
+          if (comparison === 0) {
+            comparison = (cardA.name || '').localeCompare(cardB.name || '');
+          }
           break;
 
         case 'name':
           comparison = (cardA.name || '').localeCompare(cardB.name || '');
           break;
-        case 'category':
-          comparison = (cardA.category || '').localeCompare(cardB.category || '');
-          break;
+
         case 'color':
           comparison = (cardA.color || '').localeCompare(cardB.color || '');
           break;
+
         case 'count':
           comparison = (a.count || 0) - (b.count || 0);
           break;
+
         default:
           comparison = (cardA.cost || 0) - (cardB.cost || 0);
       }
@@ -452,7 +468,6 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                   >
                     <option value="cost">Cost</option>
                     <option value="name">Name</option>
-                    <option value="category">Category</option>
                     <option value="color">Color</option>
                     <option value="count">Count</option>
                   </Select>
