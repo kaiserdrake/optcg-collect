@@ -210,7 +210,7 @@ const ListViewBuilder = ({ cards, onCardClick }) => {
         isOpen={isDetailOpen}
         onClose={onDetailClose}
         selectedCard={selectedCard}
-        showProxies={false}
+        showProxies={true}
         interactive={true}
       />
     </>

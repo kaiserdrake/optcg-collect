@@ -174,7 +174,7 @@ const ThumbViewBuilder = ({ cards, onCardClick, thumbnailSize = 120 }) => {
         isOpen={isDetailOpen}
         onClose={onDetailClose}
         selectedCard={selectedCard}
-        showProxies={false}
+        showProxies={true}
         interactive={true}
       />
     </>

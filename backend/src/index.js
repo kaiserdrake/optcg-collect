@@ -1313,13 +1313,16 @@ app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req,
     let paramIndex = 2;
     let whereClauses = [];
 
-    // Add all the existing search logic here (same as current implementation)
-    // ... (keeping all the existing where clause logic) ...
 
-    // For brevity, I'll add the key conditions. The full logic should be copied from existing implementation
-
+    // Consider proxy cards when showProxies is true
     if (ownedOnly === 'true') {
-      whereClauses.push(`oc.owned_count > 0`);
+      if (showProxies === 'true') {
+        // When Show Proxies is enabled, include both owned and proxy cards
+        whereClauses.push(`(oc.owned_count > 0 OR oc.proxy_count > 0)`);
+      } else {
+        // When Show Proxies is disabled, only include owned cards
+        whereClauses.push(`oc.owned_count > 0`);
+      }
     }
 
     // Add criteria-based where clauses

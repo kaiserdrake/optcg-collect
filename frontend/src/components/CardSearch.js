@@ -366,7 +366,7 @@ function CardSearch({
     const searchParams = {
       keyword: keyword.trim(),
       ownedOnly: ownedOnly.toString(),
-      showProxies: 'true',
+      showProxies: showProxies.toString(),
       limit: limitPerPage.toString(),
       offset: ((page - 1) * limitPerPage).toString(),
       sortBy: sortBy,
@@ -549,7 +549,7 @@ function CardSearch({
     } catch (error) {
       console.error(`handleCountUpdate - Error for ${cardId}:`, error);
     }
-  }, [apiUrl, selectedCard, ensureTagsAreArrays]);
+  }, [apiUrl, sortMode, sortReverse, showProxies, ensureTagsAreArrays]);
 
   // Helper functions
   const getSortIcon = (currentSortMode) => {

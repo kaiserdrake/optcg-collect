@@ -980,6 +980,7 @@ const TabletopCanvas = ({
         isOpen={isCardDetailOpen}
         onClose={onCardDetailClose}
         selectedCard={selectedCard}
+        showProxies={true}
         interactive={true}
         onCountUpdate={handleCardDetailUpdate}
       />
