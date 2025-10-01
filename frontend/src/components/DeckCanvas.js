@@ -141,7 +141,7 @@ const DeckCanvas = ({ deck, stats, sortedCards, sortMode, sortReverse, setSortMo
 
         ) : (
           <Grid
-            templateColumns="repeat(auto-fill, minmax(120px, 1fr))"
+            templateColumns="repeat(auto-fill, minmax(90px, 1fr))"
             gap={1}
             justifyItems="center"
             p={0}

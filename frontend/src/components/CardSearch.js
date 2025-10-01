@@ -240,7 +240,7 @@ function CardSearch({
   const [viewMode, setViewMode] = useState(mode === 'deckbuilder' ? 'thumbnails' : 'list');
   const [inCollection, setInCollection] = useState(false);
   const [showProxies, setShowProxies] = useState(true);
-  const [thumbnailSize, setThumbnailSize] = useState(mode === 'collection' ? 160 : 100);
+  const [thumbnailSize, setThumbnailSize] = useState(mode === 'collection' ? 120 : 90);
   const [sortMode, setSortMode] = useState('name');
   const [sortReverse, setSortReverse] = useState(false);
 
@@ -366,7 +366,7 @@ function CardSearch({
     const searchParams = {
       keyword: keyword.trim(),
       ownedOnly: ownedOnly.toString(),
-      showProxies: 'true',
+      showProxies: showProxies.toString(),
       limit: limitPerPage.toString(),
       offset: ((page - 1) * limitPerPage).toString(),
       sortBy: sortBy,
@@ -549,7 +549,7 @@ function CardSearch({
     } catch (error) {
       console.error(`handleCountUpdate - Error for ${cardId}:`, error);
     }
-  }, [apiUrl, selectedCard, ensureTagsAreArrays]);
+  }, [apiUrl, sortMode, sortReverse, showProxies, ensureTagsAreArrays]);
 
   // Helper functions
   const getSortIcon = (currentSortMode) => {
@@ -846,8 +846,8 @@ function CardSearch({
                       <Slider
                         value={thumbnailSize}
                         onChange={setThumbnailSize}
-                        min={80}
-                        max={200}
+                        min={60}
+                        max={160}
                         step={10}
                         size="sm"
                       >
@@ -911,8 +911,8 @@ function CardSearch({
                       <Slider
                         value={thumbnailSize}
                         onChange={setThumbnailSize}
-                        min={80}
-                        max={200}
+                        min={60}
+                        max={120}
                         step={10}
                         size="sm"
                       >

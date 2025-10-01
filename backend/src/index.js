@@ -1313,13 +1313,16 @@ app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req,
     let paramIndex = 2;
     let whereClauses = [];
 
-    // Add all the existing search logic here (same as current implementation)
-    // ... (keeping all the existing where clause logic) ...
 
-    // For brevity, I'll add the key conditions. The full logic should be copied from existing implementation
-
+    // Consider proxy cards when showProxies is true
     if (ownedOnly === 'true') {
-      whereClauses.push(`oc.owned_count > 0`);
+      if (showProxies === 'true') {
+        // When Show Proxies is enabled, include both owned and proxy cards
+        whereClauses.push(`(oc.owned_count > 0 OR oc.proxy_count > 0)`);
+      } else {
+        // When Show Proxies is disabled, only include owned cards
+        whereClauses.push(`oc.owned_count > 0`);
+      }
     }
 
     // Add criteria-based where clauses
@@ -1354,6 +1357,24 @@ app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req,
       whereClauses.push(`l.name ILIKE '%' || $${paramIndex} || '%'`);
       params.push(criteria.location);
       paramIndex++;
+    }
+
+    // Add pack filter
+    if (criteria.pack) {
+      whereClauses.push(`p.name ILIKE '%' || $${paramIndex} || '%'`);
+      params.push(criteria.pack);
+      paramIndex++;
+    }
+
+    // Add color filters - multiple colors use OR logic (same tag type)
+    if (criteria.colors && criteria.colors.length > 0) {
+      const colorConditions = criteria.colors.map(color => {
+        const condition = `c.color ILIKE '%' || $${paramIndex} || '%'`;
+        params.push(color);
+        paramIndex++;
+        return condition;
+      });
+      whereClauses.push(`(${colorConditions.join(' OR ')})`);
     }
 
     if (criteria.tags && criteria.tags.length > 0) {

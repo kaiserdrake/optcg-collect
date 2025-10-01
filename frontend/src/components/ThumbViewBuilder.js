@@ -9,7 +9,7 @@ import CardImage from './CardImage';
 import CardDetailModal from './CardDetailModal';
 import { getTagStyles } from '@/utils/cardStyles';
 
-const ThumbViewBuilder = ({ cards, onCardClick, thumbnailSize = 120 }) => {
+const ThumbViewBuilder = ({ cards, onCardClick, thumbnailSize = 80 }) => {
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
   const [selectedCard, setSelectedCard] = React.useState(null);
 
@@ -174,7 +174,7 @@ const ThumbViewBuilder = ({ cards, onCardClick, thumbnailSize = 120 }) => {
         isOpen={isDetailOpen}
         onClose={onDetailClose}
         selectedCard={selectedCard}
-        showProxies={false}
+        showProxies={true}
         interactive={true}
       />
     </>

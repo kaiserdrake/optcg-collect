@@ -330,6 +330,46 @@ const TargetCardsSection = ({ targetCards, onCardClick }) => {
   );
 };
 
+// Helper function to ensure tags are arrays
+const ensureTagsAreArrays = (card) => {
+  if (!card) return card;
+
+  const parsePostgreSQLArray = (pgArray) => {
+    if (Array.isArray(pgArray)) return pgArray;
+    if (!pgArray || pgArray === 'null' || pgArray === null || pgArray === undefined) return [];
+
+    // Parse PostgreSQL array format like "{favorite,want}" -> ["favorite", "want"]
+    if (typeof pgArray === 'string') {
+      if (pgArray === '{}') return [];
+      const cleaned = pgArray.replace(/[{}]/g, '');
+      return cleaned ? cleaned.split(',') : [];
+    }
+
+    return [];
+  };
+
+  const processedCard = {
+    ...card,
+    user_tags: parsePostgreSQLArray(card.user_tags),
+    global_tags: parsePostgreSQLArray(card.global_tags)
+  };
+
+  // Convert location_name/location_id to location object
+  if (card.location_name !== null && card.location_id !== null) {
+    processedCard.location = {
+      id: card.location_id,
+      name: card.location_name,
+      marker: card.location_marker || 'gray'
+    };
+  } else if (card.location && typeof card.location === 'object') {
+    processedCard.location = card.location;
+  } else {
+    processedCard.location = null;
+  }
+
+  return processedCard;
+};
+
 const CollectionStatistics = ({ onCardClick }) => {
   const { isOpen, onToggle } = useDisclosure();
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
@@ -392,7 +432,7 @@ const CollectionStatistics = ({ onCardClick }) => {
       // Handle both paginated and legacy response formats
       const cards = Array.isArray(data.results) ? data.results : Array.isArray(data) ? data : [];
 
-      console.log('Target cards fetched:', cards.length); // Debug log
+      const processedCards = cards.map(card => ensureTagsAreArrays(card));
       setTargetCards(cards);
     } catch (err) {
       console.error('Error fetching target cards:', err);
@@ -410,8 +450,18 @@ const CollectionStatistics = ({ onCardClick }) => {
   };
 
   const handleTargetCardClick = (card) => {
-    setSelectedCard(card);
+    // Ensure the card is properly processed before opening modal
+    const processedCard = ensureTagsAreArrays(card);
+    setSelectedCard(processedCard);
     onDetailOpen();
+  };
+
+  const handleCountUpdate = async () => {
+    // Refresh both stats and target cards when counts change
+    await Promise.all([
+      fetchCollectionStats(),
+      fetchTargetCards()
+    ]);
   };
 
   const renderColorPieChart = () => {
@@ -660,8 +710,9 @@ const CollectionStatistics = ({ onCardClick }) => {
                   isOpen={isDetailOpen}
                   onClose={onDetailClose}
                   selectedCard={selectedCard}
-                  showProxies={false}
-                  interactive={false}
+                  showProxies={true}
+                  interactive={true}
+                  onCountUpdate={handleCountUpdate}
                 />
               )}
 

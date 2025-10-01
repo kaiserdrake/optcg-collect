@@ -25,6 +25,7 @@ import {
 import { AddIcon, RepeatIcon, ExternalLinkIcon } from '@chakra-ui/icons';
 import { useSearchParams } from 'next/navigation';
 import UnifiedDeckModal from './UnifiedDeckModal';
+import DiceAnimationModal from './DiceAnimationModal';
 import DeckViewerCanvas from '@/components/DeckViewerCanvas';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -83,7 +84,9 @@ const MatchUpComponent = () => {
 
   // Battle toolbox state
   const [goingFirst, setGoingFirst] = useState(true);
-  const [diceResult, setDiceResult] = useState(null);
+  const [showDiceAnimation, setShowDiceAnimation] = useState(false);
+  const [dicePlayer1, setDicePlayer1] = useState(null);
+  const [dicePlayer2, setDicePlayer2] = useState(null);
   const [leaderUsed, setLeaderUsed] = useState(false);
   const [powerCounters, setPowerCounters] = useState([0, 0, 0, 0, 0, 0]); // 6 counters, each -10 to +10
 
@@ -486,7 +489,7 @@ const MatchUpComponent = () => {
                   </VStack>
                 </Box>
 
-                {/* D20 Dice Roller */}
+                {/* D6 Dice Roller */}
                 <Box
                   bg={useColorModeValue('gray.50', 'gray.700')}
                   p={2}
@@ -496,23 +499,20 @@ const MatchUpComponent = () => {
                 >
                   <VStack spacing={1}>
                     <Text fontSize="xs" fontWeight="semibold" color={useColorModeValue('gray.600', 'gray.400')}>
-                      D20 Roll
+                      D6 Roll
                     </Text>
                     <Button
                       size="xs"
                       colorScheme="purple"
-                      onClick={() => setDiceResult(Math.floor(Math.random() * 20) + 1)}
+                      onClick={() => setShowDiceAnimation(true)}
                       w="100%"
                     >
-
-                      {diceResult ? `${diceResult}` : "Roll"}
+                      {dicePlayer1 && dicePlayer2 ? `${dicePlayer1} / ${dicePlayer2}` : "Roll"}
                     </Button>
-
                   </VStack>
                 </Box>
 
                 {/* Leader Ability Toggle */}
-
                 <Box
                   bg={useColorModeValue('gray.50', 'gray.700')}
                   p={2}
@@ -818,6 +818,16 @@ const MatchUpComponent = () => {
         }}
         context="matchup"
         title={`Select Deck for Player ${selectedPlayerNumber}`}
+      />
+
+      {/* Dice Animation Modal */}
+      <DiceAnimationModal
+        isOpen={showDiceAnimation}
+        onClose={() => setShowDiceAnimation(false)}
+        onResult={({ player1, player2 }) => {
+          setDicePlayer1(player1);
+          setDicePlayer2(player2);
+        }}
       />
 
     </VStack>
