@@ -254,6 +254,7 @@ const createTables = async () => {
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
       tag_type tag_type NOT NULL,
       is_global BOOLEAN DEFAULT false,
+      notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT user_tag_check CHECK (
