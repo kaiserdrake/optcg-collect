@@ -98,7 +98,7 @@ const DeckCard = ({
         />
 
         {/* Leader crown */}
-        {isLeader && (
+        {isLeader && !hideCount && (
           <Box
             position="absolute"
             top={1}
