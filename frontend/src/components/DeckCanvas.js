@@ -161,6 +161,7 @@ const DeckCanvas = ({ deck, stats, sortedCards, sortMode, sortReverse, setSortMo
                   onAddCard={onAddCard}
                   onCardClick={onCardClick}
                   isLeader={normalizedItem.card.category === 'LEADER'}
+                  thumbnailSize={90}
                 />
               );
             })}

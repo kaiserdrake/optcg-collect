@@ -193,9 +193,8 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     onSyncOpen();
 
     try {
-      // Use the correct endpoint that exists in the backend
       const response = await fetch(`${api}/api/sync/stream`, {
-        method: 'GET', // Changed from POST to GET
+        method: 'GET',
         credentials: 'include',
       });
 
@@ -220,7 +219,18 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
             // The backend sends Server-Sent Events in format "data: <message>"
             if (line.startsWith('data: ')) {
               const logMessage = line.substring(6); // Remove "data: " prefix
-              setSyncLogs(prev => [...prev, logMessage]);
+
+              // Update logs immediately for real-time display
+              setSyncLogs(prev => {
+                const newLogs = [...prev, logMessage];
+                // Trigger scroll after state update
+                setTimeout(() => {
+                  if (logContainerRef.current) {
+                    logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+                  }
+                }, 0);
+                return newLogs;
+              });
 
               // Check for sync completion
               if (logMessage.startsWith('SYNC_END:')) {

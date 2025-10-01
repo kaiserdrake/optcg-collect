@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Text, HStack, VStack } from '@chakra-ui/react';
+import { Box, Text, HStack, VStack, Button } from '@chakra-ui/react';
 
 const DiceAnimationModal = ({ isOpen, onClose, onResult }) => {
   const dice1Ref = useRef(null);
@@ -46,10 +46,10 @@ const DiceAnimationModal = ({ isOpen, onClose, onResult }) => {
         finalTransform = 'rotateY(1080deg) rotateX(1170deg)';
         break;
       case 3: // right face - 3 dots
-        finalTransform = 'rotateY(1170deg) rotateX(1080deg)';
+        finalTransform = 'rotateY(990deg) rotateX(1080deg)';
         break;
       case 4: // left face - 4 dots
-        finalTransform = 'rotateY(990deg) rotateX(1080deg)';
+        finalTransform = 'rotateY(1170deg) rotateX(1080deg)';
         break;
       case 5: // top face - 5 dots
         finalTransform = 'rotateY(1080deg) rotateX(990deg)';
@@ -108,6 +108,38 @@ const DiceAnimationModal = ({ isOpen, onClose, onResult }) => {
         dice2Ref.current.classList.remove('rolling', 'settled');
       }
     }
+  };
+
+  const handleReroll = (e) => {
+    // Prevent click from bubbling to the close handler
+    e.stopPropagation();
+
+    // Reset state
+    setBothSettled(false);
+    setResult1(null);
+    setResult2(null);
+
+    // Reset dice elements
+    if (dice1Ref.current) {
+      dice1Ref.current.classList.remove('rolling', 'settled');
+      dice1Ref.current.style.transform = '';
+    }
+    if (dice2Ref.current) {
+      dice2Ref.current.classList.remove('rolling', 'settled');
+      dice2Ref.current.style.transform = '';
+    }
+
+    // Roll again with a slight delay
+    setTimeout(() => {
+      if (dice1Ref.current) {
+        rollDice(dice1Ref.current, setResult1, false);
+      }
+      setTimeout(() => {
+        if (dice2Ref.current) {
+          rollDice(dice2Ref.current, setResult2, true);
+        }
+      }, 100);
+    }, 50);
   };
 
   if (!isOpen) return null;
@@ -283,7 +315,7 @@ const DiceAnimationModal = ({ isOpen, onClose, onResult }) => {
               <span className="dice-dot dot-br"></span>
             </Box>
           </Box>
-          {result1 && (
+          {bothSettled && result1 && (
             <Text color="white" fontSize="2xl" fontWeight="bold">
               {result1}
             </Text>
@@ -334,7 +366,7 @@ const DiceAnimationModal = ({ isOpen, onClose, onResult }) => {
               <span className="dice-dot dot-br"></span>
             </Box>
           </Box>
-          {result2 && (
+          {bothSettled && result2 && (
             <Text color="white" fontSize="2xl" fontWeight="bold">
               {result2}
             </Text>
@@ -342,9 +374,19 @@ const DiceAnimationModal = ({ isOpen, onClose, onResult }) => {
         </VStack>
       </HStack>
 
-      <VStack mt={8} spacing={2}>
+      <VStack mt={8} spacing={3}>
+        {bothSettled && (
+          <Button
+            colorScheme="purple"
+            size="md"
+            onClick={handleReroll}
+            leftIcon={<Text>🎲</Text>}
+          >
+            Reroll
+          </Button>
+        )}
         <Text fontSize="md" color="gray.400">
-          Click anywhere to close
+          {bothSettled ? "Reroll or click anywhere to close" : "Rolling..."}
         </Text>
       </VStack>
     </Box>
