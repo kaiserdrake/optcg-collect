@@ -190,7 +190,7 @@ const TagSelector = ({ selectedTagType, selectedTagAction, onTagTypeSelect, onTa
 };
 
 // Mobile card component for small screens
-const MobileCardRow = ({ row, needMoreCards, onLocationChange, isIncomplete }) => {
+const MobileCardRow = ({ row, needMoreCards, onLocationChange, onCardClick, isIncomplete }) => {
   return (
     <Box
       bg={isIncomplete ? 'red.50' : (row.isAlternative ? 'yellow.50' : 'white')}
@@ -307,6 +307,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
   const [hideComplete, setHideComplete] = useState(false);
+  const [isInstanceModalOpen, setIsInstanceModalOpen] = useState(false);
 
   // Bulk action states
   const [bulkLocationId, setBulkLocationId] = useState(undefined);
@@ -1255,7 +1256,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
 
   return (
     <>
-      <Modal isOpen={isOpen && !isCardDetailModalOpen} onClose={onClose} size={modalSize} scrollBehavior="inside">
+      <Modal isOpen={isOpen && !isCardDetailModalOpen && !isInstanceModalOpen} onClose={onClose} size={modalSize} scrollBehavior="inside">
         <ModalOverlay bg="blackAlpha.400" backdropFilter="blur(4px)" />
         <ModalContent>
           <ModalHeader>
@@ -1488,6 +1489,7 @@ const LocateModal = ({ isOpen, onClose, deck }) => {
           onClose={onLocationModalClose}
           card={selectedCard}
           onLocationUpdated={bulkMoveErrors.length > 0 ? handleLocationUpdateAndReopenErrors : handleLocationUpdate}
+          onModalStateChange={setIsInstanceModalOpen}
         />
       )}
 

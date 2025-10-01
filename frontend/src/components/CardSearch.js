@@ -997,6 +997,15 @@ function CardSearch({
         showProxies={showProxies}
         onCountUpdate={handleCountUpdate}
       />
+
+      <SetCardInstanceLocationsModal
+        isOpen={isLocationModalOpen}
+        onClose={handleLocationModalClose}
+        card={locationModalCard}
+        onLocationUpdated={handleLocationUpdated}
+        onModalStateChange={setIsInstanceModalOpen}
+      />
+
       <SearchHelpModal isOpen={isHelpOpen} onClose={onHelpClose} />
     </VStack>
   );

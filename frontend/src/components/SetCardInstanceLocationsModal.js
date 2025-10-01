@@ -8,6 +8,7 @@ import {
 } from '@chakra-ui/react';
 import { FiMapPin, FiBox, FiBookOpen } from 'react-icons/fi';
 import { getLocationMarkerBg, getLocationColorScheme } from '@/utils/cardStyles';
+import { CARD_EVENTS, dispatchCardUpdate } from '@/utils/cardEvents'; // ADD THIS IMPORT
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -19,6 +20,46 @@ const getLocationTypeIcon = (type) => {
     case 'binder': return FiBookOpen;
     default: return FiMapPin;
   }
+};
+
+// Helper function to ensure tags are arrays
+const ensureTagsAreArrays = (card) => {
+  if (!card) return card;
+
+  const parsePostgreSQLArray = (pgArray) => {
+    if (Array.isArray(pgArray)) return pgArray;
+    if (!pgArray || pgArray === 'null' || pgArray === null || pgArray === undefined) return [];
+
+    // Parse PostgreSQL array format like "{favorite,want}" -> ["favorite", "want"]
+    if (typeof pgArray === 'string') {
+      if (pgArray === '{}') return [];
+      const cleaned = pgArray.replace(/[{}]/g, '');
+      return cleaned ? cleaned.split(',') : [];
+    }
+
+    return [];
+  };
+
+  const processedCard = {
+    ...card,
+    user_tags: parsePostgreSQLArray(card.user_tags),
+    global_tags: parsePostgreSQLArray(card.global_tags)
+  };
+
+  // Convert location_name/location_id to location object
+  if (card.location_name !== null && card.location_id !== null) {
+    processedCard.location = {
+      id: card.location_id,
+      name: card.location_name,
+      marker: card.location_marker || 'gray'
+    };
+  } else if (card.location && typeof card.location === 'object') {
+    processedCard.location = card.location;
+  } else {
+    processedCard.location = null;
+  }
+
+  return processedCard;
 };
 
 const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdated, onModalStateChange }) => {
@@ -55,25 +96,16 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
 
       if (response.ok) {
         const data = await response.json();
-        setInstances(data.instances || []);
-      } else {
-        toast({
-          title: 'Error',
-          description: 'Failed to fetch card instances',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
+        const instancesData = data.instances || [];
+        setInstances(instancesData);
+
+        // Auto-select all instances by default
+        if (instancesData.length > 0) {
+          setSelectedInstances(instancesData.map(inst => inst.instance_id));
+        }
       }
     } catch (error) {
-      console.error('Error fetching instances:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load card instances',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
+      console.error('Failed to fetch card instances:', error);
     } finally {
       setIsLoading(false);
     }
@@ -90,43 +122,42 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
         setLocations(data);
       }
     } catch (error) {
-      console.error('Error fetching locations:', error);
+      console.error('Failed to fetch locations:', error);
     }
   };
 
+  const handleToggleInstance = (instanceId, checked) => {
+    setSelectedInstances(prev => {
+      if (checked) {
+        return [...prev, instanceId];
+      } else {
+        return prev.filter(id => id !== instanceId);
+      }
+    });
+  };
+
   const handleSelectAll = () => {
-    setSelectedInstances(instances.map(inst => inst.instance_id));
+    if (Array.isArray(instances)) {
+      setSelectedInstances(instances.map(inst => inst.instance_id));
+    }
   };
 
   const handleUnselectAll = () => {
     setSelectedInstances([]);
   };
 
-  const handleToggleInstance = (instanceId, checked) => {
-    if (checked) {
-      setSelectedInstances(prev => [...prev, instanceId]);
-    } else {
-      setSelectedInstances(prev => prev.filter(id => id !== instanceId));
-    }
-  };
-
   const handleApply = async () => {
     if (selectedInstances.length === 0) {
-      toast({
-        title: 'No Selection',
-        description: 'Please select at least one card to update',
-        status: 'warning',
-        duration: 3000,
-        isClosable: true,
-      });
       return;
     }
 
     setIsApplying(true);
+
     try {
+      // Build updates array
       const updates = selectedInstances.map(instanceId => ({
         instance_id: instanceId,
-        location_id: selectedLocationId
+        location_id: selectedLocationId // null to remove location
       }));
 
       const response = await fetch(
@@ -140,14 +171,6 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
       );
 
       if (response.ok) {
-        toast({
-          title: 'Locations Updated',
-          description: `Successfully updated ${selectedInstances.length} card(s)`,
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
-
         // Refresh instances to show updated locations
         await fetchInstances();
 
@@ -155,7 +178,40 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
         setSelectedInstances([]);
         setSelectedLocationId(null);
 
-        // Notify parent component
+        // Fetch updated card data for global event dispatch
+        try {
+          const searchParams = new URLSearchParams({
+            keyword: `id:${card.id}`,
+            ownedOnly: 'false',
+            showProxies: 'true'
+          });
+
+          const cardResponse = await fetch(`${api}/api/cards/search?${searchParams.toString()}`, {
+            credentials: 'include',
+          });
+
+          if (cardResponse.ok) {
+            const searchData = await cardResponse.json();
+            const searchResults = Array.isArray(searchData) ? searchData : searchData.results || [];
+
+            if (searchResults.length > 0) {
+              const updatedCard = ensureTagsAreArrays(searchResults[0]);
+
+              console.log('SetCardInstanceLocationsModal: Dispatching LOCATION_UPDATED event', {
+                cardId: updatedCard.id,
+                cardName: updatedCard.name,
+                location: updatedCard.location
+              });
+
+              // Dispatch global update event for all listening components
+              dispatchCardUpdate(CARD_EVENTS.LOCATION_UPDATED, updatedCard.id, { card: updatedCard });
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to fetch updated card data for event dispatch:', error);
+        }
+
+        // Notify parent component (parent will show the toast)
         if (onLocationUpdated) {
           onLocationUpdated();
         }
@@ -192,8 +248,8 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
   };
 
   // Group instances by type for display
-  const ownedInstances = instances.filter(inst => !inst.is_proxy);
-  const proxyInstances = instances.filter(inst => inst.is_proxy);
+  const ownedInstances = Array.isArray(instances) ? instances.filter(inst => !inst.is_proxy) : [];
+  const proxyInstances = Array.isArray(instances) ? instances.filter(inst => inst.is_proxy) : [];
 
   // Get selected location details for display
   const selectedLocation = selectedLocationId
@@ -250,8 +306,12 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
                   p={3}
                 >
                   <VStack align="stretch" spacing={2}>
+                    {/* Owned Instances Section */}
                     {ownedInstances.length > 0 && (
                       <>
+                        <Text fontSize="sm" fontWeight="bold" color="gray.700">
+                          Owned Cards
+                        </Text>
                         {ownedInstances.map((instance, index) => (
                           <Checkbox
                             key={instance.instance_id}
@@ -285,9 +345,13 @@ const SetCardInstanceLocationsModal = ({ isOpen, onClose, card, onLocationUpdate
                       </>
                     )}
 
+                    {/* Proxy Instances Section */}
                     {proxyInstances.length > 0 && (
                       <>
                         {ownedInstances.length > 0 && <Divider my={2} />}
+                        <Text fontSize="sm" fontWeight="bold" color="gray.700">
+                          Proxy Cards
+                        </Text>
                         {proxyInstances.map((instance, index) => (
                           <Checkbox
                             key={instance.instance_id}
