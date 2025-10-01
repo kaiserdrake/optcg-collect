@@ -155,6 +155,7 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate, onLoc
                   {hasLocation && (
                     <LocationDisplayBadge
                       card={card}
+                      onClick={onLocationBadgeClick}
                     />
                   )}
                 </Box>
@@ -211,6 +212,7 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate, onLoc
                 <Box onClick={(e) => handleLocationClick(e, card)}>
                   <LocationDisplayBadge
                     card={card}
+                    onClick={onLocationBadgeClick}
                   />
                 </Box>
               )}
