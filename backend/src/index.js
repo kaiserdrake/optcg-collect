@@ -1359,6 +1359,24 @@ app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req,
       paramIndex++;
     }
 
+    // Add pack filter
+    if (criteria.pack) {
+      whereClauses.push(`p.name ILIKE '%' || $${paramIndex} || '%'`);
+      params.push(criteria.pack);
+      paramIndex++;
+    }
+
+    // Add color filters - multiple colors use OR logic (same tag type)
+    if (criteria.colors && criteria.colors.length > 0) {
+      const colorConditions = criteria.colors.map(color => {
+        const condition = `c.color ILIKE '%' || $${paramIndex} || '%'`;
+        params.push(color);
+        paramIndex++;
+        return condition;
+      });
+      whereClauses.push(`(${colorConditions.join(' OR ')})`);
+    }
+
     if (criteria.tags && criteria.tags.length > 0) {
       const tagConditions = criteria.tags.map(tag => {
         const condition = `(ut.tag_type = $${paramIndex} OR gt.tag_type = $${paramIndex})`;

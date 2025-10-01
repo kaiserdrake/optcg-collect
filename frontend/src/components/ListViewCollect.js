@@ -164,6 +164,15 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate, onLoc
 
             {/* Second Row: Count Controls */}
             <HStack spacing={4} justify="center" pt={2} borderTop="1px" borderColor="gray.100">
+              <VStack spacing={1}>
+                <Text fontSize="xs" color="gray.500">Owned</Text>
+                <CountControl
+                  cardId={card.id}
+                  type="owned"
+                  count={card.owned_count || 0}
+                  onUpdate={onCountUpdate}
+                />
+              </VStack>
               {showProxies && (
                 <VStack spacing={1}>
                   <Text fontSize="xs" color="gray.500">Proxy</Text>
@@ -175,15 +184,6 @@ const ListViewCollect = ({ cards, onCardClick, showProxies, onCountUpdate, onLoc
                   />
                 </VStack>
               )}
-              <VStack spacing={1}>
-                <Text fontSize="xs" color="gray.500">Owned</Text>
-                <CountControl
-                  cardId={card.id}
-                  type="owned"
-                  count={card.owned_count || 0}
-                  onUpdate={onCountUpdate}
-                />
-              </VStack>
             </HStack>
           </VStack>
         </Box>

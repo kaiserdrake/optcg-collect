@@ -240,7 +240,7 @@ function CardSearch({
   const [viewMode, setViewMode] = useState(mode === 'deckbuilder' ? 'thumbnails' : 'list');
   const [inCollection, setInCollection] = useState(false);
   const [showProxies, setShowProxies] = useState(true);
-  const [thumbnailSize, setThumbnailSize] = useState(mode === 'collection' ? 160 : 100);
+  const [thumbnailSize, setThumbnailSize] = useState(mode === 'collection' ? 120 : 90);
   const [sortMode, setSortMode] = useState('name');
   const [sortReverse, setSortReverse] = useState(false);
 
@@ -846,8 +846,8 @@ function CardSearch({
                       <Slider
                         value={thumbnailSize}
                         onChange={setThumbnailSize}
-                        min={80}
-                        max={200}
+                        min={60}
+                        max={160}
                         step={10}
                         size="sm"
                       >
@@ -911,8 +911,8 @@ function CardSearch({
                       <Slider
                         value={thumbnailSize}
                         onChange={setThumbnailSize}
-                        min={80}
-                        max={200}
+                        min={60}
+                        max={120}
                         step={10}
                         size="sm"
                       >
