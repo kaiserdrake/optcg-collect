@@ -142,7 +142,7 @@ const DeckCard = ({
   const deckName = isPublished ? deck.deck_title : deck.name;
   const publisher = isPublished ? deck.publisher : null;
   const date = isPublished ?
-    (deck.created_at ? new Date(deck.created_at).toLocaleDateString() : 'Unknown') :
+    (deck.date_published ? new Date(deck.date_published).toLocaleDateString() : 'Unknown') :
     (deck.updated_at ? new Date(deck.updated_at).toLocaleDateString() : 'Unknown');
 
   const isHovered = hoveredDeckId === deck.id;
