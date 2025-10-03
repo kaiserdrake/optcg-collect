@@ -34,7 +34,7 @@ import {
 } from '@chakra-ui/react';
 
 import { HamburgerIcon } from '@chakra-ui/icons';
-import { FiSettings, FiUsers, FiDownload, FiMapPin, FiDatabase, FiLayers, FiHeart } from 'react-icons/fi';
+import { FiSettings, FiUsers, FiDownload, FiMapPin, FiDatabase, FiLayers, FiHeart, FiEdit } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 import LoginModal from './LoginModal';
 
@@ -44,6 +44,7 @@ import UserManagementModal from './UserManagementModal';
 import LocationManagementModal from './LocationManagementModal';
 import CollectionManagementModal from './CollectionManagementModal';
 import UnifiedDeckModal from './UnifiedDeckModal';
+import EditCardDataModal from './EditCardDataModal';
 
 // Modern Tab Component
 const ModernTab = ({ isActive, onClick, children, badge }) => {
@@ -116,6 +117,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
   const { isOpen: isCollectionOpen, onOpen: onCollectionOpen, onClose: onCollectionClose } = useDisclosure();
   const { isOpen: isDeckManagementOpen, onOpen: onDeckManagementOpen, onClose: onDeckManagementClose } = useDisclosure();
   const { isOpen: isSyncOpen, onOpen: onSyncOpen, onClose: onSyncClose } = useDisclosure();
+  const { isOpen: isEditCardOpen, onOpen: onEditCardOpen, onClose: onEditCardClose } = useDisclosure();
 
   const logContainerRef = useRef(null);
   const syncConfirmCancelRef = useRef();
@@ -123,9 +125,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
 
   useEffect(() => {
     setRenderCounter(prev => prev + 1);
-    // Force component to re-render if we detect a state change
-    // This helps with React optimization issues that might prevent re-renders
-  }, [user, loading]); // Dependencies ensure this runs on auth state changes
+  }, [user, loading]);
 
   // Automatically close Login Modal if logged in
   useEffect(() => {
@@ -143,13 +143,11 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
   const handleTabChange = (index) => {
     const tab = tabs[index];
 
-    // If tab requires auth and user is not logged in, show login modal
     if (tab.requiresAuth && !user) {
       onLoginOpen();
       return;
     }
 
-    // Otherwise change tab normally
     onTabChange?.(index);
   };
 
@@ -174,14 +172,11 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
     }
   };
 
-  // Buy Me Coffee handler
   const handleDonationClick = () => {
-    // Replace 'YOUR_PAYPAL_EMAIL' with the actual PayPal email
     const paypalUrl = `https://www.paypal.com/ncp/payment/WGP5P2UEDDSBE`;
     window.open(paypalUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // Sync functionality (keeping existing code)
   const handleSync = async () => {
     setIsSyncConfirmOpen(true);
   };
@@ -216,14 +211,11 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
 
         for (const line of lines) {
           if (line.trim()) {
-            // The backend sends Server-Sent Events in format "data: <message>"
             if (line.startsWith('data: ')) {
-              const logMessage = line.substring(6); // Remove "data: " prefix
+              const logMessage = line.substring(6);
 
-              // Update logs immediately for real-time display
               setSyncLogs(prev => {
                 const newLogs = [...prev, logMessage];
-                // Trigger scroll after state update
                 setTimeout(() => {
                   if (logContainerRef.current) {
                     logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
@@ -232,7 +224,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                 return newLogs;
               });
 
-              // Check for sync completion
               if (logMessage.startsWith('SYNC_END:')) {
                 toast({
                   title: 'Sync Complete',
@@ -268,7 +259,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
   };
 
   const handleLocationChange = (action, locationData) => {
-    // Dispatch a custom event to notify CardSearch and other components
     const event = new CustomEvent('locationChanged', {
       detail: { action, locationData }
     });
@@ -386,7 +376,7 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                     <MenuDivider />
                   </Box>
 
-                  {/* Features available to ALL logged-in users (Normal User + Admin) */}
+                  {/* Features available to ALL logged-in users */}
                   <MenuItem icon={<FiLayers />} onClick={onDeckManagementOpen}>
                     Deck Management
                   </MenuItem>
@@ -412,7 +402,13 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
                         onClick={handleSync}
                         isDisabled={isSyncing}
                       >
-                        {isSyncing ? 'Syncing...' : 'Sync Cards'}
+                        {isSyncing ? 'Syncing...' : 'Sync Card List'}
+                      </MenuItem>
+                      <MenuItem
+                        icon={<FiEdit />}
+                        onClick={onEditCardOpen}
+                      >
+                        Edit Card Detail
                       </MenuItem>
                     </>
                   )}
@@ -430,7 +426,6 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
               </Menu>
             ) : (
               <HStack spacing={2}>
-                {/* Buy Me Coffee for non-logged users on mobile - compact version */}
                 <IconButton
                   icon={<FiHeart />}
                   size="sm"
@@ -487,13 +482,15 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       <UnifiedDeckModal
         isOpen={isDeckManagementOpen}
         onClose={onDeckManagementClose}
-        onSelect={(selectedDeck) => {
-          // For navbar context, the deck selection just highlights the deck
-          // The actual navigation happens via the "To MatchUp" and "To Builder" buttons
-        }}
+        onSelect={(selectedDeck) => {}}
         context="navbar"
         title="Deck Management"
       />
+
+      {/* Edit Card Data Modal (Admin only) */}
+      {user?.role === 'Admin' && (
+        <EditCardDataModal isOpen={isEditCardOpen} onClose={onEditCardClose} />
+      )}
 
       {/* Sync Modal (Admin only) */}
       {user?.role === 'Admin' && (
@@ -568,4 +565,4 @@ export default function Navbar({ activeTab = 0, onTabChange, tabs = [] }) {
       )}
     </>
   );
-};
+}
