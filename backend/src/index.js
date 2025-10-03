@@ -2988,6 +2988,202 @@ app.get('/api/collection/statistics', isAuthenticated, async (req, res) => {
   }
 });
 
+// --- CARD MANAGEMENT ROUTES (Admin Only) ---
+
+// Create a new card (Admin only)
+app.post('/api/cards/create', isAuthenticated, isAdmin, async (req, res) => {
+  const {
+    id,
+    card_code,
+    name,
+    rarity,
+    category,
+    color,
+    cost,
+    power,
+    counter,
+    effect,
+    trigger_effect,
+    img_url,
+    block,
+    attributes,
+    types
+  } = req.body;
+
+  // Validation
+  if (!id || !name) {
+    return res.status(400).json({
+      message: 'Card ID and Name are required.'
+    });
+  }
+
+  try {
+    // Check if card already exists
+    const existingCard = await query('SELECT id FROM cards WHERE id = $1', [id]);
+    if (existingCard.rows.length > 0) {
+      return res.status(409).json({
+        message: 'A card with this ID already exists.'
+      });
+    }
+
+    // Insert the new card
+    const insertQuery = `
+      INSERT INTO cards (
+        id, card_code, name, rarity, category, color, cost, power,
+        counter, effect, trigger_effect, img_url, attributes, types, block
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *
+    `;
+
+    const values = [
+      id.trim(),
+      card_code?.trim() || null,
+      name.trim(),
+      rarity?.trim() || null,
+      category?.trim() || null,
+      color?.trim() || null,
+      cost !== null && cost !== '' ? parseInt(cost) : null,
+      power !== null && power !== '' ? parseInt(power) : null,
+      counter !== null && counter !== '' ? parseInt(counter) : null,
+      effect?.trim() || null,
+      trigger_effect?.trim() || null,
+      img_url?.trim() || null,
+      attributes && attributes.length > 0 ? attributes : null,
+      types && types.length > 0 ? types : null,
+      block !== null && block !== '' ? parseInt(block) : null
+    ];
+
+    const result = await query(insertQuery, values);
+
+    res.status(201).json({
+      message: 'Card created successfully.',
+      card: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error('Error creating card:', err);
+    res.status(500).json({
+      message: 'Server error while creating card.',
+      error: err.message
+    });
+  }
+});
+
+// Update an existing card (Admin only)
+app.put('/api/cards/:id', isAuthenticated, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const {
+    card_code,
+    name,
+    rarity,
+    category,
+    color,
+    cost,
+    power,
+    counter,
+    effect,
+    trigger_effect,
+    img_url,
+    block,
+    attributes,
+    types
+  } = req.body;
+
+  // Validation
+  if (!name) {
+    return res.status(400).json({
+      message: 'Name is required.'
+    });
+  }
+
+  try {
+    // Check if card exists
+    const existingCard = await query('SELECT id FROM cards WHERE id = $1', [id]);
+    if (existingCard.rows.length === 0) {
+      return res.status(404).json({
+        message: 'Card not found.'
+      });
+    }
+
+    // Update the card
+    const updateQuery = `
+      UPDATE cards SET
+        card_code = $1,
+        name = $2,
+        rarity = $3,
+        category = $4,
+        color = $5,
+        cost = $6,
+        power = $7,
+        counter = $8,
+        effect = $9,
+        trigger_effect = $10,
+        img_url = $11,
+        attributes = $12,
+        types = $13,
+        block = $14
+      WHERE id = $15
+      RETURNING *
+    `;
+
+    const values = [
+      card_code?.trim() || null,
+      name.trim(),
+      rarity?.trim() || null,
+      category?.trim() || null,
+      color?.trim() || null,
+      cost !== null && cost !== '' ? parseInt(cost) : null,
+      power !== null && power !== '' ? parseInt(power) : null,
+      counter !== null && counter !== '' ? parseInt(counter) : null,
+      effect?.trim() || null,
+      trigger_effect?.trim() || null,
+      img_url?.trim() || null,
+      attributes && attributes.length > 0 ? attributes : null,
+      types && types.length > 0 ? types : null,
+      block !== null && block !== '' ? parseInt(block) : null,
+      id
+    ];
+
+    const result = await query(updateQuery, values);
+
+    res.json({
+      message: 'Card updated successfully.',
+      card: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error('Error updating card:', err);
+    res.status(500).json({
+      message: 'Server error while updating card.',
+      error: err.message
+    });
+  }
+});
+
+// Get a specific card by ID for editing (Admin only)
+app.get('/api/cards/:id/edit', isAuthenticated, isAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await query('SELECT * FROM cards WHERE id = $1', [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: 'Card not found.'
+      });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    console.error('Error fetching card:', err);
+    res.status(500).json({
+      message: 'Server error while fetching card.',
+      error: err.message
+    });
+  }
+});
+
 // Start the server
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
