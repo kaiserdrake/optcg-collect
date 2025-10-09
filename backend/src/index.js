@@ -1361,7 +1361,7 @@ app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req,
 
     // Add pack filter
     if (criteria.pack) {
-      whereClauses.push(`p.name ILIKE '%' || $${paramIndex} || '%'`);
+      whereClauses.push(`(p.code ILIKE '%' || $${paramIndex} || '%' OR p.series_id ILIKE '%' || $${paramIndex} || '%' OR p.name ILIKE '%' || $${paramIndex} || '%')`);
       params.push(criteria.pack);
       paramIndex++;
     }
