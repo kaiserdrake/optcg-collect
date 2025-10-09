@@ -989,6 +989,19 @@ function CardSearch({
         onLocationBadgeClick={handleLocationBadgeClick}
       />
 
+      {/* Bottom Pagination Controls */}
+      {results.length > 0 && (
+        <PaginationControls
+          currentPage={currentPage}
+          itemsPerPage={itemsPerPage}
+          totalItems={totalResults}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          loading={loading}
+          statusMessage={statusMessage}
+        />
+      )}
+
       {/* Modals */}
       <CardDetailModal
         isOpen={isDetailOpen}
