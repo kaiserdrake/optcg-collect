@@ -823,6 +823,7 @@ app.get('/api/sync/stream', isAuthenticated, isAdmin, (req, res) => {
 
   const sendLog = (log) => {
     res.write(`data: ${log}\n\n`);
+    if (res.flush) res.flush(); // Explicitly flush to send data immediately
   };
 
   sendLog('SYNC_START: Starting card list sync...');
