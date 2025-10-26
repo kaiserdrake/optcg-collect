@@ -412,7 +412,7 @@ const UnifiedDeckModal = ({
   const [isDeletingDeck, setIsDeletingDeck] = useState(false);
   const [myDecksSearchTerm, setMyDecksSearchTerm] = useState('');
   const [publishedDecksSearchTerm, setPublishedDecksSearchTerm] = useState('');
-  const [selectedDeckId, setSelectedDeckId] = useState(null);
+  const [selectedDeckInfo, setSelectedDeckInfo] = useState(null);
   const [hoveredDeckId, setHoveredDeckId] = useState(null);
 
   // Delete confirmation dialog
@@ -581,122 +581,127 @@ const UnifiedDeckModal = ({
   };
 
   const handleDeckSelect = async (deck) => {
-  setSelectedDeckId(deck.id);
+    // Determine dechandleLoadInMatchUpk type
+    const deckType = (deck.deck_title || deck.type === 'published') ? 'published' : 'saved';
 
-  if (context !== 'navbar') {
-    // For DeckBuilder and MatchUp contexts, process the deck immediately
-    if (context === 'deckbuilder') {
-      try {
-        // For deckbuilder, we always need to fetch full deck details
-        if (deck.type === 'published' || 'deck_title' in deck) {
-          // Published deck - use parsed data
-          const deckToReturn = {
-            ...deck,
-            name: deck.deck_title || deck.name,
-            cards: deck.parsedDeck?.cards || []
-          };
-          onSelect(deckToReturn);
-        } else {
-          // Saved deck - fetch full details with cards
-          const response = await fetch(`${api}/api/decks/${deck.id}`, {
-            credentials: 'include'
-          });
+    // Store both ID and type
+    setSelectedDeckInfo({ id: deck.id, type: deckType });
 
-          if (response.ok) {
-            const fullDeckData = await response.json();
-            onSelect(fullDeckData);
+    if (context !== 'navbar') {
+      // For DeckBuilder and MatchUp contexts, process the deck immediately
+      if (context === 'deckbuilder') {
+        try {
+          // For deckbuilder, we always need to fetch full deck details
+          if (deck.type === 'published' || 'deck_title' in deck) {
+            // Published deck - use parsed data
+            const deckToReturn = {
+              ...deck,
+              name: deck.deck_title || deck.name,
+              cards: deck.parsedDeck?.cards || []
+            };
+            onSelect(deckToReturn);
           } else {
-            throw new Error('Failed to load full deck details');
-          }
-        }
-      } catch (error) {
-        console.error('Error loading full deck details:', error);
-        toast({
-          title: 'Error loading deck',
-          description: 'Failed to load complete deck data',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
-        return;
-      }
-    } else if (context === 'matchup') {
-      try {
-        // For MatchUp, ensure we have proper deck structure with cards
-        if (deck.type === 'published' || 'deck_title' in deck) {
-          // Published deck - use parsed data
-          const deckToReturn = {
-            ...deck,
-            name: deck.deck_title || deck.name,
-            cards: deck.parsedDeck?.cards || []
-          };
-          onSelect(deckToReturn);
-        } else {
-          // Saved deck - fetch full details with cards
-          const response = await fetch(`${api}/api/decks/${deck.id}`, {
-            credentials: 'include'
-          });
+            // Saved deck - fetch full details with cards
+            const response = await fetch(`${api}/api/decks/${deck.id}`, {
+              credentials: 'include'
+            });
 
-          if (response.ok) {
-            const fullDeckData = await response.json();
-            onSelect(fullDeckData);
-          } else {
-            throw new Error('Failed to load full deck details');
+            if (response.ok) {
+              const fullDeckData = await response.json();
+              onSelect(fullDeckData);
+            } else {
+              throw new Error('Failed to load full deck details');
+            }
           }
+        } catch (error) {
+          console.error('Error loading full deck details:', error);
+          toast({
+            title: 'Error loading deck',
+            description: 'Failed to load complete deck data',
+            status: 'error',
+            duration: 3000,
+            isClosable: true,
+          });
+          return;
         }
-      } catch (error) {
-        console.error('Error loading deck for MatchUp:', error);
-        toast({
-          title: 'Error loading deck',
-          description: 'Failed to load complete deck data',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
-        return;
+      } else if (context === 'matchup') {
+        try {
+          // For MatchUp, ensure we have proper deck structure with cards
+          if (deck.type === 'published' || 'deck_title' in deck) {
+            // Published deck - use parsed data
+            const deckToReturn = {
+              ...deck,
+              name: deck.deck_title || deck.name,
+              cards: deck.parsedDeck?.cards || []
+            };
+            onSelect(deckToReturn);
+          } else {
+            // Saved deck - fetch full details with cards
+            const response = await fetch(`${api}/api/decks/${deck.id}`, {
+              credentials: 'include'
+            });
+
+            if (response.ok) {
+              const fullDeckData = await response.json();
+              onSelect(fullDeckData);
+            } else {
+              throw new Error('Failed to load full deck details');
+            }
+          }
+        } catch (error) {
+          console.error('Error loading deck for MatchUp:', error);
+          toast({
+            title: 'Error loading deck',
+            description: 'Failed to load complete deck data',
+            status: 'error',
+            duration: 3000,
+            isClosable: true,
+          });
+          return;
+        }
       }
+
+      onClose();
+    } else {
+      // FIXED: For navbar context, also call onSelect to notify parent component
+      if (onSelect) {
+        try {
+          if (deck.type === 'published' || 'deck_title' in deck) {
+            // Published deck - use parsed data
+            const deckToReturn = {
+              ...deck,
+              name: deck.deck_title || deck.name,
+              cards: deck.parsedDeck?.cards || []
+            };
+            onSelect(deckToReturn);
+          } else {
+            // Saved deck - fetch full details with cards
+            const response = await fetch(`${api}/api/decks/${deck.id}`, {
+              credentials: 'include'
+            });
+
+            if (response.ok) {
+              const fullDeckData = await response.json();
+              onSelect(fullDeckData);
+            } else {
+              throw new Error('Failed to load full deck details');
+            }
+          }
+        } catch (error) {
+          console.error('Error loading deck in navbar context:', error);
+          toast({
+            title: 'Error loading deck',
+            description: 'Failed to load deck details',
+            status: 'error',
+            duration: 3000,
+            isClosable: true,
+          });
+        }
+      }
+      // Note: Don't auto-close in navbar context, let user choose action with buttons
     }
+  };
 
-    onClose();
-  } else {
-    // FIXED: For navbar context, also call onSelect to notify parent component
-    if (onSelect) {
-      try {
-        if (deck.type === 'published' || 'deck_title' in deck) {
-          // Published deck - use parsed data
-          const deckToReturn = {
-            ...deck,
-            name: deck.deck_title || deck.name,
-            cards: deck.parsedDeck?.cards || []
-          };
-          onSelect(deckToReturn);
-        } else {
-          // Saved deck - fetch full details with cards
-          const response = await fetch(`${api}/api/decks/${deck.id}`, {
-            credentials: 'include'
-          });
-
-          if (response.ok) {
-            const fullDeckData = await response.json();
-            onSelect(fullDeckData);
-          } else {
-            throw new Error('Failed to load full deck details');
-          }
-        }
-      } catch (error) {
-        console.error('Error loading deck in navbar context:', error);
-        toast({
-          title: 'Error loading deck',
-          description: 'Failed to load deck details',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
-      }
-    }
-    // Note: Don't auto-close in navbar context, let user choose action with buttons
-  }
-};
 
   // Helper function to generate deck content string for navigation
   const generateDeckContentForNavigation = async (deck) => {
@@ -725,11 +730,15 @@ const UnifiedDeckModal = ({
   };
 
   const handleLoadInMatchUp = async () => {
-    if (!selectedDeckId) return;
+    if (!selectedDeckInfo) return;
 
-    const selectedFromMyDecks = filteredMyDecks.find(deck => deck.id === selectedDeckId);
-    const selectedFromPublished = filteredPublishedDecks.find(deck => deck.id === selectedDeckId);
-    const deck = selectedFromMyDecks || selectedFromPublished;
+    // Find the deck based on both ID and type
+    let deck;
+    if (selectedDeckInfo.type === 'published') {
+      deck = filteredPublishedDecks.find(d => d.id === selectedDeckInfo.id);
+    } else {
+      deck = filteredMyDecks.find(d => d.id === selectedDeckInfo.id);
+    }
 
     if (deck) {
       // Navigate to MatchUp page with deck parameters
@@ -742,11 +751,15 @@ const UnifiedDeckModal = ({
   };
 
   const handleLoadInDeckBuilder = async () => {
-    if (!selectedDeckId) return;
+    if (!selectedDeckInfo) return;
 
-    const selectedFromMyDecks = filteredMyDecks.find(deck => deck.id === selectedDeckId);
-    const selectedFromPublished = filteredPublishedDecks.find(deck => deck.id === selectedDeckId);
-    const deck = selectedFromMyDecks || selectedFromPublished;
+    // Find the deck based on both ID and type
+    let deck;
+    if (selectedDeckInfo.type === 'published') {
+      deck = filteredPublishedDecks.find(d => d.id === selectedDeckInfo.id);
+    } else {
+      deck = filteredMyDecks.find(d => d.id === selectedDeckInfo.id);
+    }
 
     if (deck) {
       try {
@@ -908,22 +921,22 @@ const UnifiedDeckModal = ({
                       {/* My Decks Grid */}
                       {filteredMyDecks.length > 0 ? (
                         <SimpleGrid columns={{ base: 2, md: 3, lg: 4, xl: 6 }} spacing={4}>
-                          {filteredMyDecks.map((deck) => (
-                            <DeckCard
-                              key={deck.id}
-                              deck={deck}
-                              isSelected={selectedDeckId === deck.id}
-                              onSelect={handleDeckSelect}
-                              context={context}
-                              onDelete={handleDeleteDeck}
-                              onLoadInMatchUp={handleLoadInMatchUp}
-                              onLoadInDeckBuilder={handleLoadInDeckBuilder}
-                              canDelete={canDeleteMyDeck(deck)}
-                              hoveredDeckId={hoveredDeckId}
-                              setHoveredDeckId={setHoveredDeckId}
-                            />
-                          ))}
-                        </SimpleGrid>
+                            {filteredMyDecks.map((deck) => (
+                              <DeckCard
+                                key={deck.id}
+                                deck={deck}
+                                isSelected={selectedDeckInfo?.id === deck.id}  // CHANGED: was selectedDeckId === deck.id
+                                onSelect={handleDeckSelect}
+                                context={context}
+                                onDelete={handleDeleteDeck}
+                                onLoadInMatchUp={handleLoadInMatchUp}
+                                onLoadInDeckBuilder={handleLoadInDeckBuilder}
+                                canDelete={canDeleteMyDeck(deck)}
+                                hoveredDeckId={hoveredDeckId}
+                                setHoveredDeckId={setHoveredDeckId}
+                              />
+                            ))}
+                          </SimpleGrid>
                       ) : user ? (
                         <Box textAlign="center" py={8}>
                           <Icon as={FiFolder} fontSize="3xl" color="gray.300" />
@@ -962,23 +975,23 @@ const UnifiedDeckModal = ({
 
                       {/* Published Decks Grid */}
                       {filteredPublishedDecks.length > 0 ? (
-                        <SimpleGrid columns={{ base: 2, md: 3, lg: 4, xl: 6 }} spacing={4}>
-                          {filteredPublishedDecks.map((deck) => (
-                            <DeckCard
-                              key={deck.id}
-                              deck={deck}
-                              isSelected={selectedDeckId === deck.id}
-                              onSelect={handleDeckSelect}
-                              context={context}
-                              onDelete={handleDeleteDeck}
-                              onLoadInMatchUp={handleLoadInMatchUp}
-                              onLoadInDeckBuilder={handleLoadInDeckBuilder}
-                              canDelete={canDeletePublishedDeck(deck)}
-                              hoveredDeckId={hoveredDeckId}
-                              setHoveredDeckId={setHoveredDeckId}
-                            />
-                          ))}
-                        </SimpleGrid>
+                          <SimpleGrid columns={{ base: 2, md: 3, lg: 4, xl: 6 }} spacing={4}>
+                            {filteredPublishedDecks.map((deck) => (
+                              <DeckCard
+                                key={deck.id}
+                                deck={deck}
+                                isSelected={selectedDeckInfo?.id === deck.id}  // CHANGED: was selectedDeckId === deck.id
+                                onSelect={handleDeckSelect}
+                                context={context}
+                                onDelete={handleDeleteDeck}
+                                onLoadInMatchUp={handleLoadInMatchUp}
+                                onLoadInDeckBuilder={handleLoadInDeckBuilder}
+                                canDelete={canDeletePublishedDeck(deck)}
+                                hoveredDeckId={hoveredDeckId}
+                                setHoveredDeckId={setHoveredDeckId}
+                              />
+                            ))}
+                          </SimpleGrid>
                       ) : (
                         <Box textAlign="center" py={8}>
                           <Icon as={FiDatabase} fontSize="3xl" color="gray.300" />
