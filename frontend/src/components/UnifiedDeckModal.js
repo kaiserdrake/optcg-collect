@@ -750,33 +750,9 @@ const UnifiedDeckModal = ({
 
     if (deck) {
       try {
-        // Use direct callback instead of URL navigation for better UX
-        if (onSelect && (context === 'deckbuilder')) {
-          // For DeckBuilder context, use onSelect callback (already implemented above)
-          if (deck.deck_title || deck.type === 'published') {
-            // Published deck - use already parsed data
-            const deckToReturn = {
-              ...deck,
-              name: deck.deck_title || deck.name,
-              cards: deck.parsedDeck?.cards || []
-            };
-            onSelect(deckToReturn);
-          } else {
-            // Saved deck - fetch full details with cards
-            const response = await fetch(`${api}/api/decks/${deck.id}`, {
-              credentials: 'include'
-            });
-
-            if (response.ok) {
-              const fullDeckData = await response.json();
-              onSelect(fullDeckData);
-            } else {
-              throw new Error('Failed to load full deck details');
-            }
-          }
-        } else {
-          // For navbar context, use sessionStorage to pass deck data
-
+        // For navbar context, use sessionStorage to pass deck data
+        if (context === 'navbar') {
+          // Check if it's a published deck by looking for deck_title property
           if (deck.deck_title || deck.type === 'published') {
             // For published decks, store the complete deck data in sessionStorage
             const deckToStore = {
@@ -789,14 +765,40 @@ const UnifiedDeckModal = ({
             // Store the deck data in sessionStorage
             sessionStorage.setItem('tempDeckData', JSON.stringify(deckToStore));
 
-            // Navigate with tempDeck parameter
-            window.history.replaceState(null, '', '/?tab=decks&tempDeck=published');
+            // Navigate with tempDeck parameter WITHOUT reload
+            window.location.href = '/?tab=decks&tempDeck=published';
           } else {
             // For saved decks, use the existing loadDeck parameter approach
-            window.history.replaceState(null, '', `/?tab=decks&loadDeck=${deck.id}`);
+            window.location.href = `/?tab=decks&loadDeck=${deck.id}`;
+          }
+          // Don't call onClose() here - let the navigation handle it
+        } else {
+          // For deckbuilder context, use onSelect callback directly
+          if (onSelect) {
+            if (deck.deck_title || deck.type === 'published') {
+              // Published deck - use already parsed data
+              const deckToReturn = {
+                ...deck,
+                name: deck.deck_title || deck.name,
+                cards: deck.parsedDeck?.cards || []
+              };
+              onSelect(deckToReturn);
+            } else {
+              // Saved deck - fetch full details with cards
+              const response = await fetch(`${api}/api/decks/${deck.id}`, {
+                credentials: 'include'
+              });
+
+              if (response.ok) {
+                const fullDeckData = await response.json();
+                onSelect(fullDeckData);
+              } else {
+                throw new Error('Failed to load full deck details');
+              }
+            }
+            onClose();
           }
         }
-        onClose();
       } catch (error) {
         console.error('Error loading deck in DeckBuilder:', error);
         toast({
