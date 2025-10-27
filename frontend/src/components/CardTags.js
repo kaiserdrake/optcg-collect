@@ -101,9 +101,20 @@ const CardTags = ({
 
   useEffect(() => {
     if (useCardData) {
+      // Helper function to safely parse tags
+      const parseTagArray = (tags) => {
+        if (Array.isArray(tags)) return tags;
+        if (!tags || tags === 'null' || tags === '{}') return [];
+        if (typeof tags === 'string') {
+          const cleaned = tags.replace(/[{}]/g, '');
+          return cleaned ? cleaned.split(',') : [];
+        }
+        return [];
+      };
+
       setTags([
-        ...(card.user_tags || []).map(tagType => ({ tag_type: tagType, is_global: false })),
-        ...(card.global_tags || []).map(tagType => ({ tag_type: tagType, is_global: true }))
+        ...parseTagArray(card.user_tags).map(tagType => ({ tag_type: tagType, is_global: false })),
+        ...parseTagArray(card.global_tags).map(tagType => ({ tag_type: tagType, is_global: true }))
       ]);
     } else if (cardId && interactive) {
       loadTags();
