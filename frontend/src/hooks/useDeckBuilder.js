@@ -87,8 +87,18 @@ export const useDeckBuilder = () => {
     return deck.cards.some(item => {
       const cardData = getCardData(item);
       if (!cardData) return false;
-      const globalTags = cardData.global_tags || [];
-      return globalTags.includes('banned');
+
+      // Handle PostgreSQL array format safely
+      let globalTags = cardData.global_tags || [];
+      if (typeof globalTags === 'string') {
+        if (globalTags === '{}') {
+          globalTags = [];
+        } else {
+          globalTags = globalTags.replace(/[{}]/g, '').split(',');
+        }
+      }
+
+      return Array.isArray(globalTags) && globalTags.includes('banned');
     });
   }, [deck.cards, getCardData]);
 
