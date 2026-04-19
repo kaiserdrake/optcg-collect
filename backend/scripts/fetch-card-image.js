@@ -38,9 +38,9 @@ const downloadCardImage = async (cardId, force = false) => {
   }
 
   // Look up the card — exact match first, then case-insensitive
-  let result = await query('SELECT id FROM cards WHERE id = $1', [cardId]);
+  let result = await query('SELECT id, img_url FROM cards WHERE id = $1', [cardId]);
   if (result.rows.length === 0) {
-    result = await query('SELECT id FROM cards WHERE LOWER(id) = LOWER($1)', [cardId]);
+    result = await query('SELECT id, img_url FROM cards WHERE LOWER(id) = LOWER($1)', [cardId]);
   }
 
   if (result.rows.length === 0) {
@@ -58,22 +58,35 @@ const downloadCardImage = async (cardId, force = false) => {
   }
 
   const resolvedId = result.rows[0].id;
+  const dbImgUrl = result.rows[0].img_url;
+
   if (resolvedId !== cardId) {
     console.log(`FETCH-IMG: Resolved '${cardId}' -> '${resolvedId}'`);
   }
 
-  // Build the standard image path from the resolved card ID.
-  // Always try all three hosts regardless of what img_url currently says.
+  // Build candidate URLs. If the DB already has a remote img_url, try that
+  // first — it may point to a different filename than the card ID (e.g.
+  // P-096_m1 -> P-096.png). Then fall back to constructing from the card ID.
+  const candidates = [];
+
+  if (dbImgUrl && !dbImgUrl.startsWith('/card-images/')) {
+    const urlSource = dbImgUrl.includes('en.onepiece-cardgame.com') && !dbImgUrl.includes('asia-en')
+      ? 'English'
+      : dbImgUrl.includes('www.onepiece-cardgame.com')
+        ? 'Japanese (www)'
+        : 'Asia-EN';
+    candidates.push({ url: dbImgUrl, source: urlSource, imageId: resolvedId });
+  }
+
+  // Also try all three hosts with the card ID as the filename
   const imagePath = `/images/cardlist/card/${resolvedId}.png`;
-  const candidates = [
-    { url: `https://en.onepiece-cardgame.com${imagePath}`,   source: 'English' },
-    { url: `https://asia-en.onepiece-cardgame.com${imagePath}`, source: 'Asia-EN' },
-    { url: `https://www.onepiece-cardgame.com${imagePath}`,  source: 'Japanese (www)' },
-  ];
+  candidates.push({ url: `https://en.onepiece-cardgame.com${imagePath}`,      source: 'English',        imageId: resolvedId });
+  candidates.push({ url: `https://asia-en.onepiece-cardgame.com${imagePath}`, source: 'Asia-EN',        imageId: resolvedId });
+  candidates.push({ url: `https://www.onepiece-cardgame.com${imagePath}`,     source: 'Japanese (www)', imageId: resolvedId });
 
   console.log(`FETCH-IMG: Attempting download for card '${resolvedId}'...`);
 
-  for (const { url, source } of candidates) {
+  for (const { url, source, imageId } of candidates) {
     console.log(`FETCH-IMG: Trying ${source}: ${url} ...`);
     const response = await tryFetch(url);
     if (response) {
@@ -84,7 +97,8 @@ const downloadCardImage = async (cardId, force = false) => {
 
         const buffer = await response.arrayBuffer();
         fs.writeFileSync(resolvedLocalPath, Buffer.from(buffer));
-        console.log(`FETCH-IMG: Downloaded from ${source}.`);
+        const label = imageId !== resolvedId ? `${source} (as ${imageId})` : source;
+        console.log(`FETCH-IMG: Downloaded from ${label}.`);
 
         await query('UPDATE cards SET img_url = $1 WHERE id = $2', [resolvedLocalUrl, resolvedId]);
         console.log(`FETCH-IMG: Updated img_url in database to ${resolvedLocalUrl}`);
