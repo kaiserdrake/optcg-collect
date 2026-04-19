@@ -28,6 +28,9 @@ services:
       - '3001:3001'
     env_file:
       - .env
+    volumes:
+      - ${OPCC_DATA_PATH}/cards:/usr/src/app/card-images
+    user: "0:0"
     depends_on:
       - opcc-db
       - opcc-scraper-api

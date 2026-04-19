@@ -1,9 +1,82 @@
 import { query } from '../src/db.js';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Directory where card images will be stored locally
+const IMAGE_DIR = '/usr/src/app/card-images';
+
+// Ensure the image directory exists
+const ensureImageDir = () => {
+  if (!fs.existsSync(IMAGE_DIR)) {
+    fs.mkdirSync(IMAGE_DIR, { recursive: true });
+    console.log(`UPDATE: Created image directory at ${IMAGE_DIR}`);
+  }
+};
+
+// Attempt to fetch a single URL, returns the Response or null on failure.
+const tryFetch = async (url) => {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': 'https://en.onepiece-cardgame.com/',
+      }
+    });
+    return response.ok ? response : null;
+  } catch {
+    return null;
+  }
+};
+
+// Download a card image locally. Tries the English version first; if that
+// returns a non-200, falls back to the original (Asia-EN / Japanese) URL.
+// Only one version is stored. Returns the local URL path or null on failure.
+const downloadImage = async (originalUrl, cardId) => {
+  if (!originalUrl || typeof originalUrl !== 'string') return null;
+
+  const ext = path.extname(originalUrl) || '.png';
+  const filename = `${cardId}${ext}`;
+  const localPath = path.join(IMAGE_DIR, filename);
+  const localUrl = `/card-images/${filename}`;
+
+  // Skip download if file already exists
+  if (fs.existsSync(localPath)) {
+    return localUrl;
+  }
+
+  // Build candidate URLs: English first, then original (Asia-EN / Japanese)
+  const englishUrl = originalUrl.includes('asia-en.onepiece-cardgame.com')
+    ? originalUrl.replace('asia-en.onepiece-cardgame.com', 'en.onepiece-cardgame.com')
+    : originalUrl.includes('en.onepiece-cardgame.com')
+      ? originalUrl
+      : null;
+
+  const candidates = [];
+  if (englishUrl) candidates.push(englishUrl);
+  if (originalUrl !== englishUrl) candidates.push(originalUrl);
+
+  for (const url of candidates) {
+    const response = await tryFetch(url);
+    if (response) {
+      try {
+        const buffer = await response.arrayBuffer();
+        fs.writeFileSync(localPath, Buffer.from(buffer));
+        console.log(`UPDATE: Downloaded image for ${cardId} from ${url.includes('en.onepiece-cardgame.com') && !url.includes('asia-en') ? 'English' : 'Japanese'} source`);
+        return localUrl;
+      } catch (err) {
+        console.warn(`UPDATE: Failed to write image for ${cardId}: ${err.message}`);
+      }
+    }
+  }
+
+  console.warn(`UPDATE: Could not download image for ${cardId} from any source`);
+  return null;
+};
 
 // Backup function to create duplicates of tables
 const createBackupTables = async () => {
@@ -96,9 +169,11 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
       // Base card doesn't exist, create it with card_code = card_id (no _rN suffix)
       console.log(`UPDATE: Creating new base card ${baseCardId} from reprint ${cardId}`);
 
+      const localImgUrl = await downloadImage(cardData.img_url, baseCardId);
+
       const cardValues = [
-        baseCardId,        // id (use base card ID)
-        baseCardId,        // card_code (same as ID, no _rN suffix)
+        baseCardId,
+        baseCardId,
         cardData.name,
         cardData.rarity || null,
         cardData.category || null,
@@ -108,7 +183,7 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
         safeParseInt(cardData.counter),
         cardData.effect || null,
         cardData.trigger || null,
-        cardData.img_url || null,
+        localImgUrl || cardData.img_url || null,
         attributesArray || null,
         typesArray || null,
         safeParseInt(cardData.block)
@@ -146,9 +221,11 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
     }
   } else {
     // Not a reprint, handle normally
+    const localImgUrl = await downloadImage(cardData.img_url, cardId);
+
     const cardValues = [
       cardId,
-      cardCode || cardId, // Use card_code if available, otherwise use card_id
+      cardCode || cardId,
       cardData.name,
       cardData.rarity || null,
       cardData.category || null,
@@ -158,7 +235,7 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
       safeParseInt(cardData.counter),
       cardData.effect || null,
       cardData.trigger || null,
-      cardData.img_url || null,
+      localImgUrl || cardData.img_url || null,
       attributesArray || null,
       typesArray || null,
       safeParseInt(cardData.block)
@@ -202,6 +279,9 @@ const main = async () => {
   const errors = [];
 
   console.log('UPDATE: Starting card database update...');
+
+  // Ensure image storage directory exists before processing
+  ensureImageDir();
 
   try {
     await query('BEGIN');

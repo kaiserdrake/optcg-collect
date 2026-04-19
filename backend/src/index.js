@@ -14,6 +14,7 @@ dotenv.config();
 
 const app = express();
 const port = 3001;
+app.use('/card-images', express.static('/usr/src/app/card-images'));
 
 // Debug middleware to log all requests
 // app.use((req, res, next) => {

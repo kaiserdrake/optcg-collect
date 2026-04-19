@@ -169,6 +169,8 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
 
 const createTables = async () => {
   console.log('INIT: Dropping all existing tables...');
+  await query('DROP TABLE IF EXISTS short_urls;');
+  await query('DROP FUNCTION IF EXISTS maintain_short_url_limit() CASCADE;');
   await query('DROP TABLE IF EXISTS public_shared_decks;');
   await query('DROP TABLE IF EXISTS deck_cards;');
   await query('DROP TABLE IF EXISTS decks;');
@@ -181,7 +183,7 @@ const createTables = async () => {
   await query('DROP TYPE IF EXISTS tag_type;');
   await query('DROP TABLE IF EXISTS card_pack_appearances;');
   await query('DROP TABLE IF EXISTS packs;');
-  await query('DROP TABLE IF EXISTS cards;');
+  await query('DROP TABLE IF EXISTS cards CASCADE;');
 
   console.log('INIT: Creating new relational tables...');
 
