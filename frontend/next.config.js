@@ -95,9 +95,16 @@ const nextConfig = {
     ];
   },
 
-  // Add rewrites to proxy external images through your domain
   async rewrites() {
+    // Rewrites run server-side, so we must use the internal Docker network
+    // hostname, not the public-facing NEXT_PUBLIC_API_URL (which is localhost:3001
+    // from the host machine's perspective and unreachable inside the container).
+    const internalApiUrl = 'http://opcc-backend:3001';
     return [
+      {
+        source: '/card-images/:path*',
+        destination: `${internalApiUrl}/card-images/:path*`,
+      },
       {
         source: '/proxy/images/:path*',
         destination: 'https://en.onepiece-cardgame.com/images/:path*',
