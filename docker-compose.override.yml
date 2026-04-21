@@ -1,0 +1,12 @@
+services:
+  opcc-backend:
+    image: ""
+    build: ./backend
+
+  opcc-frontend:
+    image: ""
+
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}

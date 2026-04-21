@@ -22,7 +22,7 @@ services:
 
   opcc-backend:
     container_name: opcc-backend
-    build: ./backend
+    image: ghcr.io/kaiserdrake/opcc-backend:latest
     restart: always
     ports:
       - '3001:3001'
@@ -39,12 +39,9 @@ services:
 
   opcc-frontend:
     container_name: opcc-frontend
+    image: ghcr.io/kaiserdrake/opcc-frontend:latest
     env_file:
       - .env
-    build:
-      context: ./frontend
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     restart: always
     ports:
       - '8086:3000'
