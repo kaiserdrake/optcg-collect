@@ -169,6 +169,8 @@ const handleCardWithReprintLogic = async (cardData, packCode) => {
 
 const createTables = async () => {
   console.log('INIT: Dropping all existing tables...');
+  await query('DROP TABLE IF EXISTS short_urls;');
+  await query('DROP FUNCTION IF EXISTS maintain_short_url_limit() CASCADE;');
   await query('DROP TABLE IF EXISTS public_shared_decks;');
   await query('DROP TABLE IF EXISTS deck_cards;');
   await query('DROP TABLE IF EXISTS decks;');
@@ -181,7 +183,7 @@ const createTables = async () => {
   await query('DROP TYPE IF EXISTS tag_type;');
   await query('DROP TABLE IF EXISTS card_pack_appearances;');
   await query('DROP TABLE IF EXISTS packs;');
-  await query('DROP TABLE IF EXISTS cards;');
+  await query('DROP TABLE IF EXISTS cards CASCADE;');
 
   console.log('INIT: Creating new relational tables...');
 
@@ -239,7 +241,7 @@ const createTables = async () => {
   `;
   const createPacksTable = `CREATE TABLE packs (code VARCHAR(255) PRIMARY KEY, series_id VARCHAR(255) UNIQUE NOT NULL, name TEXT NOT NULL);`;
   const createCardPackAppearancesTable = `CREATE TABLE card_pack_appearances (card_id VARCHAR(255) REFERENCES cards(id) ON DELETE CASCADE, pack_code VARCHAR(255) REFERENCES packs(code) ON DELETE CASCADE, PRIMARY KEY (card_id, pack_code));`;
-  const createOwnedCardsTable = `CREATE TABLE owned_cards (instance_id SERIAL PRIMARY KEY, card_id VARCHAR(255) NOT NULL REFERENCES cards(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL, is_proxy BOOLEAN DEFAULT false);`;
+  const createOwnedCardsTable = `CREATE TABLE owned_cards (instance_id SERIAL PRIMARY KEY, card_id VARCHAR(255) NOT NULL REFERENCES cards(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL, is_proxy BOOLEAN DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());`;
 
   await query(createCardsTable);
   await query(createPacksTable);
@@ -254,6 +256,7 @@ const createTables = async () => {
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
       tag_type tag_type NOT NULL,
       is_global BOOLEAN DEFAULT false,
+      notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT user_tag_check CHECK (

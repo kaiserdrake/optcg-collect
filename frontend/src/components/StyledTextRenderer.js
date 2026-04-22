@@ -3,7 +3,7 @@ import { Box, Text, Tag } from '@chakra-ui/react';
 import { keywordStyles, keywordPatterns } from '@/utils/keywordStyles';
 import { decodeHTMLEntities } from '@/utils/cardStyles';
 
-const StyledTextRenderer = ({ text }) => {
+const StyledTextRenderer = ({ text, keywordSize = 'sm' }) => {
   if (!text || text.trim() === '' || text.trim() === '-') {
     return <Text as="span">&nbsp;</Text>;
   }
@@ -41,10 +41,13 @@ const StyledTextRenderer = ({ text }) => {
                     <Tag
                       key={index}
                       {...style}
+                      size={keywordSize}
                       display="inline-flex"
                       flexShrink={0}
                       whiteSpace="nowrap"
                       mr={1}
+                      px={2}
+                      py={1}
                     >
                       {part.slice(1, -1)}
                     </Tag>
@@ -56,10 +59,13 @@ const StyledTextRenderer = ({ text }) => {
                     <Tag
                       key={index}
                       {...patternMatch.style}
+                      size={keywordSize}
                       display="inline-flex"
                       flexShrink={0}
                       whiteSpace="nowrap"
                       mr={1}
+                      px={2}
+                      py={1}
                     >
                       {part.slice(1, -1)}
                     </Tag>

@@ -5,9 +5,10 @@ import {
   Box, Text, VStack, HStack, Tag, Grid
 } from '@chakra-ui/react';
 import CardImage from './CardImage';
+import LocationDisplayBadge from './LocationDisplayBadge';
 import { getTagStyles } from '@/utils/cardStyles';
 
-const ThumbViewCollect = ({ cards, onCardClick, showProxies, thumbnailSize = 160 }) => {
+const ThumbViewCollect = ({ cards, onCardClick, showProxies, thumbnailSize = 160, onLocationBadgeClick }) => {
   const ThumbnailCard = ({ card }) => {
     if (!card) return null;
 

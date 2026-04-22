@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   VStack,
@@ -26,8 +26,8 @@ import CardSearch from './CardSearch';
 import CardDetailModal from './CardDetailModal';
 import ThumbnailSelector from './ThumbnailSelector';
 import SaveDeckModal from './SaveDeckModal';
-import LoadDeckModal from './LoadDeckModal';
 import LocateModal from './LocateModal';
+import UnifiedDeckModal from './UnifiedDeckModal';
 import PublishConfirmationModal from './PublishConfirmationModal';
 
 import DeckHeader from './DeckHeader';
@@ -36,10 +36,12 @@ import ImportDeckModal from './ImportDeckModal';
 
 import { useDeckBuilder } from '../hooks/useDeckBuilder';
 import { useAuth } from '../context/AuthContext';
+import { useSearchParams } from 'next/navigation';
 
 export default function DeckBuilder() {
   const toast = useToast();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
 
   const {
 
@@ -123,7 +125,7 @@ export default function DeckBuilder() {
     onImportOpen();
   };
 
-  // LoadDeckModal callback - replaces the entire deck
+  // Load deck callback - replaces the entire deck
   const handleLoadSuccess = (loadedDeckData) => {
     // For loading, we DO want to replace the entire deck
     setDeck(loadedDeckData);
@@ -156,7 +158,7 @@ export default function DeckBuilder() {
   };
 
 
-  // Publish deck function - now shows confirmation modal first
+  // Publish deck function
   const handlePublishDeck = () => {
     // Check if deck has a leader instead of checking if it's saved
     if (!stats.hasLeader) {
@@ -182,16 +184,21 @@ export default function DeckBuilder() {
       return;
     }
 
-
     // Open confirmation modal instead of publishing directly
     onPublishConfirmOpen();
   };
 
   // Handle the actual publishing after confirmation
-  const handleConfirmPublish = async () => {
+  const handleConfirmPublish = async (editedDeckName) => {
     setIsPublishing(true);
 
     try {
+      // Create deck data with the potentially modified name
+      const deckDataToPublish = {
+        ...deck,
+        name: editedDeckName || deck.name // Use edited name if provided, otherwise fallback to original
+      };
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/decks/publish-current`, {
         method: 'POST',
         headers: {
@@ -199,13 +206,13 @@ export default function DeckBuilder() {
 
         },
         credentials: 'include',
-        body: JSON.stringify({ deckData: deck }),
+        body: JSON.stringify({ deckData: deckDataToPublish }),
       });
 
       if (response.ok) {
         toast({
           title: 'Deck published',
-          description: `"${deck.name}" has been published to the public gallery`,
+          description: `"${editedDeckName || deck.name}" has been published to the public gallery`,
           status: 'success',
           duration: 3000,
           isClosable: true,
@@ -236,16 +243,56 @@ export default function DeckBuilder() {
     console.log('Card refreshed:', updatedCard);
   };
 
+  useEffect(() => {
+    // Only run if isClient (component mounted in browser)
+    if (typeof window === 'undefined' || !isClient) return;
+
+    const loadDeckId = searchParams.get('loadDeck');
+    const tempDeckParam = searchParams.get('tempDeck');
+
+    // Check for temporary deck data from sessionStorage (for published decks from navbar)
+    if (tempDeckParam === 'published') {
+      try {
+        const tempDeckData = sessionStorage.getItem('tempDeckData');
+        if (tempDeckData) {
+          const deckData = JSON.parse(tempDeckData);
+          setDeck(deckData);
+
+          // Clean up
+          sessionStorage.removeItem('tempDeckData');
+          const url = new URL(window.location.href);
+          url.searchParams.delete('tempDeck');
+          window.history.replaceState({}, '', url);
+
+          toast({
+            title: 'Published deck loaded',
+            description: `"${deckData.name}" has been loaded from published decks`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading temp deck data:', error);
+        sessionStorage.removeItem('tempDeckData'); // Clean up on error
+      }
+    }
+    // Check for regular loadDeck parameter (for saved decks)
+    else if (loadDeckId && deck?.id !== parseInt(loadDeckId)) {
+      handleLoadDeck(loadDeckId, () => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClient, searchParams, deck?.id]); // Add dependencies to ensure proper updates
+
+  // Early return AFTER all hooks
   if (!isClient) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minH="400px">
         <VStack spacing={4}>
           <Spinner size="xl" color="blue.500" />
-
           <Text color="gray.600">Loading Deck Builder...</Text>
         </VStack>
       </Box>
-
     );
   }
 
@@ -286,6 +333,7 @@ export default function DeckBuilder() {
             onCardClick={handleCardClickWrapper}
             onRemoveCard={removeCardFromDeck}
             onAddCard={addCardToDeck}
+            onLocate={() => onLocateOpen()}
           />
         </GridItem>
 
@@ -321,23 +369,21 @@ export default function DeckBuilder() {
         onSave={handleSaveSuccess}
       />
 
-      <LoadDeckModal
+      <UnifiedDeckModal
         isOpen={isLoadOpen}
         onClose={onLoadClose}
-        onLoad={handleLoadSuccess}
+        onSelect={(selectedDeck) => {
+          // Handle deck loading directly without URL navigation
+          handleLoadDeck(selectedDeck, onLoadClose);
+        }}
+        context="deckbuilder"
+        title="Load Deck in Deck Builder"
       />
 
       <LocateModal
         isOpen={isLocateOpen}
         onClose={onLocateClose}
-        deckId={deck.id}
-        currentLocation={deck.location}
-        onLocationUpdate={(locationData) => {
-          setDeck(prevDeck => ({
-            ...prevDeck,
-            location: locationData.id
-          }));
-        }}
+        deck={deck}
       />
 
       <ImportDeckModal

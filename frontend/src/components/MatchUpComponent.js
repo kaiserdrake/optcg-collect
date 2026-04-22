@@ -21,9 +21,11 @@ import {
   useColorModeValue,
   Collapse
 } from '@chakra-ui/react';
+
 import { AddIcon, RepeatIcon, ExternalLinkIcon } from '@chakra-ui/icons';
 import { useSearchParams } from 'next/navigation';
-import SelectDeckModal from '@/components/SelectDeckModal';
+import UnifiedDeckModal from './UnifiedDeckModal';
+import DiceAnimationModal from './DiceAnimationModal';
 import DeckViewerCanvas from '@/components/DeckViewerCanvas';
 
 const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -45,7 +47,6 @@ const parseDeckContent = async (deckContent) => {
       throw new Error('Failed to parse deck content');
     }
 
-
     const parsedDeck = await response.json();
     return parsedDeck;
   } catch (error) {
@@ -58,6 +59,7 @@ const parseDeckContent = async (deckContent) => {
 const generateDeckContent = (deck) => {
   if (!deck?.cards || !Array.isArray(deck.cards) || deck.cards.length === 0) {
     return '';
+
   }
 
   return deck.cards
@@ -73,6 +75,7 @@ const MatchUpComponent = () => {
   const searchParams = useSearchParams();
   const toast = useToast();
 
+
   const [deck1, setDeck1] = useState({ name: '', cards: [], type: null });
   const [deck2, setDeck2] = useState({ name: '', cards: [], type: null });
   const [loadingDeck1, setLoadingDeck1] = useState(false);
@@ -81,7 +84,9 @@ const MatchUpComponent = () => {
 
   // Battle toolbox state
   const [goingFirst, setGoingFirst] = useState(true);
-  const [diceResult, setDiceResult] = useState(null);
+  const [showDiceAnimation, setShowDiceAnimation] = useState(false);
+  const [dicePlayer1, setDicePlayer1] = useState(null);
+  const [dicePlayer2, setDicePlayer2] = useState(null);
   const [leaderUsed, setLeaderUsed] = useState(false);
   const [powerCounters, setPowerCounters] = useState([0, 0, 0, 0, 0, 0]); // 6 counters, each -10 to +10
 
@@ -101,7 +106,6 @@ const MatchUpComponent = () => {
     setPowerCounters(prev => {
       const newCounters = [...prev];
       newCounters[index] = 0;
-
       return newCounters;
     });
   };
@@ -111,19 +115,21 @@ const MatchUpComponent = () => {
   // Responsive grid settings
   const gridTemplate = useBreakpointValue({
     base: '1fr',
-    lg: '1fr 1fr'
+    lg: 'repeat(2, 1fr)'
   });
   const gridGap = useBreakpointValue({
     base: 4,
     lg: 6
   });
 
+  // Check if we should use mobile layout (wrap player info to multiple lines)
+  const isMobile = useBreakpointValue({ base: true, sm: false });
+
   // Load decks from URL parameters on mount
   useEffect(() => {
     const deckParams = searchParams.getAll('deck');
 
     if (deckParams.length > 0) {
-
       // Load first deck
       if (deckParams[0]) {
         loadDeckFromContent(deckParams[0], 1);
@@ -240,7 +246,6 @@ const MatchUpComponent = () => {
         status: 'warning',
         duration: 3000,
         isClosable: true,
-
       });
       return;
     }
@@ -251,6 +256,7 @@ const MatchUpComponent = () => {
       status: 'info',
       duration: 2000,
       isClosable: true,
+
     });
 
     try {
@@ -287,62 +293,129 @@ const MatchUpComponent = () => {
       navigator.clipboard.writeText(shortUrl).then(() => {
         toast({
           title: 'Short URL Copied!',
-          description: `${shortUrl} copied to clipboard`,
+          description: 'The short URL has been copied to your clipboard',
           status: 'success',
-          duration: 4000,
+          duration: 3000,
           isClosable: true,
         });
       }).catch(() => {
-          toast({
-            title: 'Short URL Generated',
-            description: shortUrl,
-            status: 'info',
-            duration: 6000,
-            isClosable: true,
-          });
-
+        // Fallback: Show the URL in a toast for manual copying
+        toast({
+          title: 'Short URL Generated',
+          description: shortUrl,
+          status: 'success',
+          duration: 10000,
+          isClosable: true,
         });
-
+      });
     } catch (error) {
       console.error('Error generating short URL:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to generate short URL',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
 
-      // Fallback to original long URL
-      const params = new URLSearchParams();
-      params.set('tab', 'matchup');
+  // Component to render player header section with responsive layout
+  const PlayerHeader = ({
+    playerNumber,
+    deck,
+    loading,
+    colorScheme,
+    onSelectDeck,
+    onClearDeck
+  }) => {
+    if (isMobile) {
+      // Mobile layout: Stack elements vertically
+      return (
+        <VStack spacing={2} align="stretch">
+          {/* First row: Player badge */}
+          <HStack spacing={2}>
+            <Badge colorScheme={colorScheme} variant="solid" fontSize="sm">
+              Player {playerNumber}
+            </Badge>
+          </HStack>
 
-      if (deck1Content) {
-        params.append('deck', deck1Content);
-      }
+          {/* Second row: Deck name */}
+          <Box>
 
-      if (deck2Content) {
-        params.append('deck', deck2Content);
-      }
+            <Text fontWeight="semibold" color="gray.700" isTruncated>
+              {deck?.name || 'No Deck Selected'}
+            </Text>
+          </Box>
 
-      const fallbackUrl = `${window.location.origin}/?${params.toString()}`;
+          {/* Third row: Action buttons */}
+          <HStack spacing={2}>
+            {(deck?.cards?.length || 0) > 0 && (
+              <IconButton
+                icon={<RepeatIcon />}
+                size="sm"
+                variant="outline"
+                onClick={() => onClearDeck(playerNumber)}
+                aria-label="Clear deck"
+              />
+            )}
+            <Button
+              leftIcon={<AddIcon />}
+              size="sm"
+              colorScheme={colorScheme}
+              variant="outline"
+              onClick={() => onSelectDeck(playerNumber)}
+              isLoading={loading}
 
-      navigator.clipboard.writeText(fallbackUrl).then(() => {
-        toast({
-          title: 'Fallback URL Copied',
-          description: 'Short URL service unavailable, copied full URL instead',
-          status: 'warning',
-          duration: 4000,
-          isClosable: true,
-        });
-      }).catch(() => {
-          toast({
-            title: 'Error generating URL',
-            description: 'Failed to create shareable URL',
-            status: 'error',
-            duration: 3000,
-            isClosable: true,
-          });
-        });
+              flex="1"
+            >
+              Select Deck
+            </Button>
+          </HStack>
+        </VStack>
+      );
+    } else {
+      // Desktop layout: Keep original horizontal layout
+      return (
+        <HStack justify="space-between" align="center">
+
+          <HStack spacing={2}>
+            <Badge colorScheme={colorScheme} variant="solid" fontSize="sm">
+              Player {playerNumber}
+            </Badge>
+            <Text fontWeight="semibold" color="gray.700" isTruncated>
+              {deck?.name || 'No Deck Selected'}
+            </Text>
+          </HStack>
+          <HStack spacing={2} flexShrink={0}>
+            {(deck?.cards?.length || 0) > 0 && (
+              <IconButton
+                icon={<RepeatIcon />}
+                size="sm"
+                variant="outline"
+                onClick={() => onClearDeck(playerNumber)}
+                aria-label="Clear deck"
+              />
+            )}
+            <Button
+              leftIcon={<AddIcon />}
+              size="sm"
+              colorScheme={colorScheme}
+              variant="outline"
+              onClick={() => onSelectDeck(playerNumber)}
+              isLoading={loading}
+            >
+              Select Deck
+            </Button>
+          </HStack>
+        </HStack>
+      );
     }
   };
 
   return (
     <VStack spacing={6} align="stretch">
-{/* Battle Toolbox - Collapsible */}
+      {/* Battle Toolbox - Collapsible */}
       <Box
         bg={useColorModeValue('white', 'gray.800')}
         border="1px solid"
@@ -409,13 +482,14 @@ const MatchUpComponent = () => {
                       colorScheme={goingFirst ? "blue" : "gray"}
                       onClick={() => setGoingFirst(!goingFirst)}
                       w="100%"
+
                     >
                       {goingFirst ? "First" : "Second"}
                     </Button>
                   </VStack>
                 </Box>
 
-                {/* D20 Dice Roller */}
+                {/* D6 Dice Roller */}
                 <Box
                   bg={useColorModeValue('gray.50', 'gray.700')}
                   p={2}
@@ -425,15 +499,15 @@ const MatchUpComponent = () => {
                 >
                   <VStack spacing={1}>
                     <Text fontSize="xs" fontWeight="semibold" color={useColorModeValue('gray.600', 'gray.400')}>
-                      D20 Roll
+                      D6 Roll
                     </Text>
                     <Button
                       size="xs"
                       colorScheme="purple"
-                      onClick={() => setDiceResult(Math.floor(Math.random() * 20) + 1)}
+                      onClick={() => setShowDiceAnimation(true)}
                       w="100%"
                     >
-                      {diceResult ? `${diceResult}` : "Roll"}
+                      {dicePlayer1 && dicePlayer2 ? `${dicePlayer1} / ${dicePlayer2}` : "Roll"}
                     </Button>
                   </VStack>
                 </Box>
@@ -453,7 +527,8 @@ const MatchUpComponent = () => {
                     <Button
                       size="xs"
                       variant={leaderUsed ? "solid" : "outline"}
-                      colorScheme={leaderUsed ? "orange" : "gray"}
+                      colorScheme={leaderUsed ? "red" : "green"}
+
                       onClick={() => setLeaderUsed(!leaderUsed)}
                       w="100%"
                     >
@@ -465,12 +540,11 @@ const MatchUpComponent = () => {
 
               {/* Power Counters */}
               <Box w="100%">
-                <Text fontSize="xs" fontWeight="semibold" color={useColorModeValue('gray.600', 'gray.400')} mb={2}>
-                  Power Counters
+                <Text fontSize="sm" fontWeight="semibold" mb={2} color={useColorModeValue('gray.600', 'gray.400')}>
+                  Power Counters (-10K to +10K)
                 </Text>
-                <Grid templateColumns="repeat(auto-fit, minmax(80px, 1fr))" gap={2}>
+                <Grid templateColumns="repeat(auto-fit, minmax(100px, 1fr))" gap={2}>
                   {powerCounters.map((counter, index) => {
-                    const counterLabels = ["Leader", "Counter 1", "Counter 2", "Counter 3", "Counter 4", "Counter 5"];
                     return (
                       <Box
                         key={index}
@@ -481,14 +555,14 @@ const MatchUpComponent = () => {
                         borderColor={useColorModeValue('gray.200', 'gray.600')}
                       >
                         <VStack spacing={1}>
-                          <Text fontSize="2xs" fontWeight="semibold" color={useColorModeValue('gray.600', 'gray.400')}>
-                            {counterLabels[index]}
+                          <Text fontSize="xs" color={useColorModeValue('gray.600', 'gray.400')}>
+                            Counter {index + 1}
                           </Text>
                           <HStack spacing={1}>
                             <Button
                               size="2xs"
                               onClick={() => updatePowerCounter(index, -1)}
-                              isDisabled={counter === -10}
+                              isDisabled={counter <= -10}
                               colorScheme="red"
                               variant="outline"
                               minW={0}
@@ -496,7 +570,13 @@ const MatchUpComponent = () => {
                             >
                               -
                             </Button>
-                            <Text fontSize="xs" fontWeight="bold" minW="35px" textAlign="center">
+                            <Text
+                              fontSize="xs"
+                              fontWeight="semibold"
+                              minW="35px"
+                              textAlign="center"
+                              color={counter === 0 ? "gray.500" : counter > 0 ? "green.500" : "red.500"}
+                            >
                               {counter === 0 ? "0" : counter > 0 ? `+${counter}K` : `${counter}K`}
                             </Text>
                             <Button
@@ -535,46 +615,87 @@ const MatchUpComponent = () => {
 
       {/* Deck Comparison Grid */}
       <Grid
-        templateColumns={gridTemplate}
+        templateColumns={{ base: "1fr", lg: "1fr 1fr" }}
         gap={gridGap}
         minH="500px"
+        w="100%"
       >
         {/* Player 1 Deck */}
-        <GridItem>
-
+        <GridItem w="100%" minW={0}>
           <VStack spacing={4} align="stretch" h="100%">
-            <HStack justify="space-between" align="center">
-              <HStack spacing={2}>
-                <Badge colorScheme="blue" variant="solid" fontSize="sm">
-                  Player 1
-                </Badge>
-                <Text fontWeight="semibold" color="gray.700" isTruncated>
-                  {deck1?.name || 'No Deck Selected'}
-                </Text>
-              </HStack>
-              <HStack spacing={2} flexShrink={0}>
-                {(deck1?.cards?.length || 0) > 0 && (
-                  <IconButton
-                    icon={<RepeatIcon />}
-                    size="sm"
-                    variant="outline"
-                    onClick={() => clearDeck(1)}
-                    aria-label="Clear deck"
-                  />
-                )}
-                <Button
-                  leftIcon={<AddIcon />}
-                  size="sm"
-                  colorScheme="blue"
-                  variant="outline"
-                  onClick={() => handleSelectDeck(1)}
-                  isLoading={loadingDeck1}
-                >
-                  Select Deck
-                </Button>
-              </HStack>
+            {isMobile ? (
+              <VStack spacing={2} align="stretch">
+                {/* Mobile: Player badge */}
+                <HStack spacing={2}>
+                  <Badge colorScheme="blue" variant="solid" fontSize="sm">
+                    Player 1
+                  </Badge>
+                </HStack>
 
-            </HStack>
+                {/* Mobile: Deck name */}
+                <Box>
+                  <Text fontWeight="semibold" color="gray.700" isTruncated>
+                    {deck1?.name || 'No Deck Selected'}
+                  </Text>
+                </Box>
+
+                {/* Mobile: Action buttons */}
+                <HStack spacing={2}>
+                  {(deck1?.cards?.length || 0) > 0 && (
+                    <IconButton
+                      icon={<RepeatIcon />}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => clearDeck(1)}
+                      aria-label="Clear deck"
+                    />
+                  )}
+                  <Button
+                    leftIcon={<AddIcon />}
+                    size="sm"
+                    colorScheme="blue"
+                    variant="outline"
+                    onClick={() => handleSelectDeck(1)}
+                    isLoading={loadingDeck1}
+                    flex="1"
+                  >
+                    Select Deck
+                  </Button>
+                </HStack>
+              </VStack>
+            ) : (
+                <HStack justify="space-between" align="center">
+                  <HStack spacing={2} flex="1" minW={0}>
+                    <Badge colorScheme="blue" variant="solid" fontSize="sm">
+                      Player 1
+                    </Badge>
+                    <Text fontWeight="semibold" color="gray.700" isTruncated>
+                      {deck1?.name || 'No Deck Selected'}
+                    </Text>
+                  </HStack>
+                  <HStack spacing={2} flexShrink={0}>
+                    {(deck1?.cards?.length || 0) > 0 && (
+                      <IconButton
+                        icon={<RepeatIcon />}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => clearDeck(1)}
+                        aria-label="Clear deck"
+                      />
+                    )}
+                    <Button
+                      leftIcon={<AddIcon />}
+                      size="sm"
+                      colorScheme="blue"
+                      variant="outline"
+                      onClick={() => handleSelectDeck(1)}
+                      isLoading={loadingDeck1}
+                    >
+                      Select Deck
+                    </Button>
+                  </HStack>
+                </HStack>
+              )}
 
             {loadingDeck1 ? (
               <Box textAlign="center" py={8}>
@@ -582,49 +703,93 @@ const MatchUpComponent = () => {
                 <Text mt={4} color="gray.600">Loading deck...</Text>
               </Box>
             ) : (
-              <DeckViewerCanvas
-                deck={deck1}
-                showStats={true}
-                playerNumber={1}
-              />
-            )}
+                <Box w="100%" minW={0}>
+                  <DeckViewerCanvas
+                    deck={deck1}
+                    showStats={true}
+                    playerNumber={1}
+                  />
+                </Box>
+              )}
           </VStack>
         </GridItem>
 
         {/* Player 2 Deck */}
-        <GridItem>
+        <GridItem w="100%" minW={0}>
           <VStack spacing={4} align="stretch" h="100%">
-            <HStack justify="space-between" align="center">
-              <HStack spacing={2}>
-                <Badge colorScheme="red" variant="solid" fontSize="sm">
-                  Player 2
-                </Badge>
-                <Text fontWeight="semibold" color="gray.700" isTruncated>
-                  {deck2?.name || 'No Deck Selected'}
-                </Text>
-              </HStack>
-              <HStack spacing={2} flexShrink={0}>
-                {(deck2?.cards?.length || 0) > 0 && (
-                  <IconButton
-                    icon={<RepeatIcon />}
+            {isMobile ? (
+              <VStack spacing={2} align="stretch">
+                {/* Mobile: Player badge */}
+                <HStack spacing={2}>
+                  <Badge colorScheme="red" variant="solid" fontSize="sm">
+                    Player 2
+                  </Badge>
+                </HStack>
+
+                {/* Mobile: Deck name */}
+                <Box>
+                  <Text fontWeight="semibold" color="gray.700" isTruncated>
+                    {deck2?.name || 'No Deck Selected'}
+                  </Text>
+                </Box>
+
+                {/* Mobile: Action buttons */}
+                <HStack spacing={2}>
+                  {(deck2?.cards?.length || 0) > 0 && (
+                    <IconButton
+                      icon={<RepeatIcon />}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => clearDeck(2)}
+                      aria-label="Clear deck"
+                    />
+                  )}
+                  <Button
+                    leftIcon={<AddIcon />}
                     size="sm"
+                    colorScheme="red"
                     variant="outline"
-                    onClick={() => clearDeck(2)}
-                    aria-label="Clear deck"
-                  />
-                )}
-                <Button
-                  leftIcon={<AddIcon />}
-                  size="sm"
-                  colorScheme="red"
-                  variant="outline"
-                  onClick={() => handleSelectDeck(2)}
-                  isLoading={loadingDeck2}
-                >
-                  Select Deck
-                </Button>
-              </HStack>
-            </HStack>
+                    onClick={() => handleSelectDeck(2)}
+                    isLoading={loadingDeck2}
+                    flex="1"
+                  >
+                    Select Deck
+                  </Button>
+                </HStack>
+              </VStack>
+            ) : (
+                <HStack justify="space-between" align="center">
+                  <HStack spacing={2} flex="1" minW={0}>
+                    <Badge colorScheme="red" variant="solid" fontSize="sm">
+                      Player 2
+                    </Badge>
+                    <Text fontWeight="semibold" color="gray.700" isTruncated>
+                      {deck2?.name || 'No Deck Selected'}
+                    </Text>
+                  </HStack>
+                  <HStack spacing={2} flexShrink={0}>
+                    {(deck2?.cards?.length || 0) > 0 && (
+                      <IconButton
+                        icon={<RepeatIcon />}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => clearDeck(2)}
+                        aria-label="Clear deck"
+                      />
+                    )}
+                    <Button
+                      leftIcon={<AddIcon />}
+                      size="sm"
+                      colorScheme="red"
+                      variant="outline"
+                      onClick={() => handleSelectDeck(2)}
+                      isLoading={loadingDeck2}
+                    >
+                      Select Deck
+                    </Button>
+                  </HStack>
+                </HStack>
+              )}
 
             {loadingDeck2 ? (
               <Box textAlign="center" py={8}>
@@ -632,23 +797,39 @@ const MatchUpComponent = () => {
                 <Text mt={4} color="gray.600">Loading deck...</Text>
               </Box>
             ) : (
-              <DeckViewerCanvas
-                deck={deck2}
-                showStats={true}
-                playerNumber={2}
-              />
-            )}
+                <Box w="100%" minW={0}>
+                  <DeckViewerCanvas
+                    deck={deck2}
+                    showStats={true}
+                    playerNumber={2}
+                  />
+                </Box>
+              )}
           </VStack>
         </GridItem>
       </Grid>
-
-      {/* Select Deck Modal */}
-      <SelectDeckModal
+      {/* Select Deck using UnifiedDeckModal */}
+      <UnifiedDeckModal
         isOpen={isSelectOpen}
         onClose={onSelectClose}
-        onDeckSelected={handleDeckSelected}
-        playerNumber={selectedPlayerNumber}
+        onSelect={(selectedDeck) => {
+          // Use the existing handleDeckSelected logic
+          handleDeckSelected(selectedDeck);
+        }}
+        context="matchup"
+        title={`Select Deck for Player ${selectedPlayerNumber}`}
       />
+
+      {/* Dice Animation Modal */}
+      <DiceAnimationModal
+        isOpen={showDiceAnimation}
+        onClose={() => setShowDiceAnimation(false)}
+        onResult={({ player1, player2 }) => {
+          setDicePlayer1(player1);
+          setDicePlayer2(player2);
+        }}
+      />
+
     </VStack>
   );
 };

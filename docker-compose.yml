@@ -22,12 +22,15 @@ services:
 
   opcc-backend:
     container_name: opcc-backend
-    build: ./backend
+    image: ghcr.io/kaiserdrake/opcc-backend:latest
     restart: always
     ports:
       - '3001:3001'
     env_file:
       - .env
+    volumes:
+      - ${OPCC_DATA_PATH}/cards:/usr/src/app/card-images
+    user: "0:0"
     depends_on:
       - opcc-db
       - opcc-scraper-api
@@ -36,11 +39,9 @@ services:
 
   opcc-frontend:
     container_name: opcc-frontend
-    build:
-      context: ./frontend
-      args:
-        # Use localhost for browser requests (client-side)
-        NEXT_PUBLIC_API_URL: http://localhost:3001
+    image: ghcr.io/kaiserdrake/opcc-frontend:latest
+    env_file:
+      - .env
     restart: always
     ports:
       - '8086:3000'
@@ -48,9 +49,6 @@ services:
       - opcc-backend
     networks:
       - opcc-network
-
-volumes:
-  opcc-dbvolume:
 
 networks:
   opcc-network:

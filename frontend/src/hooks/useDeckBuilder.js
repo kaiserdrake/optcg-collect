@@ -87,8 +87,18 @@ export const useDeckBuilder = () => {
     return deck.cards.some(item => {
       const cardData = getCardData(item);
       if (!cardData) return false;
-      const globalTags = cardData.global_tags || [];
-      return globalTags.includes('banned');
+
+      // Handle PostgreSQL array format safely
+      let globalTags = cardData.global_tags || [];
+      if (typeof globalTags === 'string') {
+        if (globalTags === '{}') {
+          globalTags = [];
+        } else {
+          globalTags = globalTags.replace(/[{}]/g, '').split(',');
+        }
+      }
+
+      return Array.isArray(globalTags) && globalTags.includes('banned');
     });
   }, [deck.cards, getCardData]);
 
@@ -232,22 +242,52 @@ export const useDeckBuilder = () => {
         sortedNonLeaderCards = nonLeaderCards.sort((a, b) => {
           const aData = getCardData(a);
           const bData = getCardData(b);
+
+          // Define category order: CHARACTER, STAGE, EVENT
+          const categoryOrder = { 'CHARACTER': 1, 'STAGE': 2, 'EVENT': 3 };
+          const aCategory = categoryOrder[aData?.category] || 999;
+          const bCategory = categoryOrder[bData?.category] || 999;
+
+          // First, sort by category
+          const categoryCompare = aCategory - bCategory;
+          if (categoryCompare !== 0) {
+            return sortReverse ? -categoryCompare : categoryCompare;
+          }
+
+          // Then, sort by cost within the same category
           const costCompare = (aData?.cost || 0) - (bData?.cost || 0);
           if (costCompare !== 0) {
             return sortReverse ? -costCompare : costCompare;
           }
+
+          // Finally, sort by name if cost is the same
           const nameCompare = (aData?.name || '').localeCompare(bData?.name || '');
           return sortReverse ? -nameCompare : nameCompare;
         });
         break;
+
       case 'name':
         sortedNonLeaderCards = nonLeaderCards.sort((a, b) => {
           const aData = getCardData(a);
           const bData = getCardData(b);
+
+          // Define category order: CHARACTER, STAGE, EVENT
+          const categoryOrder = { 'CHARACTER': 1, 'STAGE': 2, 'EVENT': 3 };
+          const aCategory = categoryOrder[aData?.category] || 999;
+          const bCategory = categoryOrder[bData?.category] || 999;
+
+          // First, sort by category
+          const categoryCompare = aCategory - bCategory;
+          if (categoryCompare !== 0) {
+            return sortReverse ? -categoryCompare : categoryCompare;
+          }
+
+          // Then, sort by name within the same category
           const nameCompare = (aData?.name || '').localeCompare(bData?.name || '');
           return sortReverse ? -nameCompare : nameCompare;
         });
         break;
+
       case 'type':
         sortedNonLeaderCards = nonLeaderCards.sort((a, b) => {
           const aData = getCardData(a);
@@ -260,6 +300,7 @@ export const useDeckBuilder = () => {
           return sortReverse ? -nameCompare : nameCompare;
         });
         break;
+
       default:
         sortedNonLeaderCards = nonLeaderCards;
     }
@@ -359,13 +400,16 @@ export const useDeckBuilder = () => {
     }
 
     const leaderData = getCardData(leader);
-    const leaderText = `LEADER: ${leaderData.name}`;
+
+    // Format: "1xOP10-001" - use card codes instead of names
+    const leaderText = `${leader.count}x${leaderData.card_code}`;
 
     const cardTexts = nonLeaderCards.map(item => {
       const cardData = getCardData(item);
-      return `${item.count}x ${cardData.name}`;
+      return `${item.count}x${cardData.card_code}`;
     });
 
+    // Combine leader and cards in the correct format (each on new line)
     const fullText = [leaderText, ...cardTexts].join('\n');
 
     navigator.clipboard.writeText(fullText).then(() => {
@@ -377,14 +421,14 @@ export const useDeckBuilder = () => {
         isClosable: true,
       });
     }).catch(() => {
-      toast({
-        title: 'Failed to copy',
-        description: 'Could not copy deck list to clipboard',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
+        toast({
+          title: 'Failed to copy',
+          description: 'Could not copy deck list to clipboard',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
       });
-    });
   };
 
   // Delete deck handling
@@ -451,26 +495,45 @@ export const useDeckBuilder = () => {
 
   const handleLoadDeck = async (deckToLoad, onLoadClose) => {
     try {
-      const response = await fetch(`${api}/api/decks/${deckToLoad.id || deckToLoad}`, {
-        credentials: 'include',
-      });
+      let loadedDeck;
 
-      if (response.ok) {
-        const loadedDeck = await response.json();
-        setDeck(loadedDeck);
-
-        setPreviousLeaderColors([]);
-
-        toast({
-          title: 'Deck loaded',
-          description: `"${loadedDeck.name}" has been loaded`,
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
+      // Check if deckToLoad is already a complete deck object (published deck case)
+      if (deckToLoad && typeof deckToLoad === 'object' && deckToLoad.cards && Array.isArray(deckToLoad.cards)) {
+        // It's already a complete deck object (from UnifiedDeckModal published deck)
+        loadedDeck = deckToLoad;
       } else {
-        throw new Error('Failed to load deck');
+        // It's a deck ID or deck object that needs to be fetched from API
+        const deckId = deckToLoad.id || deckToLoad;
+        const response = await fetch(`${api}/api/decks/${deckId}`, {
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load deck');
+        }
+
+        loadedDeck = await response.json();
       }
+
+      // Set the deck in the builder
+      setDeck(loadedDeck);
+
+      // Clear URL parameters if they exist
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('loadDeck');
+        window.history.replaceState({}, '', url);
+      }
+
+      setPreviousLeaderColors([]);
+
+      toast({
+        title: 'Deck loaded',
+        description: `"${loadedDeck.name}" has been loaded`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
     } catch (error) {
       console.error('Load deck error:', error);
       toast({

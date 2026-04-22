@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/index.js",
     "db:init": "node scripts/init.js",
-    "db:update": "node scripts/update.js"
+    "db:update": "node scripts/update.js",
+    "db:fetch-image": "node scripts/fetch-card-image.js",
+    "db:migrate-thumbnails": "node scripts/migrate-thumbnails.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

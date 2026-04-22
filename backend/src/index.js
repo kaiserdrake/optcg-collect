@@ -14,6 +14,7 @@ dotenv.config();
 
 const app = express();
 const port = 3001;
+app.use('/card-images', express.static('/usr/src/app/card-images'));
 
 // Debug middleware to log all requests
 // app.use((req, res, next) => {
@@ -297,12 +298,13 @@ app.post('/api/decks/:id/publish', isAuthenticated, async (req, res) => {
     }
 
     const deck = deckCheck.rows[0];
-    const publisher = deck.alias || 'Anonymous'; // Use alias or fallback
+    const publisher = deck.alias || 'Anonymous';
 
-    // Get deck cards with their details
+    // Get deck cards with their details - use card ID instead of card_code
     const cardsResult = await query(`
       SELECT
         dc.count,
+        c.id as card_id,
         c.card_code,
         c.category
       FROM deck_cards dc
@@ -310,7 +312,7 @@ app.post('/api/decks/:id/publish', isAuthenticated, async (req, res) => {
       WHERE dc.deck_id = $1
       ORDER BY
         CASE WHEN c.category = 'LEADER' THEN 0 ELSE 1 END,
-        c.card_code ASC
+        c.id ASC
     `, [id]);
 
     if (cardsResult.rows.length === 0) {
@@ -318,33 +320,33 @@ app.post('/api/decks/:id/publish', isAuthenticated, async (req, res) => {
       return res.status(400).json({ message: 'Cannot publish empty deck.' });
     }
 
-    // Count cards by card_code (no normalization needed)
-    const cardCodeCounts = {};
+    // Count cards by card ID (not card_code) to preserve variants
+    const cardIdCounts = {};
     cardsResult.rows.forEach(row => {
-      const cardCode = row.card_code;
-      if (!cardCodeCounts[cardCode]) {
-        cardCodeCounts[cardCode] = { count: 0, isLeader: row.category === 'LEADER' };
+      const cardId = row.card_id;
+      if (!cardIdCounts[cardId]) {
+        cardIdCounts[cardId] = { count: 0, isLeader: row.category === 'LEADER' };
       }
-      cardCodeCounts[cardCode].count += row.count;
+      cardIdCounts[cardId].count += row.count;
     });
 
-    // Build deck content string according to spec
+    // Build deck content string using card IDs
     const deckContentParts = [];
 
     // Add leader first
-    const leaderEntry = Object.entries(cardCodeCounts).find(([code, data]) => data.isLeader);
+    const leaderEntry = Object.entries(cardIdCounts).find(([id, data]) => data.isLeader);
     if (leaderEntry) {
-      const [code, data] = leaderEntry;
-      deckContentParts.push(`${data.count}x${code}`);
-      // Remove from cardCodeCounts so it's not duplicated
-      delete cardCodeCounts[code];
+      const [cardId, data] = leaderEntry;
+      deckContentParts.push(`${data.count}x${cardId}`);
+      // Remove from cardIdCounts so it's not duplicated
+      delete cardIdCounts[cardId];
     }
 
-    // Add other cards sorted by card_code
-    Object.keys(cardCodeCounts)
+    // Add other cards sorted by card ID
+    Object.keys(cardIdCounts)
       .sort()
-      .forEach(code => {
-        deckContentParts.push(`${cardCodeCounts[code].count}x${code}`);
+      .forEach(cardId => {
+        deckContentParts.push(`${cardIdCounts[cardId].count}x${cardId}`);
       });
 
     // Join with commas as specified
@@ -387,7 +389,6 @@ app.post('/api/decks/:id/publish', isAuthenticated, async (req, res) => {
   }
 });
 
-
 // Publish deck from current state (without requiring saved deck)
 app.post('/api/decks/publish-current', isAuthenticated, async (req, res) => {
   const { deckData } = req.body;
@@ -409,51 +410,49 @@ app.post('/api/decks/publish-current', isAuthenticated, async (req, res) => {
     const userResult = await query('SELECT alias FROM users WHERE id = $1', [userId]);
     const publisher = userResult.rows[0]?.alias || 'Anonymous';
 
-
-    // Process deck cards to create deck content string
-    const cardCodeCounts = {};
+    // Process deck cards to create deck content string using card IDs
+    const cardIdCounts = {};
 
     for (const item of deckData.cards) {
-      if (!item.card || !item.card.card_code || !item.count) {
+      if (!item.card || !item.card.id || !item.count) {
         await query('ROLLBACK');
         return res.status(400).json({ message: 'Invalid card data in deck.' });
       }
 
-      const cardCode = item.card.card_code;
+      const cardId = item.card.id; // Use card ID instead of card_code
       const count = item.count;
       const isLeader = item.card.category === 'LEADER';
 
-      if (!cardCodeCounts[cardCode]) {
-        cardCodeCounts[cardCode] = { count: 0, isLeader };
+      if (!cardIdCounts[cardId]) {
+        cardIdCounts[cardId] = { count: 0, isLeader };
       }
-      cardCodeCounts[cardCode].count += count;
+      cardIdCounts[cardId].count += count;
     }
 
     // Validate that deck has a leader
-    const hasLeader = Object.values(cardCodeCounts).some(data => data.isLeader);
+    const hasLeader = Object.values(cardIdCounts).some(data => data.isLeader);
     if (!hasLeader) {
       await query('ROLLBACK');
       return res.status(400).json({ message: 'Deck must have a leader to be published.' });
     }
 
-    // Build deck content string according to spec
+    // Build deck content string according to spec using card IDs
     const deckContentParts = [];
 
     // Add leader first
-    const leaderEntry = Object.entries(cardCodeCounts).find(([code, data]) => data.isLeader);
+    const leaderEntry = Object.entries(cardIdCounts).find(([id, data]) => data.isLeader);
     if (leaderEntry) {
-      const [code, data] = leaderEntry;
-
-      deckContentParts.push(`${data.count}x${code}`);
-      // Remove from cardCodeCounts so it's not duplicated
-      delete cardCodeCounts[code];
+      const [cardId, data] = leaderEntry;
+      deckContentParts.push(`${data.count}x${cardId}`);
+      // Remove from cardIdCounts so it's not duplicated
+      delete cardIdCounts[cardId];
     }
 
-    // Add other cards sorted by card_code
-    Object.keys(cardCodeCounts)
+    // Add other cards sorted by card ID
+    Object.keys(cardIdCounts)
       .sort()
-      .forEach(code => {
-        deckContentParts.push(`${cardCodeCounts[code].count}x${code}`);
+      .forEach(cardId => {
+        deckContentParts.push(`${cardIdCounts[cardId].count}x${cardId}`);
       });
 
     // Join with commas as specified
@@ -493,6 +492,68 @@ app.post('/api/decks/publish-current', isAuthenticated, async (req, res) => {
     await query('ROLLBACK');
     console.error('Error publishing deck from current state:', err);
     res.status(500).json({ message: 'Server error while publishing deck.' });
+  }
+});
+
+// Delete a published deck (admin or publisher only)
+app.delete('/api/public/decks/:id', isAuthenticated, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await query('BEGIN');
+
+    // Get user info
+    const userResult = await query('SELECT alias, role FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      await query('ROLLBACK');
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const user = userResult.rows[0];
+    const userAlias = user.alias;
+    const userRole = user.role;
+
+    // Check if deck exists and get publisher info
+    const deckCheck = await query(
+      'SELECT id, deck_title, publisher FROM public_shared_decks WHERE id = $1',
+      [id]
+    );
+
+    if (deckCheck.rows.length === 0) {
+      await query('ROLLBACK');
+      return res.status(404).json({ message: 'Published deck not found.' });
+    }
+
+    const deck = deckCheck.rows[0];
+
+    // Check if user has permission to delete (is publisher or admin)
+    if (deck.publisher !== userAlias && userRole !== 'Admin') {
+      await query('ROLLBACK');
+      return res.status(403).json({
+        message: 'Access denied. You can only delete your own published decks.'
+      });
+    }
+
+
+    // Delete the published deck
+    await query('DELETE FROM public_shared_decks WHERE id = $1', [id]);
+
+    await query('COMMIT');
+
+    res.json({
+      message: 'Published deck deleted successfully.',
+      deletedDeck: {
+        id: parseInt(id),
+        deck_title: deck.deck_title,
+        publisher: deck.publisher
+
+      }
+    });
+  } catch (err) {
+    await query('ROLLBACK');
+    console.error('Error deleting published deck:', err);
+    res.status(500).json({ message: 'Server error while deleting published deck.' });
   }
 });
 
@@ -763,6 +824,7 @@ app.get('/api/sync/stream', isAuthenticated, isAdmin, (req, res) => {
 
   const sendLog = (log) => {
     res.write(`data: ${log}\n\n`);
+    if (res.flush) res.flush(); // Explicitly flush to send data immediately
   };
 
   sendLog('SYNC_START: Starting card list sync...');
@@ -825,6 +887,118 @@ app.post('/api/collection/update', isAuthenticated, async (req, res) => {
   }
 });
 
+
+app.put('/api/collection/set-count', isAuthenticated, async (req, res) => {
+  const { cardId, ownedCount, proxyCount } = req.body;
+  const userId = req.user.id;
+
+  if (!cardId) {
+    return res.status(400).json({ message: 'Card ID is required.' });
+  }
+
+  // Validate counts
+  if (ownedCount !== undefined && (ownedCount < 0 || ownedCount > 99)) {
+    return res.status(400).json({ message: 'Owned count must be between 0 and 99.' });
+  }
+
+  if (proxyCount !== undefined && (proxyCount < 0 || proxyCount > 99)) {
+    return res.status(400).json({ message: 'Proxy count must be between 0 and 99.' });
+  }
+
+  try {
+    await query('BEGIN');
+
+    // Handle owned count if provided
+    if (ownedCount !== undefined) {
+      // Get current owned count
+      const currentOwnedResult = await query(
+        'SELECT COUNT(*) FROM owned_cards WHERE user_id = $1 AND card_id = $2 AND is_proxy = false',
+        [userId, cardId] // cardId is already a string (card code)
+      );
+      const currentOwnedCount = parseInt(currentOwnedResult.rows[0].count, 10);
+
+      if (ownedCount > currentOwnedCount) {
+        // Add more owned cards
+        const toAdd = ownedCount - currentOwnedCount;
+        for (let i = 0; i < toAdd; i++) {
+          await query(
+            'INSERT INTO owned_cards (user_id, card_id, is_proxy) VALUES ($1, $2, false)',
+            [userId, cardId]
+          );
+        }
+      } else if (ownedCount < currentOwnedCount) {
+        // Remove owned cards
+        const toRemove = currentOwnedCount - ownedCount;
+        await query(`
+          DELETE FROM owned_cards
+          WHERE instance_id IN (
+            SELECT instance_id
+            FROM owned_cards
+            WHERE user_id = $1 AND card_id = $2 AND is_proxy = false
+            LIMIT $3
+          )
+        `, [userId, cardId, toRemove]);
+      }
+    }
+
+    // Handle proxy count if provided
+    if (proxyCount !== undefined) {
+      // Get current proxy count
+      const currentProxyResult = await query(
+        'SELECT COUNT(*) FROM owned_cards WHERE user_id = $1 AND card_id = $2 AND is_proxy = true',
+        [userId, cardId] // cardId is already a string (card code)
+      );
+      const currentProxyCount = parseInt(currentProxyResult.rows[0].count, 10);
+
+      if (proxyCount > currentProxyCount) {
+        // Add more proxy cards
+        const toAdd = proxyCount - currentProxyCount;
+        for (let i = 0; i < toAdd; i++) {
+          await query(
+            'INSERT INTO owned_cards (user_id, card_id, is_proxy) VALUES ($1, $2, true)',
+            [userId, cardId]
+          );
+        }
+      } else if (proxyCount < currentProxyCount) {
+        // Remove proxy cards
+        const toRemove = currentProxyCount - proxyCount;
+        await query(`
+          DELETE FROM owned_cards
+          WHERE instance_id IN (
+            SELECT instance_id
+            FROM owned_cards
+            WHERE user_id = $1 AND card_id = $2 AND is_proxy = true
+            LIMIT $3
+          )
+        `, [userId, cardId, toRemove]);
+      }
+    }
+
+    // Get final counts to return
+    const finalCountsResult = await query(`
+      SELECT
+        COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
+        COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count
+      FROM owned_cards
+      WHERE user_id = $1 AND card_id = $2
+    `, [userId, cardId]);
+
+    await query('COMMIT');
+
+    res.json({
+      owned_count: parseInt(finalCountsResult.rows[0].owned_count, 10),
+      proxy_count: parseInt(finalCountsResult.rows[0].proxy_count, 10),
+      message: 'Counts updated successfully'
+    });
+
+  } catch (err) {
+    await query('ROLLBACK');
+    console.error('Error setting card count:', err);
+    res.status(500).json({ message: 'Server error while setting card count.' });
+  }
+});
+
+
 app.put('/api/collection/location', isAuthenticated, async (req, res) => {
   const { cardId, locationId } = req.body;
   const userId = req.user.id;
@@ -837,7 +1011,13 @@ app.put('/api/collection/location', isAuthenticated, async (req, res) => {
     await query('BEGIN');
 
     if (locationId) {
-      const locationCheck = await query('SELECT id FROM locations WHERE id = $1 AND user_id = $2', [locationId, userId]);
+      const numericLocationId = parseInt(locationId);
+      if (isNaN(numericLocationId)) {
+        await query('ROLLBACK');
+        return res.status(400).json({ message: 'Location ID must be a valid number.' });
+      }
+
+      const locationCheck = await query('SELECT id FROM locations WHERE id = $1 AND user_id = $2', [numericLocationId, userId]);
       if (locationCheck.rows.length === 0) {
         await query('ROLLBACK');
         return res.status(404).json({ message: 'Location not found or does not belong to user.' });
@@ -855,6 +1035,7 @@ app.put('/api/collection/location', isAuthenticated, async (req, res) => {
     }
 
     await query('COMMIT');
+
     res.json({
       message: 'Location updated successfully.',
       updatedCards: updateResult.rowCount
@@ -1014,8 +1195,27 @@ app.get('/api/public/cards/search', validateSearchKeyword, async (req, res) => {
 
 // Enhanced search
 app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req, res) => {
-  const { keyword, ownedOnly, showProxies } = req.query;
+  const {
+    keyword,
+    ownedOnly,
+    showProxies,
+    limit = 50,
+    offset = 0,
+    sortBy = 'name',
+    sortOrder = 'asc'
+  } = req.query;
   const userId = req.user.id;
+
+  // Convert limit and offset to integers
+  const limitInt = Math.min(parseInt(limit) || 50, 100); // Cap at 100 per page
+  const offsetInt = parseInt(offset) || 0;
+
+  // Validate sort parameters
+  const validSortFields = ['name', 'rarity', 'card_code', 'tags', 'cost', 'power'];
+  const validSortOrders = ['asc', 'desc'];
+
+  const sortByField = validSortFields.includes(sortBy) ? sortBy : 'name';
+  const sortOrderDir = validSortOrders.includes(sortOrder.toLowerCase()) ? sortOrder.toLowerCase() : 'asc';
 
   // Allow empty keyword ONLY if ownedOnly or showProxies is true
   const allowEmptyKeyword = ownedOnly === 'true' || showProxies === 'true';
@@ -1059,323 +1259,284 @@ app.get('/api/cards/search', isAuthenticated, validateSearchKeyword, async (req,
     let fuzzyTextValid = false;
 
     if (allowEmptyKeyword) {
-      // Case 1: "In Collection" is true - fuzzyText can be any length (including 0)
-      fuzzyTextValid = true; // Any fuzzyText length is allowed when showing collection
+      fuzzyTextValid = true;
     } else if (hasSpecialCriteria) {
-      // Case 2: Advanced keywords present - fuzzyText can be any length (including 0)
-      fuzzyTextValid = true; // Advanced keywords allow any fuzzyText length
+      fuzzyTextValid = true;
     } else {
-      // Case 3: Normal search - fuzzyText must be 3+ characters
       fuzzyTextValid = fuzzyText && fuzzyText.length >= 3;
     }
 
     const hasValidCriteria = fuzzyTextValid || hasSpecialCriteria;
 
-    // Enhanced validation with proper error messages
     if (!hasValidCriteria) {
       if (fuzzyText && fuzzyText.length > 0 && fuzzyText.length < 3) {
         return res.status(400).json({
-          error: 'Search term must be at least 3 characters long. Use advanced keywords (id:, exact:, category:, cost:, tag:, etc.) for shorter searches, or enable "In Collection" filter.'
+          error: 'Search term must be at least 3 characters long.'
+        });
+      } else {
+        return res.status(400).json({
+          error: 'Please enter a search term or use the "In Collection" filter.'
         });
       }
-      return res.status(400).json({ error: 'Search keyword cannot be empty' });
     }
 
-    // Enhanced query with tag information and proper column aliasing
+    // Build the base query (same logic as before, but we'll modify the end)
     let baseQuery = `
-WITH user_owned_cards AS (
-SELECT
-oc.card_id,
-COUNT(*) FILTER (WHERE oc.is_proxy = false) AS owned_count,
-COUNT(*) FILTER (WHERE oc.is_proxy = true) AS proxy_count,
-MAX(oc.location_id) as location_id
-FROM owned_cards oc
-WHERE oc.user_id = $1
-GROUP BY oc.card_id
-),
-card_tags_agg AS (
-SELECT
-ct.card_id,
--- Aggregate user tags for the current user
-COALESCE(
-jsonb_agg(
-DISTINCT ct.tag_type
-) FILTER (WHERE ct.user_id = $1 AND ct.is_global = false),
-'[]'::jsonb
-) as user_tags,
--- Aggregate global admin tags
-COALESCE(
-jsonb_agg(
-DISTINCT ct.tag_type
-) FILTER (WHERE ct.is_global = true),
-'[]'::jsonb
-) as global_tags
-FROM card_tags ct
-WHERE ct.user_id = $1 OR ct.is_global = true
-GROUP BY ct.card_id
-)
-SELECT
-c.id, c.name, c.card_code, c.category, c.color, c.power, c.counter, c.effect, c.trigger_effect, c.img_url,
-c.attributes, c.types, c.block, c.rarity, c.cost,
-STRING_AGG(DISTINCT p.name, ', ' ORDER BY p.name) as packs,
-COALESCE(uc.owned_count, 0) as owned_count,
-COALESCE(uc.proxy_count, 0) as proxy_count,
-uc.location_id,
-l.id as loc_id, l.name as loc_name, l.type as loc_type, l.marker as loc_marker,
-COALESCE(cta.user_tags, '[]'::jsonb) as user_tags,
-COALESCE(cta.global_tags, '[]'::jsonb) as global_tags
-FROM cards c
-LEFT JOIN card_pack_appearances cpa ON c.id = cpa.card_id
-LEFT JOIN packs p ON cpa.pack_code = p.code
-LEFT JOIN user_owned_cards uc ON c.id = uc.card_id
-LEFT JOIN locations l ON uc.location_id = l.id
-LEFT JOIN card_tags_agg cta ON c.id = cta.card_id
-`;
+      SELECT
+        c.id, c.name, c.card_code, c.category, c.color, c.power, c.counter,
+        c.effect, c.trigger_effect, c.img_url, c.attributes, c.types,
+        c.block, c.rarity, c.cost,
+        STRING_AGG(DISTINCT p.name, ', ' ORDER BY p.name) as packs,
+        COALESCE(oc.owned_count, 0) as owned_count,
+        COALESCE(oc.proxy_count, 0) as proxy_count,
+        ARRAY_AGG(DISTINCT ut.tag_type) FILTER (WHERE ut.tag_type IS NOT NULL) as user_tags,
+        ARRAY_AGG(DISTINCT gt.tag_type) FILTER (WHERE gt.tag_type IS NOT NULL) as global_tags,
+        l.name as location_name,
+        l.id as location_id
+      FROM cards c
+      LEFT JOIN card_pack_appearances cpa ON c.id = cpa.card_id
+      LEFT JOIN packs p ON cpa.pack_code = p.code
+      LEFT JOIN (
+        SELECT
+          card_id,
+          COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
+          COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count,
+          MAX(location_id) as location_id
+        FROM owned_cards
+        WHERE user_id = $1
+        GROUP BY card_id
+      ) oc ON c.id = oc.card_id
+      LEFT JOIN card_tags ut ON c.id = ut.card_id AND ut.user_id = $1 AND ut.is_global = false
+      LEFT JOIN card_tags gt ON c.id = gt.card_id AND gt.is_global = true
+      LEFT JOIN locations l ON oc.location_id = l.id
+    `;
 
-    const params = [userId];
+    let params = [userId];
     let paramIndex = 2;
-    const whereClauses = [];
+    let whereClauses = [];
 
-    // Restrict to only card name, attributes, and types
-    if (fuzzyText && fuzzyText.length > 0) {
-      whereClauses.push(`(
-c.name % $${paramIndex} OR
-c.name ILIKE '%' || $${paramIndex} || '%' OR
-immutable_array_to_string(c.attributes) % $${paramIndex} OR
-immutable_array_to_string(c.types) % $${paramIndex}
-)`);
-      params.push(fuzzyText);
-      paramIndex++;
+
+    // Consider proxy cards when showProxies is true
+    if (ownedOnly === 'true') {
+      if (showProxies === 'true') {
+        // When Show Proxies is enabled, include both owned and proxy cards
+        whereClauses.push(`(oc.owned_count > 0 OR oc.proxy_count > 0)`);
+      } else {
+        // When Show Proxies is disabled, only include owned cards
+        whereClauses.push(`oc.owned_count > 0`);
+      }
     }
 
-    // Use substring matching instead of fuzzy
+    // Add criteria-based where clauses
     if (criteria.id) {
-      whereClauses.push(`(c.id ILIKE '%' || $${paramIndex} || '%' OR c.card_code ILIKE '%' || $${paramIndex} || '%')`);
+      whereClauses.push(`(c.id = $${paramIndex} OR c.card_code = $${paramIndex} OR c.id ILIKE $${paramIndex} || '%' OR c.card_code ILIKE $${paramIndex} || '%')`);
       params.push(criteria.id);
       paramIndex++;
     }
 
-    if (criteria.pack) {
-      whereClauses.push(`EXISTS (
-SELECT 1 FROM card_pack_appearances cpa_filter
-WHERE cpa_filter.card_id = c.id AND cpa_filter.pack_code ILIKE $${paramIndex}
-)`);
-      params.push(`${criteria.pack}%`);
-      paramIndex++;
-    }
-
-    if (criteria.colors && criteria.colors.length > 0) {
-      const colorClauses = [];
-      for (const clr of criteria.colors) {
-        colorClauses.push(`c.color ILIKE $${paramIndex}`);
-        params.push(`%${clr}%`);
-        paramIndex++;
-      }
-      whereClauses.push('(' + colorClauses.join(' OR ') + ')');
-    }
-
-    // Use substring for effect and trigger instead of fuzzy
     if (criteria.exact) {
-      whereClauses.push(`(
-c.name ILIKE '%' || $${paramIndex} || '%' OR
-c.effect ILIKE '%' || $${paramIndex} || '%' OR
-c.trigger_effect ILIKE '%' || $${paramIndex} || '%' OR
-array_to_string(c.attributes, ' ') ILIKE '%' || $${paramIndex} || '%' OR
-array_to_string(c.types, ' ') ILIKE '%' || $${paramIndex} || '%'
-)`);
+      whereClauses.push(`c.name ILIKE '%' || $${paramIndex} || '%'`);
       params.push(criteria.exact);
       paramIndex++;
     }
 
-    if (criteria.location) {
-      whereClauses.push(`l.name ILIKE $${paramIndex}`);
-      params.push(`%${criteria.location}%`);
-      paramIndex++;
-    }
-
-    // Add category filter for card category
     if (criteria.category) {
       whereClauses.push(`c.category ILIKE $${paramIndex}`);
-      params.push(`%${criteria.category.toUpperCase()}%`);
+      params.push(criteria.category);
       paramIndex++;
     }
 
-    // Add cost filter
     if (criteria.cost) {
-      // Support various cost patterns: exact (5), range (3-5), less than (<5), greater than (>5)
-      const costValue = criteria.cost;
-      if (costValue.includes('-')) {
-        // Range: 3-5
-        const [min, max] = costValue.split('-').map(v => parseInt(v.trim()));
-        if (!isNaN(min) && !isNaN(max)) {
-          whereClauses.push(`c.cost >= $${paramIndex} AND c.cost <= $${paramIndex + 1}`);
-          params.push(min, max);
-          paramIndex += 2;
-        }
-      } else if (costValue.startsWith('<')) {
-        // Less than: <5
-        const maxCost = parseInt(costValue.substring(1));
-        if (!isNaN(maxCost)) {
-          whereClauses.push(`c.cost < $${paramIndex}`);
-          params.push(maxCost);
-          paramIndex++;
-        }
-      } else if (costValue.startsWith('>')) {
-        // Greater than: >5
-        const minCost = parseInt(costValue.substring(1));
-        if (!isNaN(minCost)) {
-          whereClauses.push(`c.cost > $${paramIndex}`);
-          params.push(minCost);
-          paramIndex++;
-        }
-      } else {
-        // Exact cost: 5
-        const exactCost = parseInt(costValue);
-        if (!isNaN(exactCost)) {
-          whereClauses.push(`c.cost = $${paramIndex}`);
-          params.push(exactCost);
-          paramIndex++;
-        }
-      }
-    }
-
-    // Add tag filter with OR condition (similar to colors)
-    if (criteria.tags && criteria.tags.length > 0) {
-      const tagClauses = [];
-      for (const tag of criteria.tags) {
-        // Check both user tags and global tags for the specified tag
-        tagClauses.push(`(
-          COALESCE(cta.user_tags, '[]'::jsonb) ? $${paramIndex} OR
-          COALESCE(cta.global_tags, '[]'::jsonb) ? $${paramIndex}
-        )`);
-        params.push(tag);
+      const cost = parseInt(criteria.cost);
+      if (!isNaN(cost)) {
+        whereClauses.push(`c.cost = $${paramIndex}`);
+        params.push(cost);
         paramIndex++;
       }
-      whereClauses.push('(' + tagClauses.join(' OR ') + ')');
     }
 
-    // Updated owned-only filter logic
-    if (ownedOnly === 'true') {
-      // Only show cards that are in the user's collection (owned or proxy)
-      // This preserves the fuzzy search matching that was already applied
-      whereClauses.push(`(uc.owned_count > 0 OR uc.proxy_count > 0)`);
+    if (criteria.location) {
+      whereClauses.push(`l.name ILIKE '%' || $${paramIndex} || '%'`);
+      params.push(criteria.location);
+      paramIndex++;
     }
+
+    // Add pack filter
+    if (criteria.pack) {
+      whereClauses.push(`(p.code ILIKE '%' || $${paramIndex} || '%' OR p.series_id ILIKE '%' || $${paramIndex} || '%' OR p.name ILIKE '%' || $${paramIndex} || '%')`);
+      params.push(criteria.pack);
+      paramIndex++;
+    }
+
+    // Add color filters - multiple colors use OR logic (same tag type)
+    if (criteria.colors && criteria.colors.length > 0) {
+      const colorConditions = criteria.colors.map(color => {
+        const condition = `c.color ILIKE '%' || $${paramIndex} || '%'`;
+        params.push(color);
+        paramIndex++;
+        return condition;
+      });
+      whereClauses.push(`(${colorConditions.join(' OR ')})`);
+    }
+
+    if (criteria.tags && criteria.tags.length > 0) {
+      const tagConditions = criteria.tags.map(tag => {
+        const condition = `(ut.tag_type = $${paramIndex} OR gt.tag_type = $${paramIndex})`;
+        params.push(tag);
+        paramIndex++;
+        return condition;
+      });
+      whereClauses.push(`(${tagConditions.join(' OR ')})`);
+    }
+
+    if (fuzzyText && fuzzyText.length > 0) {
+      whereClauses.push(`(
+        c.name ILIKE '%' || $${paramIndex} || '%' OR
+        c.effect ILIKE '%' || $${paramIndex} || '%' OR
+        c.trigger_effect ILIKE '%' || $${paramIndex} || '%' OR
+        c.id ILIKE '%' || $${paramIndex} || '%' OR
+        c.card_code ILIKE '%' || $${paramIndex} || '%'
+      )`);
+      params.push(fuzzyText);
+      paramIndex++;
+    }
+
+    // Build count query for total results (remove SELECT fields, GROUP BY, ORDER BY, LIMIT)
+    let countQuery = `
+      SELECT COUNT(DISTINCT c.id)
+      FROM cards c
+      LEFT JOIN card_pack_appearances cpa ON c.id = cpa.card_id
+      LEFT JOIN packs p ON cpa.pack_code = p.code
+      LEFT JOIN (
+        SELECT
+          card_id,
+          COUNT(*) FILTER (WHERE is_proxy = false) AS owned_count,
+          COUNT(*) FILTER (WHERE is_proxy = true) AS proxy_count,
+          MAX(location_id) as location_id
+        FROM owned_cards
+        WHERE user_id = $1
+        GROUP BY card_id
+      ) oc ON c.id = oc.card_id
+      LEFT JOIN card_tags ut ON c.id = ut.card_id AND ut.user_id = $1 AND ut.is_global = false
+      LEFT JOIN card_tags gt ON c.id = gt.card_id AND gt.is_global = true
+      LEFT JOIN locations l ON oc.location_id = l.id
+    `;
 
     if (whereClauses.length > 0) {
-      baseQuery += ' WHERE ' + whereClauses.join(' AND ');
+      const whereClause = ' WHERE ' + whereClauses.join(' AND ');
+      baseQuery += whereClause;
+      countQuery += whereClause;
     }
 
-    baseQuery += ` GROUP BY
-c.id, c.name, c.card_code, c.category, c.color, c.power, c.counter, c.effect, c.trigger_effect, c.img_url,
-c.attributes, c.types, c.block, c.rarity, c.cost,
-uc.owned_count, uc.proxy_count, uc.location_id, l.id, l.name, l.type, l.marker,
-cta.user_tags, cta.global_tags
-`;
+    // Execute count query first
+    const totalCountResult = await query(countQuery, params);
+    const totalCount = parseInt(totalCountResult.rows[0].count, 10);
 
-    const orderByClauses = [];
+    // Add GROUP BY, ORDER BY, and pagination to main query
+    baseQuery += `
+      GROUP BY
+        c.id, c.name, c.card_code, c.category, c.color, c.power, c.counter,
+        c.effect, c.trigger_effect, c.img_url, c.attributes, c.types,
+        c.block, c.rarity, c.cost, oc.owned_count, oc.proxy_count,
+        l.name, l.id
+    `;
 
-    // Order by logic
-    if (criteria.colors && criteria.colors.length > 0) {
-      const colorParamValue = `%${criteria.colors[0]}%`;
-      const colorParamIndex = params.indexOf(colorParamValue);
-      if (colorParamIndex !== -1) {
-        orderByClauses.push(`CASE WHEN c.color ILIKE $${colorParamIndex + 1} THEN 0 ELSE 1 END`);
-      }
-    }
+    // Add ordering
+    const orderClauses = [];
 
-    // Use exact match priority for substring search
-    if (criteria.id) {
-      const idParamValue = criteria.id;
-      const idParamIndex = params.indexOf(idParamValue);
-      if (idParamIndex !== -1) {
-        orderByClauses.push(`CASE
-WHEN c.id = $${idParamIndex + 1} THEN 0
-WHEN c.card_code = $${idParamIndex + 1} THEN 1
-WHEN c.id ILIKE $${idParamIndex + 1} || '%' THEN 2
-WHEN c.card_code ILIKE $${idParamIndex + 1} || '%' THEN 3
-ELSE 4 END`);
-      }
-    }
-
-    if (criteria.exact) {
-      const exactParamValue = criteria.exact;
-      const exactParamIndex = params.indexOf(exactParamValue);
-      if (exactParamIndex !== -1) {
-        orderByClauses.push(`CASE WHEN c.name ILIKE '%' || $${exactParamIndex + 1} || '%' THEN 0 ELSE 1 END`);
-      }
-    }
-
-    // Add category ordering priority
-    if (criteria.category) {
-      const categoryParamValue = `%${criteria.category.toUpperCase()}%`;
-      const categoryParamIndex = params.indexOf(categoryParamValue);
-      if (categoryParamIndex !== -1) {
-        orderByClauses.push(`CASE WHEN c.category ILIKE $${categoryParamIndex + 1} THEN 0 ELSE 1 END`);
-      }
-    }
-
-    // Add cost ordering priority
-    if (criteria.cost) {
-      orderByClauses.push(`c.cost ASC`);
-    }
-
-    // Add tag ordering priority (cards with matched tags first)
-    if (criteria.tags && criteria.tags.length > 0) {
-      // Prioritize cards that have the searched tags
-      orderByClauses.push(`CASE WHEN (
-        ${criteria.tags.map((_, i) => {
-          const tagParamIndex = params.indexOf(criteria.tags[i]);
-          return `COALESCE(cta.user_tags, '[]'::jsonb) ? $${tagParamIndex + 1} OR COALESCE(cta.global_tags, '[]'::jsonb) ? $${tagParamIndex + 1}`;
-        }).join(' OR ')}
-      ) THEN 0 ELSE 1 END`);
-    }
-
-    // Only use similarity for name, attributes, and types
     if (fuzzyText && fuzzyText.length > 0) {
-      const fuzzyParamIndex = params.indexOf(fuzzyText);
-      if (fuzzyParamIndex !== -1) {
-        orderByClauses.push(`GREATEST(
-similarity(c.name, $${fuzzyParamIndex + 1}),
-similarity(immutable_array_to_string(c.attributes), $${fuzzyParamIndex + 1}),
-similarity(immutable_array_to_string(c.types), $${fuzzyParamIndex + 1})
-) DESC`);
+      orderClauses.push(`CASE WHEN c.name ILIKE '%' || $${params.indexOf(fuzzyText) + 1} || '%' THEN 0 ELSE 1 END`);
+    }
+
+    if (criteria.id) {
+      const idValue = criteria.id;
+      const idParamIndex = params.indexOf(idValue);
+      if (idParamIndex !== -1) {
+        orderClauses.push(`CASE
+          WHEN c.id = $${idParamIndex + 1} THEN 0
+          WHEN c.card_code = $${idParamIndex + 1} THEN 1
+          WHEN c.id ILIKE $${idParamIndex + 1} || '%' THEN 2
+          WHEN c.card_code ILIKE $${idParamIndex + 1} || '%' THEN 3
+          ELSE 4 END`);
       }
     }
-    orderByClauses.push('c.name ASC');
 
-    if (orderByClauses.length > 0) {
-      baseQuery += ' ORDER BY ' + orderByClauses.join(', ');
+    // Add user-selected sorting
+    switch (sortByField) {
+      case 'rarity':
+        // Define rarity order in SQL
+        orderClauses.push(`
+          CASE c.rarity
+          WHEN 'C' THEN 1
+          WHEN 'UC' THEN 2
+          WHEN 'R' THEN 3
+          WHEN 'SR' THEN 4
+          WHEN 'SEC' THEN 5
+          WHEN 'L' THEN 6
+          WHEN 'SP' THEN 7
+          ELSE 0
+          END ${sortOrderDir.toUpperCase()}
+        `);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'card_code':
+        orderClauses.push(`c.card_code ${sortOrderDir.toUpperCase()}`);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'tags':
+        // Count total tags (user_tags + global_tags)
+        orderClauses.push(`
+          (COALESCE(array_length(ARRAY_AGG(DISTINCT ut.tag_type) FILTER (WHERE ut.tag_type IS NOT NULL), 1), 0) +
+          COALESCE(array_length(ARRAY_AGG(DISTINCT gt.tag_type) FILTER (WHERE gt.tag_type IS NOT NULL), 1), 0))
+${sortOrderDir.toUpperCase()}
+`);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'cost':
+        orderClauses.push(`c.cost ${sortOrderDir.toUpperCase()} NULLS LAST`);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'power':
+        orderClauses.push(`c.power ${sortOrderDir.toUpperCase()} NULLS LAST`);
+        orderClauses.push('c.name ASC'); // Secondary sort by name
+        break;
+
+      case 'name':
+      default:
+        orderClauses.push(`c.name ${sortOrderDir.toUpperCase()}`);
+        break;
     }
-    baseQuery += ';';
 
-    console.log('Enhanced Search Query with Tags:', baseQuery);
-    console.log('Parameters:', params);
+    if (orderClauses.length > 0) {
+      baseQuery += ' ORDER BY ' + orderClauses.join(', ');
+    }
 
-    const results = await query(baseQuery, params);
+    // Add pagination
+    baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limitInt, offsetInt);
 
-    // Process results to format location information and clean up aliases
-    const processedResults = results.rows.map(card => ({
-      ...card,
-      owned_count: parseInt(card.owned_count) || 0,
-      proxy_count: parseInt(card.proxy_count) || 0,
-      // Fix: Properly construct location object from aliased columns
-      location: card.location_id && card.loc_id ? {
-        id: card.loc_id,
-        name: card.loc_name,
-        type: card.loc_type,
-        marker: card.loc_marker
-      } : null,
-      // Remove the aliased columns that are no longer needed
-      loc_id: undefined,
-      loc_name: undefined,
-      loc_type: undefined,
-      loc_marker: undefined
-    }));
+    // Execute main query
+    const result = await query(baseQuery, params);
 
-    res.json(processedResults);
+    // Return paginated response
+    res.json({
+      results: result.rows,
+      totalCount: totalCount,
+      page: Math.floor(offsetInt / limitInt) + 1,
+      itemsPerPage: limitInt,
+      totalPages: Math.ceil(totalCount / limitInt)
+    });
+
   } catch (err) {
     console.error('Enhanced search error:', err);
-    res.status(500).json({ message: 'Server error while searching cards.' });
+    res.status(500).json({
+      error: 'Server error while searching cards.',
+      message: err.message
+    });
   }
 });
 
@@ -1511,6 +1672,139 @@ app.delete('/api/locations/:id', isAuthenticated, async (req, res) => {
     await query('ROLLBACK');
     console.error('Error deleting location:', err);
     res.status(500).json({ message: 'Server error while deleting location.' });
+  }
+});
+
+
+// Get all instances of a specific card for the authenticated user
+app.get('/api/cards/:cardId/instances', isAuthenticated, async (req, res) => {
+  const { cardId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const result = await query(`
+      SELECT
+        oc.instance_id,
+        oc.is_proxy,
+        oc.location_id,
+        oc.created_at,
+        l.name as location_name,
+        l.marker as location_marker,
+        l.type as location_type
+      FROM owned_cards oc
+      LEFT JOIN locations l ON oc.location_id = l.id
+      WHERE oc.user_id = $1 AND oc.card_id = $2
+      ORDER BY oc.is_proxy ASC, oc.instance_id ASC
+    `, [userId, cardId]);
+
+    const instances = result.rows.map(row => ({
+      instance_id: row.instance_id,
+      is_proxy: row.is_proxy,
+      location_id: row.location_id,
+      location: row.location_name ? {
+        id: row.location_id,
+        name: row.location_name,
+        marker: row.location_marker || 'gray',
+        type: row.location_type
+      } : null,
+      created_at: row.created_at
+    }));
+
+    res.json({
+      cardId,
+      instances
+    });
+  } catch (err) {
+    console.error('Error fetching card instances:', err);
+    res.status(500).json({ message: 'Server error while fetching card instances.' });
+  }
+});
+
+// Update locations for multiple card instances (batch update)
+app.put('/api/cards/:cardId/instances/locations', isAuthenticated, async (req, res) => {
+  const { cardId } = req.params;
+  const { updates } = req.body;
+  const userId = req.user.id;
+
+  if (!Array.isArray(updates) || updates.length === 0) {
+    return res.status(400).json({ message: 'Updates array is required and must not be empty.' });
+  }
+
+  // Validate updates structure
+  for (const update of updates) {
+    if (!update.instance_id || typeof update.instance_id !== 'number') {
+      return res.status(400).json({
+        message: 'Each update must have a valid instance_id.'
+      });
+    }
+    if (update.location_id !== null && typeof update.location_id !== 'number') {
+      return res.status(400).json({
+        message: 'location_id must be a number or null.'
+      });
+    }
+  }
+
+  try {
+    await query('BEGIN');
+
+    // Verify all instances belong to this user and card
+    const instanceIds = updates.map(u => u.instance_id);
+    const verifyResult = await query(`
+      SELECT instance_id
+      FROM owned_cards
+      WHERE user_id = $1 AND card_id = $2 AND instance_id = ANY($3)
+    `, [userId, cardId, instanceIds]);
+
+    if (verifyResult.rows.length !== instanceIds.length) {
+      await query('ROLLBACK');
+      return res.status(403).json({
+        message: 'Some instances do not belong to you or this card.'
+      });
+    }
+
+    // Validate all location_ids if not null
+    const locationIds = updates
+      .filter(u => u.location_id !== null)
+      .map(u => u.location_id);
+
+    if (locationIds.length > 0) {
+      // Remove duplicates
+      const uniqueLocationIds = [...new Set(locationIds)];
+
+      const locResult = await query(`
+        SELECT id FROM locations
+        WHERE user_id = $1 AND id = ANY($2)
+      `, [userId, uniqueLocationIds]);
+
+      if (locResult.rows.length !== uniqueLocationIds.length) {
+        await query('ROLLBACK');
+        return res.status(404).json({
+          message: 'Some locations not found or do not belong to you.'
+        });
+      }
+    }
+
+    // Perform updates
+    for (const update of updates) {
+      await query(`
+        UPDATE owned_cards
+        SET location_id = $1
+        WHERE instance_id = $2 AND user_id = $3
+      `, [update.location_id || null, update.instance_id, userId]);
+    }
+
+    await query('COMMIT');
+
+    res.json({
+      message: 'Instance locations updated successfully.',
+      updatedCount: updates.length
+    });
+  } catch (err) {
+    await query('ROLLBACK');
+    console.error('Error updating instance locations:', err);
+    res.status(500).json({
+      message: 'Server error while updating instance locations.'
+    });
   }
 });
 
@@ -1703,10 +1997,15 @@ SELECT
 // Import collection endpoint
 app.post('/api/collection/import', isAuthenticated, async (req, res) => {
   const userId = req.user.id;
-  const { collectionData } = req.body;
+  const { collectionData, mode = 'override' } = req.body; // Default to 'override' for backward compatibility
 
   if (!collectionData || typeof collectionData !== 'string') {
     return res.status(400).json({ message: 'Collection data is required.' });
+  }
+
+  // Validate mode parameter
+  if (!['override', 'append'].includes(mode)) {
+    return res.status(400).json({ message: 'Import mode must be either "override" or "append".' });
   }
 
   // Reprint handling utility functions (same as in backend/scripts/init.js)
@@ -1802,21 +2101,37 @@ app.post('/api/collection/import', isAuthenticated, async (req, res) => {
           );
           const currentCount = parseInt(currentResult.rows[0].count, 10);
 
-          if (currentCount === count) {
+          let targetCount;
+          if (mode === 'append') {
+            // Append mode: add to existing count
+            targetCount = currentCount + count;
+
+            // Ensure we don't exceed the maximum of 99
+            if (targetCount > 99) {
+              targetCount = 99;
+              // Optional: Log a warning or add to error details
+              console.warn(`IMPORT: Capping ${cardId} at 99 cards (would have been ${currentCount + count})`);
+            }
+          } else {
+            // Override mode: set exact count (existing behavior)
+            targetCount = count;
+          }
+
+          if (currentCount === targetCount) {
             // No change needed
             continue;
           }
 
-          if (count === 0) {
+          if (targetCount === 0) {
             // Delete all owned (non-proxy) cards for this card
             await client.query(
               'DELETE FROM owned_cards WHERE user_id = $1 AND card_id = $2 AND is_proxy = false',
               [userId, actualCardId]
             );
             results.updated++;
-          } else if (count > currentCount) {
+          } else if (targetCount > currentCount) {
             // Add more cards
-            const toAdd = count - currentCount;
+            const toAdd = targetCount - currentCount;
             for (let i = 0; i < toAdd; i++) {
               await client.query(
                 'INSERT INTO owned_cards (user_id, card_id, is_proxy) VALUES ($1, $2, false)',
@@ -1825,8 +2140,8 @@ app.post('/api/collection/import', isAuthenticated, async (req, res) => {
             }
             results.updated++;
           } else {
-            // Remove some cards (count < currentCount)
-            const toRemove = currentCount - count;
+            // Remove some cards (targetCount < currentCount)
+            const toRemove = currentCount - targetCount;
 
             // Remove the specified number of cards
             await client.query(`
@@ -1864,10 +2179,11 @@ LIMIT $3
     });
 
     res.json({
-      message: 'Collection import completed',
+      message: `Collection import completed (${mode} mode)`,
       processed: results.processed,
       updated: results.updated,
       errors: results.errors,
+      mode: mode, // Include the mode in the response
       errorDetails: results.errorDetails.slice(0, 10), // Limit error details to first 10
       errorLines: results.errorLines.slice(0, 10) // Add this for frontend compatibility
     });
@@ -1883,6 +2199,7 @@ LIMIT $3
         processed: results.processed,
         updated: 0, // Nothing was committed due to rollback
         errors: results.errors,
+        mode: mode,
         errorDetails: results.errorDetails.slice(0, 5),
         errorLines: results.errorLines.slice(0, 5)
       });
@@ -1892,12 +2209,13 @@ LIMIT $3
         processed: results.processed,
         updated: 0, // Nothing was committed due to rollback
         errors: results.errors,
+        mode: mode,
         errorDetails: results.errorDetails.slice(0, 5),
         errorLines: results.errorLines.slice(0, 5)
       });
     }
   }
-})
+});
 
 // --- DECK ROUTES ---
 
@@ -2416,14 +2734,14 @@ app.post('/api/public/decks/parse', async (req, res) => {
       }
 
       const count = parseInt(match[1], 10);
-      const cardCode = match[2].trim();
+      const cardId = match[2].trim(); // This is actually the card ID, not card_code!
 
       if (count < 1 || count > 4) {
-        fetchErrors.push(`Invalid count for ${cardCode}: ${count}`);
+        fetchErrors.push(`Invalid count for ${cardId}: ${count}`);
         continue;
       }
 
-      // Find card by normalized card code
+      // Find card by ID (the published deck content uses card IDs, not card_codes)
       const cardResult = await query(`
         SELECT
           id,
@@ -2442,12 +2760,9 @@ app.post('/api/public/decks/parse', async (req, res) => {
           types,
           block
         FROM cards
-        WHERE REPLACE(card_code, '_p1', '') = $1
-           OR REPLACE(card_code, '_p2', '') = $1
-           OR REPLACE(card_code, '_p3', '') = $1
-           OR card_code = $1
+        WHERE id = $1
         LIMIT 1
-      `, [cardCode]);
+      `, [cardId]);
 
       if (cardResult.rows.length > 0) {
         const card = cardResult.rows[0];
@@ -2472,7 +2787,7 @@ app.post('/api/public/decks/parse', async (req, res) => {
           count: count
         });
       } else {
-        fetchErrors.push(`Card not found: ${cardCode}`);
+        fetchErrors.push(`Card not found: ${cardId}`);
       }
     }
 
@@ -2485,6 +2800,389 @@ app.post('/api/public/decks/parse', async (req, res) => {
   } catch (err) {
     console.error('Error parsing deck content:', err);
     res.status(500).json({ message: 'Server error while parsing deck content.' });
+  }
+});
+
+app.get('/api/collection/statistics', isAuthenticated, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Add created_at column if it doesn't exist
+    try {
+      await query(`
+        ALTER TABLE owned_cards
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+      `);
+    } catch (err) {
+      // Column might already exist, continue
+    }
+
+    // Get all owned cards with card details
+    const ownedCardsResult = await query(`
+      SELECT
+        oc.card_id,
+        c.name,
+        c.card_code,
+        c.color,
+        c.rarity,
+        c.block,
+        COUNT(*) as count,
+        MIN(oc.created_at) as first_added
+      FROM owned_cards oc
+      JOIN cards c ON oc.card_id = c.id
+      WHERE oc.user_id = $1 AND oc.is_proxy = false
+      GROUP BY oc.card_id, c.name, c.card_code, c.color, c.rarity, c.block
+      ORDER BY count DESC
+    `, [userId]);
+
+    // SAFE: Keep original pack distribution query that was working
+    const packDistributionResult = await query(`
+      SELECT
+        SUBSTRING(cpa.pack_code FROM '^[A-Z]+[0-9]+') as pack_prefix,
+        COUNT(DISTINCT oc.card_id) as count
+      FROM owned_cards oc
+      JOIN card_pack_appearances cpa ON oc.card_id = cpa.card_id
+      WHERE oc.user_id = $1 AND oc.is_proxy = false
+      GROUP BY pack_prefix
+      ORDER BY count DESC
+    `, [userId]);
+
+    // Get timeline data for the last 30 days
+    const timelineResult = await query(`
+      WITH date_series AS (
+        SELECT generate_series(
+          CURRENT_DATE - INTERVAL '29 days',
+          CURRENT_DATE,
+          INTERVAL '1 day'
+        )::date as date
+      ),
+      daily_additions AS (
+        SELECT
+          DATE(oc.created_at) as date,
+          COUNT(*) as cards_added
+        FROM owned_cards oc
+        WHERE oc.user_id = $1
+          AND oc.is_proxy = false
+          AND oc.created_at >= CURRENT_DATE - INTERVAL '29 days'
+        GROUP BY DATE(oc.created_at)
+      )
+      SELECT
+        ds.date,
+        COALESCE(da.cards_added, 0) as cards_added
+      FROM date_series ds
+      LEFT JOIN daily_additions da ON ds.date = da.date
+      ORDER BY ds.date ASC
+    `, [userId]);
+
+    // Get total available cards for completion rate
+    const totalCardsResult = await query('SELECT COUNT(DISTINCT id) as total FROM cards');
+
+    const ownedCards = ownedCardsResult.rows;
+    const totalAvailableCards = parseInt(totalCardsResult.rows[0].total);
+
+    // Calculate basic statistics
+    const uniqueCardCount = ownedCards.length;
+    const totalCardCount = ownedCards.reduce((sum, card) => sum + parseInt(card.count), 0);
+    const completionRate = totalAvailableCards > 0 ? (uniqueCardCount / totalAvailableCards) * 100 : 0;
+
+    // Color distribution
+    const colorDistribution = {};
+    ownedCards.forEach(card => {
+      const color = card.color || '';
+      colorDistribution[color] = (colorDistribution[color] || 0) + parseInt(card.count);
+    });
+
+    // Rarity distribution
+    const rarityDistribution = {};
+    ownedCards.forEach(card => {
+      const rarity = card.rarity || 'Unknown';
+      rarityDistribution[rarity] = (rarityDistribution[rarity] || 0) + parseInt(card.count);
+    });
+
+    // Block distribution
+    const blockDistribution = {};
+    ownedCards.forEach(card => {
+      const block = card.block ? card.block.toString() : 'Unknown';
+      blockDistribution[block] = (blockDistribution[block] || 0) + parseInt(card.count);
+    });
+
+    // Pack distribution - keep original working logic
+    const packDistribution = {};
+    packDistributionResult.rows.forEach(row => {
+      if (row.pack_prefix) {
+        packDistribution[row.pack_prefix] = parseInt(row.count);
+      }
+    });
+
+    // FALLBACK: If pack distribution is empty, try extracting from card codes
+    if (Object.keys(packDistribution).length === 0) {
+      console.log('Pack distribution empty, trying fallback method...');
+      ownedCards.forEach(card => {
+        if (card.card_code) {
+          // Extract pack prefix from card code (e.g., "ST01-001" -> "ST01")
+          const match = card.card_code.match(/^([A-Z]+[0-9]+)/);
+          if (match) {
+            const prefix = match[1];
+            packDistribution[prefix] = (packDistribution[prefix] || 0) + 1; // Count unique cards, not total count
+          }
+        }
+      });
+    }
+
+    // Timeline data for the chart
+    const timeline = timelineResult.rows.map(row => ({
+      date: row.date,
+      count: parseInt(row.cards_added)
+    }));
+
+    // Collection age (days since first card added)
+    let collectionAge = 0;
+    if (ownedCards.length > 0) {
+      const oldestCard = ownedCards.reduce((oldest, card) => {
+        const cardDate = new Date(card.first_added);
+        const oldestDate = oldest ? new Date(oldest.first_added) : null;
+        return (!oldestDate || cardDate < oldestDate) ? card : oldest;
+      }, null);
+
+      if (oldestCard && oldestCard.first_added) {
+        const firstAddedDate = new Date(oldestCard.first_added);
+        collectionAge = Math.floor((Date.now() - firstAddedDate.getTime()) / (24 * 60 * 60 * 1000));
+      }
+    }
+
+    // Additional statistics
+    const averageCardsPerUniqueCard = uniqueCardCount > 0 ? totalCardCount / uniqueCardCount : 0;
+
+    const mostCommonRarity = Object.entries(rarityDistribution)
+      .reduce((max, [rarity, count]) => count > max.count ? { rarity, count } : max,
+              { rarity: 'None', count: 0 });
+
+    const mostCommonColor = Object.entries(colorDistribution)
+      .reduce((max, [color, count]) => count > max.count ? { color, count } : max,
+              { color: 'None', count: 0 });
+
+    // Calculate total cards added in the last 30 days
+    const recentActivity = timeline.reduce((sum, day) => sum + day.count, 0);
+
+    res.json({
+      uniqueCardCount,
+      totalCardCount,
+      completionRate,
+      collectionAge,
+      colorDistribution,
+      rarityDistribution,
+      blockDistribution,
+      packDistribution,
+      timeline,
+      additionalStats: {
+        averageCardsPerUniqueCard: Math.round(averageCardsPerUniqueCard * 100) / 100,
+        mostCommonRarity: mostCommonRarity.rarity,
+        mostCommonColor: mostCommonColor.color || 'Colorless',
+        totalPacks: Object.keys(packDistribution).length,
+        totalBlocks: Object.keys(blockDistribution).length,
+        recentActivity: recentActivity
+      }
+    });
+
+  } catch (err) {
+    console.error('Error fetching collection statistics:', err);
+    res.status(500).json({ message: 'Server error while fetching statistics.' });
+  }
+});
+
+// --- CARD MANAGEMENT ROUTES (Admin Only) ---
+
+// Create a new card (Admin only)
+app.post('/api/cards/create', isAuthenticated, isAdmin, async (req, res) => {
+  const {
+    id,
+    card_code,
+    name,
+    rarity,
+    category,
+    color,
+    cost,
+    power,
+    counter,
+    effect,
+    trigger_effect,
+    img_url,
+    block,
+    attributes,
+    types
+  } = req.body;
+
+  // Validation
+  if (!id || !name) {
+    return res.status(400).json({
+      message: 'Card ID and Name are required.'
+    });
+  }
+
+  try {
+    // Check if card already exists
+    const existingCard = await query('SELECT id FROM cards WHERE id = $1', [id]);
+    if (existingCard.rows.length > 0) {
+      return res.status(409).json({
+        message: 'A card with this ID already exists.'
+      });
+    }
+
+    // Insert the new card
+    const insertQuery = `
+      INSERT INTO cards (
+        id, card_code, name, rarity, category, color, cost, power,
+        counter, effect, trigger_effect, img_url, attributes, types, block
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *
+    `;
+
+    const values = [
+      id.trim(),
+      card_code?.trim() || null,
+      name.trim(),
+      rarity?.trim() || null,
+      category?.trim() || null,
+      color?.trim() || null,
+      cost !== null && cost !== '' ? parseInt(cost) : null,
+      power !== null && power !== '' ? parseInt(power) : null,
+      counter !== null && counter !== '' ? parseInt(counter) : null,
+      effect?.trim() || null,
+      trigger_effect?.trim() || null,
+      img_url?.trim() || null,
+      attributes && attributes.length > 0 ? attributes : null,
+      types && types.length > 0 ? types : null,
+      block !== null && block !== '' ? parseInt(block) : null
+    ];
+
+    const result = await query(insertQuery, values);
+
+    res.status(201).json({
+      message: 'Card created successfully.',
+      card: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error('Error creating card:', err);
+    res.status(500).json({
+      message: 'Server error while creating card.',
+      error: err.message
+    });
+  }
+});
+
+// Update an existing card (Admin only)
+app.put('/api/cards/:id', isAuthenticated, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const {
+    card_code,
+    name,
+    rarity,
+    category,
+    color,
+    cost,
+    power,
+    counter,
+    effect,
+    trigger_effect,
+    img_url,
+    block,
+    attributes,
+    types
+  } = req.body;
+
+  // Validation
+  if (!name) {
+    return res.status(400).json({
+      message: 'Name is required.'
+    });
+  }
+
+  try {
+    // Check if card exists
+    const existingCard = await query('SELECT id FROM cards WHERE id = $1', [id]);
+    if (existingCard.rows.length === 0) {
+      return res.status(404).json({
+        message: 'Card not found.'
+      });
+    }
+
+    // Update the card
+    const updateQuery = `
+      UPDATE cards SET
+        card_code = $1,
+        name = $2,
+        rarity = $3,
+        category = $4,
+        color = $5,
+        cost = $6,
+        power = $7,
+        counter = $8,
+        effect = $9,
+        trigger_effect = $10,
+        img_url = $11,
+        attributes = $12,
+        types = $13,
+        block = $14
+      WHERE id = $15
+      RETURNING *
+    `;
+
+    const values = [
+      card_code?.trim() || null,
+      name.trim(),
+      rarity?.trim() || null,
+      category?.trim() || null,
+      color?.trim() || null,
+      cost !== null && cost !== '' ? parseInt(cost) : null,
+      power !== null && power !== '' ? parseInt(power) : null,
+      counter !== null && counter !== '' ? parseInt(counter) : null,
+      effect?.trim() || null,
+      trigger_effect?.trim() || null,
+      img_url?.trim() || null,
+      attributes && attributes.length > 0 ? attributes : null,
+      types && types.length > 0 ? types : null,
+      block !== null && block !== '' ? parseInt(block) : null,
+      id
+    ];
+
+    const result = await query(updateQuery, values);
+
+    res.json({
+      message: 'Card updated successfully.',
+      card: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error('Error updating card:', err);
+    res.status(500).json({
+      message: 'Server error while updating card.',
+      error: err.message
+    });
+  }
+});
+
+// Get a specific card by ID for editing (Admin only)
+app.get('/api/cards/:id/edit', isAuthenticated, isAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await query('SELECT * FROM cards WHERE id = $1', [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: 'Card not found.'
+      });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    console.error('Error fetching card:', err);
+    res.status(500).json({
+      message: 'Server error while fetching card.',
+      error: err.message
+    });
   }
 });
 

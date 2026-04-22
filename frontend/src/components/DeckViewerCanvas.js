@@ -37,7 +37,10 @@ import {
   Tr,
   Th,
   Td,
-  Circle
+  Circle,
+  Switch,
+  FormControl,
+  FormLabel
 } from '@chakra-ui/react';
 
 import { BsSortUp, BsSortDown } from 'react-icons/bs';
@@ -46,6 +49,7 @@ import DeckCard from './DeckCard';
 import CardDetailModal from './CardDetailModal';
 import StyledTextRenderer from './StyledTextRenderer';
 import { colorMap } from '@/utils/cardStyles';
+import { useBreakpointValue } from '@chakra-ui/react';
 
 // Helper function to get card data (consistent with existing codebase)
 const getCardData = (item) => {
@@ -99,11 +103,13 @@ const extractStyledKeywords = (effect, triggerEffect) => {
 const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
   const [sortMode, setSortMode] = useState('cost');
   const [sortReverse, setSortReverse] = useState(false);
-  const [thumbnailSize, setThumbnailSize] = useState(100); // Change default to 100
+  const [thumbnailSize, setThumbnailSize] = useState(80);
   const { isOpen: isCardDetailOpen, onOpen: onCardDetailOpen, onClose: onCardDetailClose } = useDisclosure();
   const [selectedCardForDetail, setSelectedCardForDetail] = useState(null);
 
   const colorScheme = playerNumber === 1 ? 'blue' : 'red';
+  const isMobile = useBreakpointValue({ base: true, md: false });
+  const [hideCount, setHideCount] = useState(false);
 
   // Calculate deck statistics
   const stats = useMemo(() => {
@@ -221,31 +227,48 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
       }
     });
 
-    // Sort non-leader cards
+    // Sort non-leader cards with category priority: CHARACTER -> STAGE -> EVENT
     nonLeaderCards.sort((a, b) => {
       const cardA = getCardData(a);
       const cardB = getCardData(b);
 
       if (!cardA || !cardB) return 0;
 
+      // Define category order: CHARACTER -> STAGE -> EVENT
+      const categoryOrder = { 'CHARACTER': 1, 'STAGE': 2, 'EVENT': 3 };
+      const categoryA = categoryOrder[cardA.category] || 999;
+      const categoryB = categoryOrder[cardB.category] || 999;
+
+      // First level: sort by category
+      const categoryComparison = categoryA - categoryB;
+      if (categoryComparison !== 0) {
+        return sortReverse ? -categoryComparison : categoryComparison;
+      }
+
+      // Second level: sort by cost or name based on sortMode
       let comparison = 0;
 
       switch (sortMode) {
         case 'cost':
           comparison = (cardA.cost || 0) - (cardB.cost || 0);
+          // If costs are equal, sort by name as tiebreaker
+          if (comparison === 0) {
+            comparison = (cardA.name || '').localeCompare(cardB.name || '');
+          }
           break;
+
         case 'name':
           comparison = (cardA.name || '').localeCompare(cardB.name || '');
           break;
-        case 'category':
-          comparison = (cardA.category || '').localeCompare(cardB.category || '');
-          break;
+
         case 'color':
           comparison = (cardA.color || '').localeCompare(cardB.color || '');
           break;
+
         case 'count':
           comparison = (a.count || 0) - (b.count || 0);
           break;
+
         default:
           comparison = (cardA.cost || 0) - (cardB.cost || 0);
       }
@@ -282,14 +305,17 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
     const colorCodeToName = {
       'R': 'Red',
       'G': 'Green',
+
       'B': 'Blue',
       'P': 'Purple',
+
       'Y': 'Yellow',
       'BK': 'Black'
     };
 
     // Check if it's already a full color name
     if (colorMap[colorCode]) {
+
       return colorMap[colorCode];
     }
 
@@ -303,6 +329,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
     return (
       <Box
         bg="gray.50"
+
         borderRadius="md"
         p={6}
         border="2px solid"
@@ -347,12 +374,12 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
 
   // Prepare data for charts
   const costChartData = Object.entries(stats.costDistribution)
-    .sort(([a], [b]) => parseInt(a) - parseInt(b))
-    .map(([cost, count]) => ({
-      cost: parseInt(cost),
-      count,
-      name: `${cost}`
-    }));
+  .sort(([a], [b]) => parseInt(a) - parseInt(b))
+  .map(([cost, count]) => ({
+    cost: parseInt(cost),
+    count,
+    name: `${cost}`
+  }));
 
   // Add missing cost values with 0 count for better visualization
   const maxCost = Math.max(...costChartData.map(d => d.cost), 10);
@@ -363,8 +390,8 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
   }
   // Add 10+ category if there are cards with cost > 10
   const highCostCount = Object.entries(stats.costDistribution)
-    .filter(([cost]) => parseInt(cost) > 10)
-    .reduce((sum, [, count]) => sum + count, 0);
+  .filter(([cost]) => parseInt(cost) > 10)
+  .reduce((sum, [, count]) => sum + count, 0);
   if (highCostCount > 0) {
     fullCostData.push({ cost: 11, count: highCostCount, name: '10+' });
   }
@@ -389,20 +416,23 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
 
         <TabPanels>
           <TabPanel>
-            {/* Compact Controls - All in one line */}
-            <HStack justify="space-between" align="center" mb={4} spacing={4}>
-              {/* Left side - Size and Sort controls */}
-              <HStack spacing={4} flex={1}>
-                {/* Thumbnail Size Slider - Compact */}
-                <HStack spacing={2} minW="200px">
+
+            {/* Compact Controls - Responsive */}
+
+            {isMobile ? (
+              // Mobile layout: Separate lines
+              <VStack spacing={3} align="stretch" mb={4}>
+
+                {/* Thumbnail Size Slider - Mobile */}
+                <HStack spacing={2}>
                   <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
                   <Slider
                     value={thumbnailSize}
                     onChange={setThumbnailSize}
-                    min={80}
-                    max={200}
+                    min={40}
+                    max={140}
                     step={10}
-                    width="120px"
+                    flex="1"
                   >
                     <SliderTrack>
                       <SliderFilledTrack />
@@ -412,18 +442,32 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                   <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
                 </HStack>
 
-                {/* Sort Controls - Compact */}
+                {/* Hide Count Toggle - Mobile */}
                 <HStack spacing={2}>
-                  <Text fontSize="sm" color="gray.600">Sort:</Text>
+                  <FormControl display="flex" alignItems="center">
+                    <FormLabel htmlFor="hide-count-mobile" mb="0" fontSize="sm" color="gray.600">
+                      Hide Count
+                    </FormLabel>
+                    <Switch
+                      id="hide-count-mobile"
+                      isChecked={hideCount}
+                      onChange={(e) => setHideCount(e.target.checked)}
+                      size="sm"
+                    />
+                  </FormControl>
+                </HStack>
+
+                {/* Sort Controls - Mobile */}
+                <HStack spacing={2}>
+                  <Text fontSize="sm" color="gray.600" minW="60px">Sort:</Text>
                   <Select
                     size="sm"
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value)}
-                    width="100px"
+                    flex="1"
                   >
                     <option value="cost">Cost</option>
                     <option value="name">Name</option>
-                    <option value="category">Category</option>
                     <option value="color">Color</option>
                     <option value="count">Count</option>
                   </Select>
@@ -437,19 +481,87 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                     />
                   </Tooltip>
                 </HStack>
-              </HStack>
+              </VStack>
+            ) : (
+                // Desktop layout: Original single line
+                <HStack justify="space-between" align="center" mb={6} spacing={6}>
+                  {/* Left side - Size and Sort controls */}
+                  <HStack spacing={6} flex={1}>
+                    {/* Thumbnail Size Slider - Compact */}
+                    <HStack spacing={2} minW="100px">
+                      <Text fontSize="sm" color="gray.600" minW="60px">Size:</Text>
+                      <Slider
+                        value={thumbnailSize}
+                        onChange={setThumbnailSize}
+                        min={60}
+                        max={180}
+                        step={10}
+                        width="120px"
+                      >
+                        <SliderTrack>
+                          <SliderFilledTrack />
+                        </SliderTrack>
+                        <SliderThumb boxSize={4} />
+                      </Slider>
+                      <Text fontSize="sm" color="gray.500" minW="35px">{thumbnailSize}</Text>
+                    </HStack>
 
-              {/* Right side - Empty for cleaner layout */}
-              <Box></Box>
-            </HStack>
+                    {/* Hide Count Toggle - Desktop */}
+                    <HStack spacing={2} minW="100px">
+                      <FormControl display="flex" alignItems="center">
+                        <FormLabel htmlFor="hide-count-desktop" mb="0" fontSize="sm" color="gray.600" mr={2}>
+                          Hide Count
+                        </FormLabel>
+                        <Switch
+                          id="hide-count-desktop"
+                          isChecked={hideCount}
+                          onChange={(e) => setHideCount(e.target.checked)}
+                          size="sm"
+                        />
+                      </FormControl>
+                    </HStack>
+
+                    {/* Sort Controls - Compact */}
+                    <HStack spacing={2}>
+                      <Text fontSize="sm" color="gray.600">Sort:</Text>
+                      <Select
+                        size="sm"
+                        value={sortMode}
+                        onChange={(e) => setSortMode(e.target.value)}
+                        width="100px"
+                      >
+
+                        <option value="cost">Cost</option>
+                        <option value="name">Name</option>
+                        <option value="category">Category</option>
+                        <option value="color">Color</option>
+                        <option value="count">Count</option>
+                      </Select>
+
+                      <Tooltip label={sortReverse ? 'Sort ascending' : 'Sort descending'}>
+                        <IconButton
+                          icon={sortReverse ? <BsSortUp /> : <BsSortDown />}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSortReverse(!sortReverse)}
+                        />
+
+                      </Tooltip>
+                    </HStack>
+                  </HStack>
+
+                  {/* Right side - Empty for cleaner layout */}
+                  <Box></Box>
+                </HStack>
+              )}
 
             {/* Cards Grid */}
             <Box
               flex="1"
               bg="gray.50"
               borderRadius="md"
-              p={2}
-              border="2px solid"
+              p={1}
+              border="1px solid"
               borderColor="gray.200"
               overflowY="auto"
               maxH="500px"
@@ -478,6 +590,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                       isLeader={cardData?.category === 'LEADER'}
                       isViewOnly={true}
                       thumbnailSize={thumbnailSize}
+                      hideCount={hideCount}
                     />
                   );
                 })}
@@ -511,8 +624,10 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                       <StatLabel fontSize="xs">Total Cards</StatLabel>
                       <StatNumber fontSize="md">{stats.totalCards}</StatNumber>
                     </Stat>
+
                     <Stat>
                       <StatLabel fontSize="xs">Unique Cards</StatLabel>
+
                       <StatNumber fontSize="md">{stats.uniqueCards}</StatNumber>
                     </Stat>
                   </StatGroup>
@@ -588,6 +703,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                               fontSize={8}
                               stroke="#2D3748"
                               tick={{ fill: '#2D3748' }}
+
                               axisLine={{ stroke: '#A0AEC0' }}
                               tickLine={{ stroke: '#A0AEC0' }}
                               label={{ value: 'Count', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#2D3748' } }}
@@ -630,6 +746,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                               labelStyle={{ fontSize: 7, fill: '#2D3748' }}
                             >
                               {colorChartData.map((entry, index) => (
+
                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                               ))}
                             </Pie>
@@ -728,6 +845,7 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                                 >
                                   <Image
                                     src={cardData.img_url || '/placeholder.png'}
+
                                     alt={cardData.name || 'Card'}
                                     width="60px"
                                     height="84px"
@@ -737,19 +855,21 @@ const DeckViewerCanvas = ({ deck, showStats = true, playerNumber = 1 }) => {
                                       '2px solid gold' : '1px solid gray'}
                                   />
                                   {/* Card count badge */}
-                                  <Badge
-                                    position="absolute"
-                                    top="-8px"
-                                    right="-8px"
-                                    colorScheme="blue"
-                                    variant="solid"
-                                    borderRadius="full"
-                                    fontSize="xs"
-                                    minW="20px"
-                                    textAlign="center"
-                                  >
-                                    {item.count}
-                                  </Badge>
+                                  {!hideCount && (
+                                    <Badge
+                                      position="absolute"
+                                      top="-8px"
+                                      right="-8px"
+                                      colorScheme="blue"
+                                      variant="solid"
+                                      borderRadius="full"
+                                      fontSize="xs"
+                                      minW="20px"
+                                      textAlign="center"
+                                    >
+                                      {item.count}
+                                    </Badge>
+                                  )}
                                   {/* Card name tooltip */}
                                   <Tooltip label={cardData.name} placement="top">
                                     <Box

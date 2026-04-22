@@ -202,7 +202,7 @@ export default function LoginModal({ isOpen, onClose }) {
                 Notice
               </Text>
               <Text fontSize="xs" color="blue.700">
-                User regisrtration is by invitation only. Please contact the administrator for access.
+              This is a self-hosted service. User registration is by invitation only. Please contact the administrator for access.
               </Text>
             </VStack>
           </Box>

@@ -1,6 +1,7 @@
 import { Providers } from './providers';
 import { AuthProvider } from '@/context/AuthContext';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import './globals.css';
 
 export const metadata = {
   title: '1pc Manager',

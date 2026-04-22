@@ -10,6 +10,7 @@ import {
   Spinner
 } from '@chakra-ui/react';
 import { FiMapPin, FiEdit2, FiTrash2, FiPlus } from 'react-icons/fi';
+import { getLocationMarkerBg } from '@/utils/cardStyles';
 
 // Color swatch picker for marker selection
 const colorOptions = [
@@ -435,14 +436,22 @@ const LocationManagementModal = ({ isOpen, onClose, onLocationChange }) => {
                       <Th>Name</Th>
                       <Th>Type</Th>
                       <Th>Description</Th>
-                      <Th>Marker</Th>
                       <Th>Actions</Th>
                     </Tr>
                   </Thead>
                   <Tbody>
                     {state.locations.map((location) => (
                       <Tr key={location.id}>
-                        <Td fontWeight="medium">{location.name}</Td>
+                        <Td>
+                          <Tag
+                            bg={getLocationMarkerBg(location.marker)}
+                            color="white"
+                            fontWeight="bold"
+                            size="md"
+                          >
+                            {location.name}
+                          </Tag>
+                        </Td>
                         <Td>
                           <Tag
                             colorScheme="blue"
@@ -456,15 +465,6 @@ const LocationManagementModal = ({ isOpen, onClose, onLocationChange }) => {
                           <Text fontSize="sm" color="gray.600" noOfLines={2}>
                             {location.description || '-'}
                           </Text>
-                        </Td>
-                        <Td>
-                          <Tag
-                            colorScheme={location.marker}
-                            size="sm"
-                            textTransform="capitalize"
-                          >
-                            {location.marker}
-                          </Tag>
                         </Td>
                         <Td>
                           <HStack spacing={1}>
@@ -490,7 +490,7 @@ const LocationManagementModal = ({ isOpen, onClose, onLocationChange }) => {
                     ))}
                     {state.locations.length === 0 && !state.isLoading && (
                       <Tr>
-                        <Td colSpan={5} textAlign="center" py={8}>
+                        <Td colSpan={4} textAlign="center" py={8}>
                           <Text color="gray.500">No locations found.</Text>
                         </Td>
                       </Tr>

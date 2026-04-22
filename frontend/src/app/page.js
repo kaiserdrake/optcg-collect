@@ -1,74 +1,54 @@
+// frontend/src/app/page.js
 'use client';
 
-import { useEffect, useState, lazy, Suspense } from 'react';
-import { Box, Container, VStack, HStack, Text, Heading, Button, Spinner, useDisclosure } from '@chakra-ui/react';
-import { useAuth } from '@/context/AuthContext';
+import { Suspense, useState, useEffect } from 'react';
+import {
+  Box,
+  Container,
+  VStack,
+  HStack,
+  Badge,
+  Spinner,
+  Heading,
+  Text,
+  useBreakpointValue
+} from '@chakra-ui/react';
 import { useSearchParams } from 'next/navigation';
-import Navbar from '@/components/Navbar';
-import LoginModal from '@/components/LoginModal';
-import Footer from '@/components/Footer';
+import { useAuth } from '@/context/AuthContext';
 
-// Lazy load the authenticated components
-const CardSearch = lazy(() => import('@/components/CardSearch'));
-const DeckBuilder = lazy(() => import('@/components/DeckBuilder'));
-const MatchUpComponent = lazy(() => import('@/components/MatchUpComponent'));
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
+import MatchUpComponent from '@/components/MatchUpComponent';
+import CardSearch from '@/components/CardSearch';
+import DeckBuilder from '@/components/DeckBuilder';
 
 export default function Home() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const [activeTabIndex, setActiveTabIndex] = useState(0);
-  const { isOpen: isLoginOpen, onOpen: onLoginOpen, onClose: onLoginClose } = useDisclosure();
 
-  // Define your tabs configuration
-  const tabs = [
-    {
-      label: 'MatchUp',
-      badge: null,
-      requiresAuth: false
-    },
-    {
-      label: 'Collection',
-      badge: null,
-      requiresAuth: true
-    },
-    {
-      label: 'Deck Builder',
-      badge: null,
-      requiresAuth: true
-    }
-  ];
-
-  // Automatically close Login Modal if logged in
-  useEffect(() => {
-
-    if (user && isLoginOpen) {
-      onLoginClose();
-    }
-  }, [user, isLoginOpen, onLoginClose])
-
-  // Handle URL parameter for tab selection
-  useEffect(() => {
+  // Get initial tab from URL
+  const getInitialTab = () => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'collection') {
-      setActiveTabIndex(1);
-    } else if (tabParam === 'decks') {
-      setActiveTabIndex(2);
-    } else if (tabParam === 'matchup' || tabParam === 'hub' || !tabParam) {
-      setActiveTabIndex(0); // MatchUp is now the default/main tab
-    } else {
-      setActiveTabIndex(0);
-    }
+    if (tabParam === 'collection') return 1;
+    if (tabParam === 'decks') return 2;
+    return 0; // Default to MatchUp
+  };
+
+  const [activeTabIndex, setActiveTabIndex] = useState(getInitialTab);
+
+  // Update active tab when URL changes
+  useEffect(() => {
+    setActiveTabIndex(getInitialTab());
   }, [searchParams]);
 
+  // Define tab configuration
+  const tabs = [
+    { label: 'MatchUp', badge: null },
+    { label: 'Collection', badge: null },
+    { label: 'Deck Builder', badge: null }
+  ];
+
   const handleTabChange = (index) => {
-    const selectedTab = tabs[index];
-
-    // Check if the tab requires authentication
-    if (selectedTab.requiresAuth && !user) {
-      onLoginOpen();
-      return;
-    }
-
     setActiveTabIndex(index);
     // Update URL without causing a page reload
     let newUrl = '/';
@@ -92,7 +72,7 @@ export default function Home() {
   // Show login required message for authenticated tabs
   const renderAuthRequiredContent = (tabName) => (
     <VStack spacing={6} align="stretch">
-      <Box textAlign="center" py={12}>
+      <Box textAlign="center" py={{ base: 6, md: 12 }}>
         <Heading size="lg" color="gray.600" mb={4}>
           {tabName}
         </Heading>
@@ -106,6 +86,14 @@ export default function Home() {
     </VStack>
   );
 
+  // Mobile-specific responsive values
+  const containerMaxW = useBreakpointValue({ base: "100%", sm: "container.xl" });
+  const containerPx = useBreakpointValue({ base: 2, sm: 6 });
+  const mainPt = useBreakpointValue({ base: 2, md: 6 });
+  const contentSpacing = useBreakpointValue({ base: 2, md: 6 });
+  const boxPadding = useBreakpointValue({ base: 2, sm: 4, md: 6 });
+  const boxBorderRadius = useBreakpointValue({ base: "md", md: "lg" });
+
   return (
     <Box minH="100vh" bg="gray.50" display="flex" flexDirection="column">
       {/* Navbar is always visible */}
@@ -115,19 +103,18 @@ export default function Home() {
         tabs={tabs}
       />
 
-      {/* Main Content */}
-      <Box as="main" pt={6} flex="1">
-        <Container maxW="container.xl">
-          <VStack spacing={6} align="stretch">
+      {/* Main Content - Optimized for mobile */}
+      <Box as="main" pt={mainPt} flex="1">
+        <Container maxW={containerMaxW} px={containerPx}>
+          <VStack spacing={contentSpacing} align="stretch">
             <Box
               bg="white"
-              borderRadius="lg"
-              shadow="sm"
-              border="1px"
-              borderColor="gray.200"
+              borderRadius={boxBorderRadius}
+              shadow={{ base: "none", sm: "sm" }}
+              border="none"
               overflow="hidden"
             >
-              <Box p={6}>
+              <Box p={boxPadding}>
                 {/* MatchUp Tab - Always accessible, now serves as the main hub */}
                 <Box display={activeTabIndex === 0 ? 'block' : 'none'}>
                   <Suspense fallback={<Box textAlign="center" py={8}><Spinner size="xl" /></Box>}>
@@ -162,13 +149,8 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* Footer */}
+      {/* Footer - Always visible */}
       <Footer />
-      {/* Login Modal */}
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={onLoginClose}
-      />
     </Box>
   );
 }
